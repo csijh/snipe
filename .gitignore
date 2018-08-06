@@ -1,0 +1,11 @@
+*.o
+*.a
+*.exe
+glfw/lib
+freetype/objs
+help/Makefile
+help/action.h
+help/event.h
+help/setting.h
+help/style.h
+snipe
