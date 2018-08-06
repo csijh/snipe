@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en-GB" xml:lang="en-GB">
+<head>
+<meta charset="UTF-8"/>
+<style>
+    body { font-size: 120%; }
+    pre, .indent { margin-left: 40px; }
+    img { display: block; margin: 0 auto; }
+    mark {
+      font-family: cursive;
+      font-size: 95%;
+      color: #080;
+      background-color: white;
+    }
+  .principle { margin-left:20px; margin-right:20px; font-style: italic; }
+</style>
+<title>Snipe Design</title>
+</head>
+<body>
+
+<h1>Design of <mark>Snipe</mark></h1>
+<h4>Ian Holyer, 2017</h4>
+
+<p>This is a report that was written before implementation of <mark>Snipe</mark>
+began.</p>
+
+<p>This project involves rethinking the design of editors for programmers. There
+are many programming editors available, but there is a strong tendency for them
+all to follow the same conventions, which are not necessarily optimal.  Many
+clever features have been developed which supposedly improve productivity, but
+which are not always as helpful as they first seem. Some editors are integrated
+into development environments (IDEs) providing sophisticated higher level
+features.  And yet those higher level features can be a distraction, especially
+when programming only in short bursts, or when streamlined simplicity is one of
+a programmer's goals.</p>
+
+<p>In this project, some principles of efficient editing are established and
+used to inform the design of a new editor. Features include improving
+keyboard-only editing to include such things as fast scrolling and finding
+specific line numbers, using overlays for mouse features such as scrollbars and
+line numbers to avoid cluttering up the available screen space, and fully
+automating indents and semicolons in C-family languages to the point where the
+programmer isn't involved and wastes no time on them.</p>
+
+<h2>Background</h2>
+
+<p>This project was started as a result of personal experiences with using
+editors, and with watching others using editors, over several decades.  Perhaps
+the most important principle of editors that has emerged from this experience
+is:</p>
+
+<p class="principle">The choice of an editor is intensely personal.  Criticisms
+of other people's choices lead to <a class="ref" href="#war" id="a-war">'holy
+wars'</a></p>
+
+<p>The original editor war between <kbd>vi</kbd> (now more often <kbd>vim</kbd>)
+and <kbd>emacs</kbd> is still going strong.  Such editors are still popular
+among programmers who feel that the keyboard is faster than the mouse, or at
+least that cutting down the frequency of switching between them is useful.</p>
+
+<p>Most newer editors and IDEs have moved away from this emphasis on the
+keyboard, and instead use the graphical user interface conventions which are
+common in the vast majority of desktop applications.  In fact the phrase
+<em>keyboard shortcut</em> gives the potentially bad impression that the mouse
+is the right thing to use, and that using the keyboard is somehow cheating.</p>
+
+<p>The personal preference issue is particularly awkward for the current project
+which, in some ways, has arisen from a personal dissatisfaction with
+<em>every</em> popular editor and IDE.  This is despite long and expert use of
+both <kbd>vi</kbd> and <kbd>emacs</kbd>, as well as considerable experience with
+most popular modern editors. It isn't possible to explain the benefits of the
+proposed features of a new editor without discussing the disadvantages of
+existing editors. But the editors being criticised will be kept reasonably
+anonymously, to avoid offence. The issue of personal choice is also linked to a
+second principle:</p>
+
+<p class="principle">The <em>main</em> source of editing productivity among
+programmers comes from their long and deep familiarity with their chosen tools,
+whatever those tools happen to be.</p>
+
+<p>This makes it difficult to claim that a proposed feature for an editor is
+going to improve anyone's productivity.  Instead, the features which are
+investigated in this project are justified on the basis that they are more
+logical or more complete than previous approaches, or that they get rid of
+niggly problems, or that they get rid of repetitive actions which programmers
+have become so used to that they aren't aware of, and yet which objectively
+detract from their productivity.  A grander claim might be that the features, if
+they were to become popular, could make life better for new generations of
+programmers.</p>
+
+<p>A further general fact is that most editors and IDEs are, at least for any
+<em>particular</em> programmer, bloated, because:</p>
+
+<p class="principle">Any one programmer typically uses only a small
+subset of the features available</p>
+
+<p>That suggests that an editor with a small number of features, if those
+features are well integrated and smoothly implemented, could be just as good for
+some people as a 'full-featured' editor.  Of course, many editors have plugin
+systems, but they are a very mixed blessing, because their quality is very
+variable.  In fact the reputations of one or two popular editors have been
+damaged by relatively poor quality plugins.</p>
+
+<p>In the end, all a new editor can do is to provide yet another choice, which
+some programmers may prefer.  Perhaps the main justification of the
+<mark>Snipe</mark> editor is that it is sufficiently different from previous
+editors that it provides a genuinely fresh choice.  One principle that can be
+applied usefully is:</p>
+
+<p class="principle">"Any processes that are quite mechanical may be
+turned over to the machine itself"<a class="ref" id="a-mech"
+href="#mech"></a></p>
+
+<p>In other words, anything that is repetitive or boring, provided that it can
+be tightly specified, should be automated.  Despite the fact that the principle
+was established by Turing in 1946, when hardly any computers existed,
+people still very often don't take it sufficiently seriously.</p>
+
+<h2>Keyboard versus mouse</h2>
+
+<p>Maybe in the not too distant future, we will be able to think at a computer
+in order to make a program appear.  But in the meantime, there doesn't currently
+appear to be any better interface than using a keyboard and a mouse.</p>
+
+<p>It is fairly widely thought that the keyboard is faster than the mouse.
+However, that depends on several issues, such as familiarity with keyboard
+shortcuts, consistency of shortcuts across applications and platforms, the
+quantity of shortcuts which need to be memorized, personal proficiency with the
+keyboard versus the mouse, the extent to which a programmer may be able to
+overlap slow operations with thinking about the program and, perhaps most of
+all, personal preference.  In addition, there is <a class="ref" href="#key"
+id="a-key">some evidence</a> (mainly relating to non-programmers) that the
+<em>perception</em> of the keyboard being faster may not actually match
+objective <em>measurements</em>.</p>
+
+<p>Nevertheless, despite all the caveats, there are a few facts which are fairly
+undeniable.  First, a programmer necessarily spends a lot of time using the
+keyboard for typing text, especially compared to non-programming tasks.  Second,
+moving a hand from the keyboard to the mouse and back again is definitely slow.
+Third, mouse operations are much slower when the target is smaller, because
+people slow down their mouse movements as they get closer to the target, in
+order to land on it with accuracy.</p>
+
+<p>What these considerations suggest for the design of the <mark>Snipe</mark>
+editor are:</p>
+
+<ul>
+
+<li>the keyboard-only style should be well supported</li>
+
+<li>keyboard shortcuts which are already widely familiar should be provided</li>
+
+<li>the number of keyboard shortcuts should nevertheless be limited</li>
+
+<li>mouse features which are already widely familiar should be provided</li>
+
+<li>mouse-based features should have big targets</li>
+
+</ul>
+
+<p>One example of a common operation that a shortcut should be provided for is
+scrolling.  Although already possible in most editors using control keys, it
+should be easier to scroll continuously, and to speed up and slow down the rate
+of scrolling, allowing a quick homing-in approach, similar to using a mouse and
+scroll bar.</p>
+
+<p>Another example is finding the right line number in response to a compiler
+error message.  That is normally done in a non-IDE editor by having visible line
+numbers and using scrolling, but that's a slow search strategy.  It should be
+quick and easy to use the keyboard to go to a specific line number.</p>
+
+<h2>Screen clutter</h2>
+
+<p>One of the issues which needs to be addressed is what should appear on the
+screen, and what is the best use of available screen space.  Screen space is
+limited, and in fact some programmers use two or three or even more monitor
+screens to try to overcome this.  Vertical space comes under the most pressure,
+because of the desire to be able to see and take in as large a portion of the
+text at once as possible. However, horizontal space also comes under pressure
+when a programmer wants to put two panes of text side by side, for comparison or
+copy and paste.</p>
+
+<p>Sometimes, it is possible to watch a programmer using an IDE where the
+program being edited is in a tiny window pane, surrounded by all sorts of other
+tool panes which are only used occasionally.  There is a case, which will be
+explored in <mark>Snipe</mark>, for having the editor focus on the program, the
+whole program, and nothing but the program.  Other tools can be available
+without being permanently visible on the screen, so that they don't take up
+valuable space during tightly focused text editing.</p>
+
+<p>There is a trend in some newer editors to have a very thin menu bar in order
+to save vertical space.  But this is slow to use, because the menu items make
+rather small targets for the mouse. If menu bars and other peripheral items are
+not permanently displayed on the screen, then there is less pressure to make
+them smaller.</p>
+
+<p>Another trend is for editors to have multiple tabs for viewing different
+files.  There is a feature where panes of text can be placed side by side, and
+that can be valuable for comparisons, but that's a separate feature which is
+independent of tabs. That means a user can normally only see the text in one tab
+at once.</p>
+
+<p>So all that tabs really provide is a permanently visible menu of recent files
+to choose from by clicking on the tab headers.  Viewed as a menu of recent
+files, tab headers provide a rather poor mechanism.  The tab headers are laid
+out horizontally, and so are the file names in them, which means that the
+horizontal space soon runs out as the number of tabs rises, and the filenames
+are no longer properly visible.  It also means that the position of each tab
+header moves about rather than staying still, making it a difficult and
+error-prone target for the mouse and the eye.  Given that they also take up
+valuable vertical space, they should probably be regarded as an anti-feature.
+Some other way of providing access to recently edited files needs to be
+found.</p>
+
+<p>A sidebar containing filenames is a much better feature, with filenames
+listed vertically in a more stable and controllable way.  If recent files are
+included, this could solve the problem.  On the other hand, a filename sidebar
+takes up a lot of screen space, so it should also not be a permanent feature on
+the screen.</p>
+
+<h2>Automatic insertions</h2>
+
+<p>A long time ago, experiments were done with <a class="ref" id="a-se"
+href="#se">structure editors</a> which didn't allow a syntactically incorrect
+program to exist.  They insisted that every action taking by the user should
+preserve some level of syntactic correctness.  For example, in a curly bracket
+language, you could insert an empty block <code>{}</code> in a valid place, but
+not an individual open or close curly bracket.</p>
+
+<p>It became clear that some operations, e.g. cutting and pasting a lump of text
+from one place to another, were close to impossible, and many other operations
+felt very restrictive or awkward.  As a result, such editors were not popular,
+and are now largely regarded as, at best, minority interest tools.</p>
+
+<p>Ever since then, it seems, authors of editors have kept trying to introduce
+partial structure features into normal free-format editors with, arguably,
+little success.  For example, many editors have a feature where, when you type
+an open curly bracket, a matching close bracket is inserted for you.  When you
+are typing new program text, this can be quite helpful.  But when you go back
+and edit existing text, the feature becomes a hindrance.  For example, if you
+want to put curly brackets round an existing statement in order to turn it into
+a block, the obvious approach doesn't work.  Many programmers type an open curly
+bracket, and then immediately delete the unwanted close bracket that has been
+inserted automatically in the wrong place.  The hindrances largely outweigh the
+helpfulness so that, overall, there is little or no gain from the feature, and
+quite a lot of potential irritation.</p>
+
+<p>One feature that can be added to overcome this is that you can select the
+region you want to surround, and then type an open curly bracket, which neatly
+puts a close bracket at the other end of the selected region. This is clever,
+but it is not right to fix up a poor complicated feature by adding another
+complicated feature, especially if it may involve a slow mouse interaction.</p>
+
+<p>A further problem arises with these features, and with features which
+auto-complete typed text, for programmers who touch type.  Few programmers are
+true touch typists, because programs are not as regular as human language text,
+but many are partial touch typists, for example glancing at other windows on the
+screen containing useful information, while editing program text. An editor
+feature becomes an anti-feature if you look back at the screen to see that the
+text there is nothing like what you thought you were typing.</p>
+
+<p>The characters needed in programming are all over the keyboard, and some of
+the non-letter characters are in different places on different keyboards, making
+it difficult to become proficient at genuine touch typing. But these keyboard
+difficulties mean that many programmers look at the keyboard itself to see where
+the keys are while typing, at least for short periods. So their eyes are not
+continuously on the screen as text is being typed, as with touch typing. That
+means for most beginners and experts alike, a feature which breaks the "what you
+see is what you typed" principle is poor.</p>
+
+<p>On the other hand, there are some possible helpful things that the editor can
+do along similar lines, such as handling indenting and making sure semicolons
+are correct and so on, that can be entirely positive.  But that is
+<em>provided</em> that the editor takes over these tasks fully, leaving
+<em>nothing</em> for the programmer to do, and especially nothing to
+correct.</p>
+
+<h2>Fast loading</h2>
+
+<p>An editor should start up quickly. This is not a particularly important
+issue for people who do programming all day, because there would only be a delay
+once at the start of work, and then the editor would remain running the rest of
+the time. But for someone for whom programming is one task among many, and who
+switches contexts frequently, an editor which starts up slowly is far less
+attractive than one which starts up quickly.</p>
+
+<p>In addition, an editor should load a large file quickly. Good programming
+practice dictates that a single module of a program should not be larger than a
+few hundred lines.  However, sometimes programmers have no choice, for example
+if they need to work with library modules, which don't fit the norm. In any case
+not all files are program modules.  Just as a simple example, if Unicode is
+involved, a programmer might need to load the standard Unicode database file,
+which describes all the world's characters, into the editor.  It has over 27000
+lines, and contains over 1.5 megabytes of text.  An editor should certainly be
+able to load and display a file of that size without any noticeable delay, and
+much larger files than that are in quite common use.</p>
+
+<h2>No buffer</h2>
+
+<p>It is an almost universal convention that an editor lets you edit a copy of a
+file in memory, traditionally called a <dfn>buffer</dfn>, and not the file
+itself.  That causes several problems.</p>
+
+<p>The first is that it adds an unnecessary extra concept.  This is not normally
+a problem for programmers, who can cope with a myriad of interconnected concepts
+at the same time with ease.  But anyone who has tried to help someone who is not
+computer literate to use an editor will know that there is a genuine extra
+mental burden, both of initial understanding, and of remembering, compared to
+the much simpler idea of just editing a file.</p>
+
+<p>Second, you have to remember to "save often", in case of some kind of crash
+which would cause you to "lose all your work".  This is totally routine, and
+ought to be automatic, and indeed many editors have an autosave feature.  For
+programmers, though, there is the further issue of remembering to "save before
+compiling".  This is also totally routine, and yet it is amazing how often even
+very experienced programmers forget.  It is usually only a momentary problem,
+but those moments add up.  Of course, IDEs include compiling and running
+programs as built in operations, which solves the problem, but a simple
+programmer's editor also ought to be able to solve the problem.</p>
+
+<p>Third, a programmer very often creates a new file.  Except that it isn't a
+new file, it is a new anonymous buffer.  And the program text that is typed into
+it doesn't get any syntax highlighting, because there is no filename which the
+editor can use to determine what language the program is written in.  It is
+extremely common for programmers to create a new buffer, and then immediately
+save it to a file, just to establish its language and get syntax highlighting
+started.  The two operations should be one.</p>
+
+<p>So the proposal is that the <mark>Snipe</mark> editor should give the user
+the impression, as far as reasonably possible, that a file is being edited
+directly, and not a copy.  Frequent autosaving becomes a necessity and not an
+optional extra.  There is no longer a button or menu item for saving.   The
+horribly ambiguous "save as" feature can also be discarded.  It means "create a
+copy", but does it also mean "continue editing the original", or "start editing
+the copy"? And if it is the latter, does it mean "delete the original" or not?
+The file operations in the editor can become the same as the common filestore
+operations - move, copy, rename and so on.</p>
+
+<p>Even with frequent autosaving, there is still a synchronization problem when
+it comes to compiling programs, and that is what we deal with next.</p>
+
+<h2>Compile and run</h2>
+
+<p>For programmers, the edit-compile-run cycle is of paramount importance.
+Modern practice is to type in at most a handful of lines of code, and often only
+one or two, before re-compiling and re-running.  So this needs to be as
+convenient as possible.</p>
+
+<p>A programmer's editor, even a simple one, should have a compile-and-run
+feature.  This is partly to solve the synchronization problem, by making sure
+the file is saved before compiling.  But it is also to avoid the need to switch
+from the editor window to a terminal window, and to avoid repetitively typing in
+the relevant commands, both of which take up valuable time unnecessarily.</p>
+
+<p>Some editors and most IDEs have a pane which acts like a terminal window.
+However, it is almost impossible to reproduce the programmer's normal command
+line environment, with its path settings, aliases and so on, especially across
+different platforms. So the proposal for <mark>Snipe</mark> is simply that the
+editor is started up by the programmer from a suitable terminal window, into
+which the editor can then inject commands.</p>
+
+<p>The programmer is asked to type the compile-and-run command or commands in,
+the first time the feature is used.  In fact remembering the commands typed from
+one session to another could introduce a security issue, because someone
+malicious could persuade a programmer to visit a particular directory and use
+the compile-and-run feature.  At that point the editor would pick up a
+pre-prepared and damaging saved command from that directory. Since the editor
+issues normal commands in the programmer's normal command line environment, a
+programmer can still, of course, use familiar tools such as <kbd>make</kbd> to
+reduce the amount of typing.</p>
+
+<p>Although a compile-and-run button, clicked with the mouse, is a good option,
+the compiling feature ought also to be accessible by keyboard alone. In fact,
+since the very common Ctrl+S shortcut is no longer needed for saving, it makes
+sense to use that. There is an opportunity here to allow a programmer to
+customize a number of available commands, and a few editors do have such a
+customization feature.</p>
+
+<p>Some programmers prefer the approach outlined here over using an IDE, because
+it is more modular.  A particular IDE often only works at its best for one
+language, and strongly encourages a particular way of working on all issues,
+whereas this editor approach allows a programmer to change languages and mix
+tools at will.</p>
+
+<h2>Final newline</h2>
+
+<p>The issue of whether a file has a final newline is a rather minor one.  Yet,
+judging by the number of discussions about it on the Web, it is an issue which
+causes a surprising amount of confusion.  In fact, reading the code in some well
+known editors reveals confusion among programmers who should know better, too.
+So let's establish the real truth, once and for all.</p>
+
+<p>There are two sensible-sounding conventions for final newlines in multi-line
+text.  The <dfn>terminator</dfn> convention insists that the last line must end
+in a newline.  With the <dfn>separator</dfn> convention, the last line never has
+a newline at the end.  It should be clear that one or other convention should be
+adhered to rigidly, and the two can't be mixed, otherwise there would be an
+ambiguity about how many lines there are.  In the terminator convention, the
+number of lines is the same as the number of newlines, and in the separator
+convention it is one more than the number of newlines.</p>
+
+<p>In a stored text file, the terminator convention is the only reasonable
+choice. This is because:</p>
+
+<ul>
+<li>some tools require it, and all tools can tolerate it</li>
+<li>some standards require it</li>
+<li>an empty file contains no lines</li>
+</ul>
+
+<p>With the separator convention, there is no way to represent empty text with
+no lines. An empty file would contain one empty line.  It doesn't seem possible
+to come up with a fully consistent and confusion-free scheme based on the
+separator convention, and it is far too late to switch anyway.  It is not going
+too far to say that, in text files, the terminator convention is correct and the
+separator convention is incorrect.</p>
+
+<p>On the other hand, in a text buffer in memory, the separator convention is
+the most obvious choice.  This is because:</p>
+
+<ul>
+<li>the text can be treated as an unrestricted array of characters</li>
+<li>a final newline corresponds to an extra line on the screen</li>
+<li>it is easy to add a final newline on save</li>
+</ul>
+
+<p>The first point means that the user can be allowed to insert or delete any
+character at any position in the text, without having to make any adjustment.
+The buffer simply is, logically speaking, an editable array of characters.</p>
+
+<p>The second point concerns the text cursor, often called a
+<dfn>caret</dfn> to distinguish it from a mouse cursor.  When text is displayed
+on screen, it must be possible to put the caret below the last line in order to
+type in new lines.  And, in particular, when the text is empty, there must be a
+line to put the caret on.  Thus empty text appears to consist of a single blank
+line, as with the separator convention.</p>
+
+<p>The two choices are quite reasonable on their own.  What is not reasonable is
+the way they clash in an editor, and that is what causes the confusion.  The
+number of lines reported or implied by the editor doesn't match the number of
+lines reported by other tools. The feature of adding a final newline on saving
+adds to the confusion, especially if it is optional. Making the feature optional
+gives the completely incorrect impression that it is allowable to have a text
+file without a final newline. It just isn't. Some people might argue that files
+in some non-text binary format don't obey the terminator convention, but there
+are so many other issues involved that a binary file editor should be regarded
+as a <em>completely different tool</em> than a text editor, even if integrated
+into it.</p>
+
+<p>The proposed solution, which matches the idea that a file is being edited and
+not a copy in a buffer, is to follow the terminator convention exclusively. That
+means, when the user makes an edit which creates a non-empty final line, then a
+newline is automatically added if there isn't one, to preserve the terminator
+convention as an invariant. In addition, when line numbers are displayed, the
+position below the last line is not marked with a line number, to avoid giving
+the wrong impression about the number of lines.</p>
+
+<p>There is no logical inconsistency in having the caret on a line below the
+last line.  It is well known, though programmers are apt to forget, that indexes
+are usually best thought of as being like carets on the screen, sitting between
+characters rather than pointing at characters.  That means there is a natural
+caret position after the last character in the text, which is after the final
+newline, and therefore visually below the last line.</p>
+
+<p>Incidentally, in the early days of computing, a caret was a highlighted
+character rather than a pointer between characters, so there were only
+<var>n</var> positions it could be placed on a line of <var>n</var> characters,
+instead of one more, leading to the 'line-wrap bug'.  This early bug seems to
+have been written out of history, so it re-emerges now and then.</p>
+
+<h2>Scrolling</h2>
+
+<p>What should the editor window look like? Perhaps like this mockup image. It
+is very plain, but the focus of attention is entirely on the program text, where
+it should be. Any status information needed can go in the title bar, avoiding a
+separate space-wasting status bar.</p>
+
+<img class="middle" src="mock.png" width="562" height="465"/>
+
+<p>For mouse operations, overlays appear when the mouse is moved over part of
+the window.  For example, when the mouse is over the right edge of the window, a
+scroll bar overlay appears, perhaps as shown in the mockup.</p>
+
+<p>The important features are that the scroll bar and 'thumb' form an overlay,
+not changing the position of the text or the amount of it that is visible, that
+the feature should be large so that it is quick and easy to use with the mouse,
+and that it should be temporary, only visible while scrolling.  Making it
+transparent or semi-transparent as in the picture helps to make its overlay
+nature clear.</p>
+
+<p>Scrolling should also be accessible via the keyboard.  Conventionally, the
+PageUp/PageDown keys scroll by just one page when you press them, though they
+may auto-repeat after a short pause.  But to get the same ease of use as with a
+mouse, a better approach is for scrolling to start when one of the keys is
+pressed down, and continue all the time the key is held down.  At the same time
+as holding down the key, the programmer should be able to speed up the scrolling
+perhaps by pressing the Shift or Ctrl/Cmd key or both.</p>
+
+<h2>Line numbers</h2>
+
+<p>A line-number overlay appears on the left side of the window, at the same
+time as the scrollbar appears on the right, since the two are most often used
+together. Clearly, the line numbers need to be somewhat less transparent.</p>
+
+<p>In addition, there is a convenient way, using the keyboard, to get to
+a specific line number.  A reasonable convention might be that if the programmer
+presses digits while the Ctrl key is held down, those digits make up a line
+number which is completed when the Ctrl key is released.  The line number
+overlay appears during this operation.</p>
+
+<h2>Files</h2>
+
+<p>Continuing in the same vein, when the mouse is over the left hand side of the
+window, or when some keyboard shortcut such as Ctrl+F is pressed, a file manager
+overlay appears.  A file can be chosen within it using the mouse or arrow
+keys, and other navigation conventions can be set up.</p>
+
+<p>The overlay handles several issues together.  First, there is a section for
+recently edited files. Files only appear in this section if they have actually
+been changed, or if they have explicitly been put there by the programmer.  The
+appearance of a file in the recent list indicates that undo information is
+being retained for that file, in the same way as often happens with tabs in
+existing editors.  A second section displays the current directory, i.e.
+the directory which the currently viewed file is in.  A third section
+allows exploration of the whole filestore.</p>
+
+<p>A carefully designed custom file handler of this kind is likely to work much
+better than conventional tabs, and also much better than using the platform's
+native file chooser, which lacks platform independence and customizability.</p>
+
+<h2>Buttons and Menus</h2>
+
+<p>Buttons and menus can also be made to appear, perhaps when the mouse is over
+the top part of the editor window, or when particular keys are pressed.  The
+menus contain many of the same entries as conventional menus, but the entries
+are pared down to make them as lean as possible.  For example, one popular
+editor has a help menu that looks something like this:</p>
+
+<ul>
+<li>View terms of use</li>
+<li>View licence</li>
+<li>Version</li>
+<li>Documentation</li>
+<li>Frequently asked questions</li>
+<li>Community discussions</li>
+<li>Search issues</li>
+<li>About</li>
+<li>Welcome guide</li>
+</ul>
+
+<p>This can be replaced by a single help button that takes you to some
+documentation containing similar information, but in a more easily navigable
+full-page format.</p>
+
+<p>In other cases, the editor simply chooses the 'best' way of doing
+something, removing the need for a panoply of options.  Of course, there will be
+people who don't like the choice made, but that situation is normal for any
+editor.  And in any case, the ultimate option is always available - use a
+different editor.</p>
+
+<h2>Indents</h2>
+
+<p>Keeping indenting consistent is boring and repetitive.  It is an issue where
+most editors provide incomplete support.  For example, it is common for an
+editor to indent the next line correctly and automatically when a newline is
+typed.  But when going back and editing existing code, indents usually have to
+be fixed up manually.  There are 'clever' fixes, such as selecting a group of
+lines and changing their indents all in one go.  But  it seems less than ideal
+to fix a poor feature by adding more features.</p>
+
+<p>So, the question arises of whether the 'correct' behaviour can be precisely
+specified.  This is a somewhat language-specific question, so let's restrict it
+for now to the C family of languages, such as C, C++, C#, Java, JavaScript,
+though the discussion probably applies with little change to other languages.</p>
+
+<p><a class="ref" id="a-is" href="#is">Indent style</a> is an emotive topic,
+based on personal preference, with many different choices.  Nevertheless, a
+correct behaviour <em>can</em> be tightly specified, <em>if</em> the programmer
+is willing to accept some restrictions on the choice of layout style. Suppose,
+for example, the following rule is implemented:</p>
+
+<p class="principle">Whenever a line ends with an open bracket <code>{ [
+(</code>, then the following lines are indented.  When a line
+starts with a close bracket <code>) ] }</code> then following lines are
+outdented.</p>
+
+<p>Obviously, the rule has to be adapted a little to deal with exceptions such
+as multi-line comments, blank lines, and so on.  Despite its simplicity, the
+rule supports the two most popular indent styles K&amp;R and Allman.  With small
+variations on the placements of the brackets themselves, the rule could be
+easily extended to cover Gnu, Whitesmiths and Horstmann styles.  Styles such as
+the Pico style are more difficult:</p>
+
+<pre>while (n > 1)
+{   if (n%2 == 0) n - n/2;
+    else n = 3*n + 1; }
+</pre>
+
+<p>The problem with this style is that the recognition of the close bracket as
+ending the block is not a simple lexical rule.  For example, suppose the code is
+changed to:</p>
+
+<pre>while (n > 1)
+{   if (n%2 == 0) n - n/2;
+    else if (n%2 == 1) { n = 3*n + 1; }
+</pre>
+
+<p>Now the final close bracket does not end the block, because it matches an
+open bracket earlier in the same line.  The rule would now have to include
+syntactic issues, or at least bracket matching.  There is something appealing
+about the simplicity of the original rule, both for implementation and for
+immediate recognition by the human eye, so it isn't clear whether it would be
+sensible to extend the rule to cover this style.</p>
+
+<p>There may be other language features which a programmer would have to give up
+in order to make fully automatic indenting possible.  For example, in C99, there
+is a feature where any line ending in a backslash is continued on the next line.
+It is unlikely that a programmer would want to use this feature, except perhaps
+to continue a long string constant, e.g.</p>
+
+<pre>    char *s = "Once upon a time, \
+long long ago";
+</pre>
+
+<p>However, C99 also joins two successive string constants, so the same effect
+can be achieved without spoiling the indenting:</p>
+
+<pre>    char *s = "Once upon a time, "
+    "long long ago";
+</pre>
+
+<p>With indentation comes the issue of how to handle continuation lines for long
+statements.  A good simple rule for continuations is:</p>
+
+<p class="principle">A line is continued on the following line if it ends with
+an infix symbol.  It is also continued if it ends with an open round or square
+bracket, up to a line beginning with a close bracket.</p>
+
+<p>This allows for two styles of continuation.  One breaks the line after a
+suitable symbol:</p>
+
+<pre>int n =
+  long_variable_name_1 +
+  long_variable_name_2;
+</pre>
+
+<p>There has to be a separate convention about how much continuation lines are
+indented in this style, if at all.  Here, we are assuming it is half the usual
+amount.</p>
+
+<p>The other is a Python-like convention where round and curly brackets are
+used, with extra indentation according to the indentation rule above:</p>
+
+<pre>int n = (
+    long_variable_name_1 +
+    long_variable_name_2;
+);
+</pre>
+
+<p>Once the programmer accepts any necessary restrictions, the rules can become
+an absolute invariant, preserved on every keystroke by the editor.  There is no
+need to allow the programmer to touch the indents, or affect them in any way. A
+newline and the following indent can be treated effectively as a single
+character.  This does not require the program to be kept correct, just
+consistent.  Indents aside, the program can be in any correct or incorrect
+state.  In exchange for giving up a tiny bit of aesthetic layout freedom, the
+programmer is offered the opportunity not to have to think about, worry about,
+or waste time on, indents ever again. This may take a bit of getting used to,
+but should in the end be regarded as an extremely advantageous trade.</p>
+
+<p>Further issues arise, however.  If the programmer inserts or deletes a
+bracket, the indentation of all the subsequent lines may change.  This may seem
+a bit strange, but similar behaviour is already widely accepted in the case of
+syntax highlighting.  Inserting or deleting the start or end of a multi-line
+comment can change the highlighting on all the remaining text.  On the other
+hand, the proposed behaviour involves the text 'moving about'.  Whether this
+will be aesthetically acceptable, or whether the idea can be adapted to be
+acceptable, remains to be seen.</p>
+
+<p>Also, there are potential efficiency issues.  If the programmer makes a
+one-character change, and there are knock-on consequences in the rest of the
+text, do all the changes have to be stored in the undo buffer?  If a feature of
+this kind is regarded as preserving a consistency invariant, this may not be
+necessary.  If the programmer's change is undone, and then the consistency
+invariant re-established, this should take the state of the text back to where
+it was before the edit.</p>
+
+<p>Finally, could knock-on changes in a large file cause latency pauses?  If
+lines of text are displayed on demand as they become visible, rather than
+treating the display as a view onto a single monolithic image, then the problem
+becomes a simple animation issue which is easily solved.</p>
+
+<h2>Tabs</h2>
+
+<p>Tabs and tab-widths are, of course, closely related to indents, because a tab
+is thought of as the unit of indenting. The approach to indenting outlined above
+means that the tab key never needs to be used by the user, but the question
+remains of how tabs are represented in files.</p>
+
+<p>The approach taken is that soft tabs are used exclusively. There is no option
+to switch to hard tabs.  This is on the basis that hard tabs are obsolete,
+poorly standardized, and visually ambiguous.  A particularly bad example is the
+convention used in some libraries that a hard tab is equivalent to 8 spaces, but
+the unit of indent is 4 spaces.  The result is a mixture of tabs and spaces
+which is <strong>impossible</strong> to view properly in an editor which does
+not have separate settings for the tab width and the unit of indent.</p>
+
+<p>There are people who believe that hard tabs increase interoperability between
+programmers, because each can choose a different tab width.  But that only works
+if you don't care about line length and wrapping issues.  And in any case, such
+interoperability is better attained using a tool which <em>intelligently</em>
+translates between layout styles.</p>
+
+<p>There is, unfortunately, no way to choose a best tab width.  Probably, 4
+spaces is the most popular, with 2 spaces a close second, and 8 spaces generally
+less popular than it used to be because of the wasted screen space. On a
+personal note, I spent several years, in my <kbd>emacs</kbd> days, utterly
+convinced that 3 spaces is aesthetically the best tab width.  Then I was
+horrified to discover than many popular modern editors only allow a choice
+between 2 or 4 spaces.</p>
+
+<p>Rather than have an option to set the tab width globally in the whole editor,
+it seems better for the editor to infer the tab width on each file from the
+first example of an indent in the file.  Some mechanism is needed to create a
+first indent in a new file which doesn't have one, and to change the tab width
+of an entire file.  A simple option which doesn't involve new menu items or
+shortcuts is to allow the first indent of a file to be editable as individual
+spaces.</p>
+
+<p>One little detail that mustn't be forgotten is that a Makefile is an
+exception.  A Makefile must be saved with hard tabs in it, for unfortunate
+historical reasons.</p>
+
+<h2>Semicolons</h2>
+
+<p>Without going into as much detail, it is possible to develop rules which
+allow the editor to keep end-of-line semicolons accurate as an absolute
+invariant. Once more, the programmer may need to give up a small amount of
+expressive freedom, but without needing to keep the program correct in any
+significant sense.</p>
+
+<p>The situation is a little more complex than with indents, and a little more
+language dependent.  For example, the C language has no fewer than four types of
+curly bracket construct:</p>
+
+<pre>{                     if (n%2 == 0) {      struct s {        enum e {
+    int temp = x;         n = n / 2;           int n;           MAX=10
+    x = y;            }                    };                };
+    y = temp;
+}
+</pre>
+
+<p>The four types differ in whether or not they have each of three features,
+which can be listed as:</p>
+
+<ol type="a">
+<li>attached to the previous statement</li>
+<li>block-like with semicolons inside</li>
+<li>close bracket followed by semicolon</li>
+</ol>
+
+<p>Then the four types shown above have feature sets <em>b</em>, <em>ab</em>,
+<em>abc</em>, <em>ac</em>.</p>
+
+<p>A full treatment of these types would involve recognizing
+<code>typedef</code> names.  It is well known that this requires not only
+parsing the syntax of the language, but also doing some semantic analysis while
+parsing.  This goes far beyond what is normally expected of a simple editor.
+However, if one or two very simple restrictions are adopted, a relatively simple
+local algorithm can be used to distinguish the above four types of curly
+brackets. Then, in conjunction with the layout and continuation rules in the
+previous section, end-of-line semicolons can be fully handled by the editor, to
+the point where the programmer need never waste time on them.</p>
+
+<h2>Line length</h2>
+
+<p>Programmers differ about the maximum length of lines, though the vast
+majority use some self-imposed limit.  Many programmers like to limit the line
+length to 80 characters.  That may seem old fashioned but, even on modern
+screens, that is about the maximum that comfortably allows two windows or panes
+to be put side by side.</p>
+
+<p>Other programmers like a much wider window width.  It isn't clear that anyone
+should be <em>allowed</em> to have such wide windows, because it is not public
+spirited.  As well as the inability to put the resulting program comfortably
+alongside anything else, it has been clearly demonstrated that for many people,
+long lines drastically reduce the speed at which text, including programs, can
+be read. Programmers are supposed to write programs which can be easily read and
+perhaps developed further by other programmers.</p>
+
+<p>Line wrapping is often offered as a solution to this problem.  However, line
+wrapping has several problems.  It spoils line numbers and confuses the eye.  It
+only applies temporarily on the screen, so there is no guarantee that the
+treatment of long lines will be the same when the program is printed, for
+example.  But worst of all, lines are wrapped at arbitrary and illogical places
+in the program.  If wrapping is to be neat and logical, it must be done
+permanently in the program text, not just temporarily on screen.</p>
+
+<p>On the other hand, programmers may say that they don't want to be bothered
+with frequent re-formatting operations to make their long statements look good.
+Leaving aside the question of whether they should be writing long statements,
+they have a very good point.  It is boring and repetitive.  So the question
+arises as to whether it can be tightly specified, so that it can be
+automated.</p>
+
+<p>The answer may be yes, though it does require the editor to have some
+syntactic information about the program text, as well as the usual lexical
+information.  If a program statement is thought of as being built up from
+expressions using operators with precedences, a rule which is simple to state,
+though perhaps not so simple to implement, might be that a statement should be
+split after the least tightly binding operator. So, suppose a programmer types
+in a statement like this:</p>
+
+<pre>int n = long_variable_name_1 + long_variable_name_2;
+</pre>
+
+<p>Suppose also that the length of the line has just become too long to fit
+within the width limit.  Then the line could be automatically split to read:</p>
+
+<pre>int n =
+  long_variable_name_1 + long_variable_name_2;
+</pre>
+
+<p>That's because the assignment 'operator' is the least binding one.  If the
+line is still too long, then it should be split automatically again:</p>
+
+<pre>int n =
+  long_variable_name_1 +
+  long_variable_name_2;
+</pre>
+
+<p>It should be emphasized that this splitting is intended to be permanent,
+adding newlines and changing line numbers, not just a temporary on-screen
+wrapping. That does not preclude the addition of the opposite feature, where a
+statement which is shortened can have the reverse process applied.</p>
+
+<p>A similar level of automation ought to be applied to comments.  They should
+be word-wrapped automatically.  And that should happen as they are typed, not by
+using some menu option or keyboard shortcut.  There are details to be sorted
+out, but the result should be very convenient.</p>
+
+<p>As before, the ideal situation would be for programmers to accept the narrow
+80-character limit, on the basis that they don't have to do anything about it or
+even think about it, just trust the editor to get everything right.  At a
+stretch, there could even be an option where long lines are allowed on screen,
+but automatically wrapped in the stored file.</p>
+
+<h2>Syntax highlighting</h2>
+
+<p>Using different colours for different categories of token is common in
+editors.  And it is not just to make programs look pretty.  It considerably
+speeds up reading, skimming, and getting overall impressions of program text. It
+also provides instant feedback for certain kinds of typing error.</p>
+
+<p>Traditionally, the scanning of text in editors to form tokens is done by
+specifying some regular expressions.  There are two main problems with that.
+One is that regular expressions are incredibly difficult to read, write, and
+debug. Many people who like them have never used them other than by copying and
+pasting ones that other people have produced.  And, if copying and pasting is
+the main operation, there would be no harm in using something better.</p>
+
+<p>They are also restrictive. For example, it is impossible with regular
+expressions to do something as simple as check that brackets are matched. And it
+is also very different to represent different scanning states. As a result, many
+existing editors use a mixture of regular expressions and states. As a result of
+this awkwardness and restrictiveness, scanning in editors is often only rough,
+with occasional incorrect behaviour.</p>
+
+<p>The proposal here is to use a more expressive, if slightly more verbose,
+language. The language allows a string-matching state machine to be expressed
+directly, bypassing the need for any difficult notation.</p>
+
+</body>
+</html>

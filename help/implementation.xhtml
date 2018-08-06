@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en-GB" xml:lang="en-GB">
+<head>
+<meta charset="UTF-8"/>
+<style>
+    body { font-size: 120%; }
+    pre, .indent { margin-left: 40px; }
+    img { display: block; margin: 0 auto; }
+    mark {
+      font-family: cursive;
+      font-size: 95%;
+      color: #080;
+      background-color: white;
+    }
+</style>
+<title>Snipe Implementation</title>
+</head>
+<body>
+
+<h1>Implementation</h1>
+
+<p>The main implementation goals are for <mark>Snipe</mark> to:</p>
+
+<ul>
+<li>be cross-platform</li>
+<li>be fast-loading</li>
+<li>have a single code base</li>
+<li>use a portable binary</li>
+</ul>
+
+<p>A variety of libraries have been tried (in several programming languages) to
+achieve cross-platform graphics. Higher level libraries are unsatisfactory,
+because they are typically very large, with extensive dependencies. That means
+programs using them are only fast-loading on their native platforms, and then
+only if the libraries have already been loaded into memory by other
+applications. In the end, low level C libraries have been chosen:</p>
+
+<ul>
+<li><a href="https://www.freetype.org/">Freetype</a> for fonts</li>
+<li><a href="http://www.glfw.org/">GLFW</a> for event handling and window control</li>
+<li><a href="https://www.opengl.org/">OpenGL</a> for graphics rendering</li>
+</ul>
+
+<p>OpenGL is reliably available across most platforms. The only current problems
+with it appear to involve old versions of Windows or obscure features, neither
+of which are relevant to <mark>Snipe</mark>. It is old, which is good for
+supporting old computers. Using Vulkan instead or as well will probably be
+appropriate at some point, to support newer computers, such as Macs which may
+stop supporting OpenGL.</p>
+
+<p>To produce reasonably portable binaries for each of the three main platform
+families, Freetype and GLFW are statically linked. The sources of Freetype and
+GLFW are included with the project. Freetype is cut down to a minimum,
+supporting only <code>.ttf</code> font files, so that it becomes small and has
+no further dependencies. OpenGL (which is effectively a device driver and
+therefore not portable, even within the same platform family), and the standard
+system libraries needed by GLFW (similarly not portable), are dynamically
+linked.</p>
+
+<p>The only reasonable programming languages to use in the implementation, given
+this choice of low level libraries, are C or C++. C has been chosen as, used
+with care, it is simpler. There are no real practical advantages of C++, given
+that no specific C++ libraries are needed.</p>
+
+<h2>Platforms</h2>
+
+<p>It is desirable to have similar build environments on all three main platform
+families. A command line build environment works well on Linux and MacOS, but
+takes more care to set up on Windows.</p>
+
+<p>The Windows C compiler is avoided, to make sure the same compiler, meeting
+the C11 standard, is used on all platforms. On the other hand, Cygwin is
+unsuitable, because of the need to create a native binary with convenient
+graphics testing and without a large extra DLL. Instead, MSYS2 is used, which is
+built on <code>mingw-w64</code>, adding a shell window and the
+<code>pacman</code> package manager. When setting up MSYS2, care is taken to
+install <code>mingw-w64-x86_64-gcc</code> rather than the default version of
+<code>gcc</code> to support native compiling and avoid the need for a
+Cygwin-like DLL. Similarly, <code>mingw64/mingw-w64-x86_64-cmake</code> is
+installed rather than the default <code>cmake</code>, and so on. To meet the C11
+standard uniformly across platforms, the <code>long</code> type is avoided, and
+very careful use is made of C library functions. Also
+<code>setbuf(stdout,NULL)</code> is included in every <code>main</code>, to
+counter the indirect handling of <code>stdout</code> on MSYS2, which causes
+buffering. A few Posix functions beyond the C11 standard are required to handle
+directories properly, but fortunately the MSYS2 environment provides what is
+needed.</p>
+
+<h2>Portability</h2>
+
+<p>Providing reasonably portable binaries, one for each of the three main
+platform families, is a compromise. It avoids the need for users to compile
+<mark>Snipe</mark> from source in most cases. But it also avoids the
+inconvenience of building installer packages for a wide range of platforms, or
+arranging for inclusion in a wide range of distributions. Some general
+information about building OpenGL/GLFW programs for the three main platforms can
+be gleaned from sites like <a
+href="http://web.eecs.umich.edu/~sugih/courses/eecs487/glfw-howto/">this
+how-to</a>.</p>
+
+<p>On Windows, the binary created uses calls to system libraries which have been
+standard for some time, and there are no known difficulties.</p>
+
+<p>MacOS has yet to be tackled, but the situation is expected to be similar to
+Linux.</p>
+
+<!--
+<p>To create a single Linux binary which covers a reasonable range of Linux
+platforms, dependencies on system libraries (checked with <code>ldd</code>) are
+kept low. In addition, as described <a
+href="http://insanecoding.blogspot.com/2012/07/creating-portable-linux-binaries.html">here</a>,
+<code>objdump</code> is used to find problematic GLIBC library functions which
+normally require recent versions of the GLIBC library. Using a method similar to
+<a href="https://github.com/wheybags/glibc_version_header">this</a>, those
+problem functions are declared as older versions, making the binary compatible
+with more platforms. This requires the <code>asm</code> feature of
+<code>gcc</code> but avoids the need for a special build environment.</p>
+-->
+<h2>Dependencies</h2>
+
+<p><mark>Snipe</mark> is implemented using small and well-encapsulated modules,
+with low dependencies and no dependency cycles, each including its own unit
+testing. The main dependency issue is how the logic of a program (the model) and
+the graphics (the view) are related. The style chosen for <mark>Snipe</mark> is
+to divide all the modules into four main groups:</p>
+
+<img src="MVC.png" />
+
+<p>The controller asks for events from the view, sends them as actions to the
+model, then asks the model for data to send to the view to update it. This is a
+variant of the Model-View-Controller design pattern, with lower dependencies
+than usual. This avoids any cyclic dependency, especially between the view and
+the model, which would make development unreasonably difficult. It avoids having
+a lot of modules dependent on graphics, which would make testing unreasonably
+difficult. And it avoids having the view depend on anything much other than
+graphics library facilities, which helps to keep it simple and independent.</p>
+
+<p>The detailed list of modules and their dependencies is recorded in only one
+definitive place, the <a href="Makefile">Makefile</a>. The modules are listed
+there in dependency order, with each depending only on the modules above so
+that, in any development step, the modules can be upgraded and tested one by one
+in the order listed.</p>
+
+<h2>Style of C</h2>
+
+<p>To make modules independent, and their dependencies clear, each module has
+its own header file which defines its API. None of the module headers mention
+anything related to the OpenGL or GLFW APIs, isolating the use of those
+libraries to the modules that need them. (Isolating libraries in this way in C++
+can be surprisingly difficult, e.g. involving the PIMPL strategy.)</p>
+
+<p>In order to make modules robust, most are encapsulated by
+defining an opaque structure in the header:</p>
+
+<pre>struct X;
+typedef struct X X;
+</pre>
+
+<p>This ensures that normal code cannot see inside or damage the structure, and
+can only access it by making official function calls.</p>
+
+<p>It is normal to guard against multiple inclusion of headers using
+preprocessor guards. But that is aesthetically ugly, and the care taken over
+dependencies makes multiple inclusion problems rare. Function prototypes, opaque
+structure declarations and (since C11) typedefs are safe to include multiple
+times, so enumerated types are effectively the only problem.</p>
+
+<p>Enumerated types in C are not type-safe. It is possible to use typesafe
+opaque constants, but they are tedious to define and awkward to use and, in
+particular, they can't be used in switch statements. So conventional C
+enumerated types are used. An enumerated type such as <code>event</code> is
+defined in its own module. The header <code>event.h</code> contains:</p>
+
+<pre>enum event { ... };
+typedef int event;
+</pre>
+
+<p>Note that a declaration <code>typedef enum event event</code> is possible,
+but is less flexible because it requires the enumeration to be in scope. In
+addition, it gives a false sense of type safety, and it effectively prevents the
+use of <code>-1</code> as an exceptional value, at least when compiler
+optimization is switched on. The header <code>event.h</code> is included only in
+implementation <code>.c</code> files, not in other header files. If the
+<code>event</code> type is needed in another header in order to define an API,
+that header uses the line:</p>
+
+<pre>typedef int event
+</pre>
+
+<p>instead of the line:</p>
+
+<pre>#include "event.h"
+</pre>
+
+<p>With these conventions, headers cause no multiple inclusion problems.</p>
+
+</body>
+</html>

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en-GB" xml:lang="en-GB">
+<head>
+<meta charset="UTF-8"/>
+<style>
+    body { font-size: 120%; }
+    pre, .indent { margin-left: 40px; }
+    img { display: block; margin: 0 auto; }
+    mark {
+      font-family: cursive;
+      font-size: 95%;
+      color: #080;
+      background-color: white;
+    }
+</style>
+<title><mark>Snipe</mark> Proposed Features</title>
+</head>
+<body>
+
+<h1>Proposed Features</h1>
+
+<h2>Character encoding</h2>
+
+<p>Only UTF-8 is supported. It has become the only sensible encoding, being
+plain-text compatible, supporting all human languages, and allowing documents
+with mixed languages. There is no reliable way to detect what encoding is used
+in a file, making it <em>impossible</em> to support other encodings in a fully
+automatic way. In any case, supporting other encodings would delay the desirable
+adoption of UTF-8 everywhere. So files must be converted to UTF-8 where
+necessary before being edited by <mark>Snipe</mark>.</p>
+
+<h2>New file</h2>
+
+<p>When a new file is created, its filename is requested straight away, instead
+of creating an anonymous buffer. This is partly to be compatible with the no
+buffer convention. But it is also because otherwise the editor doesn't know the
+file extension and so can't do syntax highlighting of the text etc.</p>
+
+<h2>Settings</h2>
+
+<p>A separate settings file, perhaps <code>.snipe</code> is supported
+in any directory. A search is made in ancestor directories, so that a single
+settings file can apply to a multi-directory project. A check is made that
+the editor has write access to the directory, to guard against security
+loopholes.</p>
+
+<h2>Auto-indenting</h2>
+
+<p>Most editors provide something that ought to be called semi-auto-indenting.
+It works well when typing new program text. But it typically works badly when
+changing existing text. The result is that, for most programmers, there is
+little or no net gain.</p>
+
+<p><mark>Snipe</mark> provides full auto-indenting for any language where syntax
+rules are provided in a language file. The idea is that, in exchange for a small
+and hopefully painless loss of control over indenting, the user need never think
+about or adjust indenting ever again. The amount of indent on a line is
+determined by rules, as explained below, and maintained during all editing
+operations. The cursor can't be placed inside the indent - it moves back and
+forth past the indent as if it wasn't there. Attempts made to change the indent
+fail, because it is immediately corrected.</p>
+
+<p>It is challenging to come up with rules which are simple to understand and
+implement, which are immediately apparent to the eye, which work across a wide
+range of languages, which work even when a program is not in a syntactically
+correct state, which cope with continuations of single statements onto multiple
+lines as well as blocks of statements, which support all the common indenting
+styles, and which the majority of programmers can accept comfortably without
+irritation.</p>
+
+<p>The rules chosen are adapted from Python, and work across all
+curly-bracket-based languages, and possibly many more. The rules work on a
+line-by-line basis, based on bracket characters <code>()[]{}</code> whether
+round, square or curly. Only syntactically active brackets (i.e. ones not inside
+comments or strings) count.</p>
+
+<p>An <dfn>opener</dfn> is an open bracket which is not followed on the same
+line by a close bracket of the same kind, or by a closer. A <dfn>closer</dfn> is
+similarly a close bracket which is not preceded on the same line by an open
+bracket of the same kind, or by an opener.</p>
+
+<p>An opener causes the indent to be increased by one tab, starting on the
+following line (or immediately following the bracket itself on the same line, if
+the bracket is at the start). A closer causes the indent to be decreased by one
+tab, starting on the next line (or on the same line if the closer is at the
+start).</p>
+
+<p>There are some exceptions. Auto-indenting is switched off during multi-line
+constructs such as long comments or strings. The indent of a blank line is
+temporarily zero. The indent of a line containing a label (e.g. a case in a
+switch statement) is temporarily reduced by half a tab.</p>
+
+<h2>Auto Semicolons</h2>
+
+<p>Semicolons are inserted or corrected automatically on every edit, in a
+similar fashion to indenting. This is more language-dependent than indenting,
+and requires some support from language scanning.</p>
+
+<h2>Multiple cursors</h2>
+
+<p>Multiple cursors are too cool to leave out of <mark>Snipe</mark>. They are
+coming soon.</p>
+
+<h2>Compile and Run</h2>
+
+<p>On pressing <code>CTRL+S</code> for example, the file should be saved, and a
+pre-defined command or command sequence issued to compile and/or run the
+program. This should be within an existing terminal window that the programmer
+is already using, with a preferred environment, and which <mark>Snipe</mark> was
+started up from.</p>
+
+<h2>Scrolling</h2>
+
+<p>Smooth scrolling should be available both from the keyboard and using the
+mouse. If done using the keyboard, it is accompanied by moving the cursor. A
+conventional 'thumb' is displayed, but using a (semi-)transparent overlay rather
+than permanently stealing space from the text, and much larger than usual to
+make an easy target for the mouse. Line numbers should also be visible as an
+overlay. The rate of scrolling should be controllable.</p>
+
+<h2>Line numbers</h2>
+
+<p>To go straight to a specific line number, the CTRL key is held down while the
+digits are typed. A line number overlay, and perhaps scrolling overlay, is
+displayed during the operation.</p>
+
+<h2>File Menu</h2>
+
+<p>When the mouse is over the left hand side of the window, or when CTRL+F is
+typed, a file menu page or overlay is displayed. It shows the available files
+and directories, which files are current (with undo info available) and allows
+navigation.</p>
+
+</body>
+</html>

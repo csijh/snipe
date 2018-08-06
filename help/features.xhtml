@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en-GB" xml:lang="en-GB">
+<head>
+<meta charset="UTF-8"/>
+<style>
+    body { font-size: 120%; }
+    pre, .indent { margin-left: 40px; }
+    img { display: block; margin: 0 auto; }
+    mark {
+      font-family: cursive;
+      font-size: 95%;
+      color: #080;
+      background-color: white;
+    }
+</style>
+<title>Snipe Features</title>
+</head>
+<body>
+
+<h1>Features</h1>
+
+<p>In general, the aims are to make the 'best' choice possible, and to automate as
+much as possible. The general settings can be seen in the file
+<a href="../settings.txt">settings.txt</a>. The keyboard and mouse mappings
+can be seen in the file
+<a href="../files/map.txt">files/map.txt</a>.</p>
+
+<h2>Help</h2>
+
+<p>On typing CTRL+H or giving some yet-to-be-determined mouse gesture, a help
+page appears in the user's browser. The command to do that varies by
+environment, so it can be specified it in the settings.</p>
+
+<h2>Line endings</h2>
+
+<p>Files are always written out using <code>\n</code> line endings, though the
+Windows convention <code>\r\n</code> and old Mac convention <code>\r</code> are
+accepted and converted on input. This follows the advice of the <a
+href="http://utf8everywhere.org/">UTF-8 everywhere manifesto</a> which
+recommends using <code>\n</code> line endings everywhere. All sensible tools on
+Windows accept <code>\n</code> line endings. The most obvious exception is
+Notepad, but there are other good reasons to avoid using that.</p>
+
+<h2>No buffer</h2>
+
+<p><mark>Snipe</mark> creates the illusion of editing a file directly, not a
+copy in a buffer. This gets rid of an unnecessary extra complication in the
+user's mental model, and removes the need for frequent saving, which is entirely
+routine and therefore should be automated. Autosave becomes a necessary feature
+of <mark>Snipe</mark> rather than an option. <mark>Snipe</mark> doesn't create
+backups of files, on the basis that programmers use other tools such as
+<code>git</code> for that. Autosaving is done at least every minute, and also
+when compiling and running programs.</p>
+
+<h2>Final newline</h2>
+
+<p>Files are always written out with a final newline, though a file without a
+final newline has one added when it is read in. That's because: (a) most tools
+expect a final newline and all tools tolerate it (b) some standards require it
+and (c) the opposite convention, treating <code>\n</code> as a separator, is not
+sensible because there is no way to represent an empty file as opposed to a file
+with a single blank line.</p>
+
+<p>The final newline convention is also maintained during editing, in line with
+having no notional buffer. The more usual convention of treating a buffer as a
+string with newlines as separators causes a surprising amount of confusion
+because the editor's line count for the buffer doesn't match the normal line
+count for the file. In <mark>Snipe</mark>, it is still reasonable to regard the
+text as a single array of characters but, after every edit, the text is adjusted
+as necessary to maintain a final newline. The last cursor position is after the
+final newline, which is naturally below the last line on the screen. However,
+that apparent 'extra' line isn't given a line number or included in the line
+count.</p>
+
+<h2>Trailing blank lines and spaces</h2>
+
+<p>A text file shouldn't have trailing blank lines, or trailing spaces on the
+end of a line. That's because they cause visual ambiguity, and can confuse
+file-comparison tools. As well ensuring this property when writing out files,
+<mark>Snipe</mark> maintains it all the time when editing. As a result, the
+cursor is sometimes beyond the end of the notional text on a line, or below the
+last notional line.</p>
+
+<h2>File separators</h2>
+
+<p>Paths use forward slash <code>/</code> separators. Backslashes <code>\</code>
+are converted to forward slashes in any paths that come from outside the editor.
+The Windows libraries have always accepted forward slashes - it is only tools on
+Windows that prefer backslashes. The editor refuses to handle file or directory
+names that have slashes or backslashes in them, to encourage programmers to use
+only platform independent names.</p>
+
+<h2>Soft tabs</h2>
+
+<p>Only soft tabs are supported. When files are read in, hard tabs are converted
+to spaces. Other control characters are also rejected, except for newlines.</p>
+
+<p>Hard tabs are obsolete, ambiguous, and cause all sorts of trouble. Some
+tools, including printer drivers, don't handle them properly, some accept them
+but with no option to specify their width, and the only common default of 8
+spaces is commonly regarded as too wide for normal programs. Some public source
+files use an indent width of four and a hard tab width of eight, leading to a
+mixture of tabs and spaces. Such files are unreadable in any editor which
+doesn't have separate settings for indent width and tab width. In any sensible
+editor, soft tabs are implemented to behave just like hard tabs, so soft tabs
+have no significant disadvantages.</p>
+
+<p>When full auto-indenting is implemented, the indent width for a file will
+be set according to the first indent found in the
+file itself, or 4 if there aren't any. Any tab width will be allowed, but it
+should
+be noted that widths other than 2, 4, 8 are quite unlikely to be supported in
+other editors. To change the indent width of a file, rename the file to have a
+<code>.txt</code> extension, change the first indent in the file, then rename it
+back.</p>
+
+</body>
+</html>

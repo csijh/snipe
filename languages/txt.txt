@@ -1,0 +1,20 @@
+start a..z A..Z word
+start 0..9 word
+start _ gap
+start _..~ start    >SIGN
+start start         >BAD
+
+word a..z A..Z word
+word 0..9 word
+word start          >WORD
+
+gap _ gap
+gap start           >GAP
+
+----------
+x
+W
+x y
+WGW
+xy, z
+WwSGW

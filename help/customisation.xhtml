@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en-GB" xml:lang="en-GB">
+<head>
+<meta charset="UTF-8"/>
+<style>
+    body { font-size: 120%; }
+    pre, .indent { margin-left: 40px; }
+    img { display: block; margin: 0 auto; }
+    mark {
+      font-family: cursive;
+      font-size: 95%;
+      color: #080;
+      background-color: white;
+    }
+</style>
+<title>Snipe Customisation</title>
+</head>
+<body>
+
+<h1>Customisation</h1>
+
+<p>To customise <mark>Snipe</mark>, edit the file <code>settings.txt</code> in
+the installation directory, and restart the editor. The possibilities for the
+settings are described in the source file <a href="setting.h">setting.h</a></p>
+
+<h2>Fonts</h2>
+
+<p>The default font and nominal pixel size are defined in the
+<code>settings.txt</code> file. The font file must be in <code>.ttf</code>
+format. At present, only ASCII text is supported.</p>
+
+<p>The only font currently provided is <code>DejaVuSansMono</code>, which
+supports a fairly wide range of national languages within a single font file,
+though it doesn't support ideographic languages.</p>
+
+<h2>Maps</h2>
+
+<p>The mapping from events, i.e. key presses and mouse clicks etc., to editor
+actions is defined in a file specified by <code>settings.txt</code>. To
+customise, edit the map file or a copy of it, and restart the editor.</p>
+
+<p>Each line of a map file consists of the name of an event followed by the name
+of an action. To find the available events and actions, see the
+<a href="event.h">event.h</a> and <a href="action.h">action.h</a> source
+files.</p>
+
+<h2>Themes</h2>
+
+<p>The <code>settings.txt</code> file lists the file paths for themes, in the
+order that the editor should cycle through them, with the default theme
+first.</p>
+
+<p>Your choice of theme may depend on the ambient light level, your eyesight,
+your chosen font size, or your taste. The default themes provided are
+solarized-dark and solarized-light, which are designed to be restful on the eye
+over long periods of time with indoor lighting, and to match each other so that
+switching between them is comfortable.</p>
+
+<p>You can construct your own theme file, perhaps based on information from <a
+href="https://github.com/highlightjs/highlight.js/tree/master/src/styles"
+>highlight.js</a> or elsewhere. If a line of a theme file is blank, or doesn't
+start with a letter, it is a comment. Otherwise, it has the name of a style
+followed by one or more spaces followed by a # character and a hex RGB colour
+value. Anything following that is a comment. Each style is a token type or
+similar. For the available styles, see the <a href="style.h">style.h</a> source
+file.</p>
+
+<h2>Language descriptions</h2>
+
+<p><mark>Snipe</mark> has a scanner used to divide the text of a file being
+edited into tokens or words, and to give each a style. The result is used for
+syntax highlighting, word-based actions, line breaking, auto indenting, auto
+semicolons and so on.</p>
+
+<p>The scanner uses description files in the <kbd>languages</kbd> directory,
+named according to file extensions. For example, <code>c.txt</code> defines the
+syntax of <code>.c</code> files.</p>
+
+<p>Each file is a description of a string-matching state machine for scanning a
+single line of text in the given language. The state at the end of the line is
+carried forward to become the start state for the next line. Multi-line language
+features such as comments are divided into smaller tokens, partly to make the
+scanning of a single line self-contained, and partly to support word-based
+actions and line breaking.</p>
+
+<p>Lines which are blank or start with anything other than a letter are ignored
+as comments. Otherwise, a line represents a string matching rule, and consists
+of the name of a state, a list of strings, and a target state. A state name must
+start with a letter. When the scanner is in the given state and one of the
+strings in the list is matched, the scanner moves past the matched string in the
+input and goes into the target state. For example:</p>
+
+<pre>start if for while key
+</pre>
+
+<p>With this rule, if the scanner is in the <code>start</code> state and any one
+of the keywords <code>if</code>, <code>for</code> or <code>while</code> appears
+next, then the scanner moves past the keyword and goes into the <code>key</code>
+state.</p>
+
+<p>The strings in a rule are plain ASCII text with no quotes, and they may not
+contain control characters or spaces. If a string consists of two characters
+separated by two dots, it represents a range of one-character strings, e.g.
+<code>0..9</code> stands for <code>0 1 2 3 4 5 6 7 8 9</code>. Underscore is
+used as an escape character. An underscore on its own stands for a space, e.g.
+<code>_</code> for a single space or <code>_..~</code> for any printable plain
+text character. A double underscore <code>__</code> stands for the underscore
+character.</p>
+
+<p>An optional action can appear at the end of a rule. An action has the form
+<code>&lt;X</code> or <code>&gt;X</code> where <code>X</code> is a style name.
+In that case, the current token is terminated, either before or after the string
+which is matched, and is given that style. For example:</p>
+
+<pre>start + - * / &lt; &lt;= == >= > start   &gt;OP
+comment _ commentGap    &lt;COMMENT
+</pre>
+
+<p>In the <code>start</code> state, if one of the operators appears next in the
+input, it becomes a token with style <code>OP</code>. In the
+<code>comment</code> state, if a space appears next, the current word in the
+comment is terminated before the space and given the <code>COMMENT</code>
+style.</p>
+
+<p>Unicode characters beyond plain text are not supported in language definition
+files. However, they are allowed in the text to be scanned, and are treated as
+letters, regardless of language. This covers most common cases where such
+characters are used in comments, strings or identifiers.</p>
+
+<p>There may be multiple rules for the same state. If a string mentioned in any
+one of the rules matches, that rule determines the action taken.  If two
+different strings match, such as <code>&lt;</code> and <code>&lt;=</code>, the
+longer string takes precedence. If the same string is mentioned in multiple
+rules, the earlier rule takes precedence. For example:</p>
+
+<pre>start a..z A..Z id
+start _..~ bad
+</pre>
+
+<p>This says that if a letter is matched, the scanner goes into the
+<code>id</code> state, but if any other single character is matched, it goes
+into the <code>bad</code> state.</p>
+
+<p>If a rule has no strings, it matches the empty string, and so defines a
+default action to be taken if nothing else matches, or if the input position is
+at the end of the line. For example:</p>
+
+<pre>id a..z A..Z 0..9 id
+id start    &gt;ID
+</pre>
+
+<p>This says that if a letter or digit is matched in the <code>id</code> state,
+the scanner stays in the <code>id</code> state. However, in any other case,
+including the end of the line, the token ends and is given the <code>ID</code>
+style, and the scanner goes to the <code>start</code> state. Each state should
+normally have a default rule of this kind, to ensure that scanning always
+succeeds. The available styles are listed in <a href="style.h">style.h</a>.</p>
+
+<p>Here are example rules for a language where an identifier is allowed to start
+with a keyword:</p>
+
+<pre>start a..z A..Z id
+start if else for while key
+
+key a..z A..Z 0..9 id
+key start  &gt;KEY
+
+id a..z A..Z 0..9 id
+id start   &gt;ID
+</pre>
+
+<p>Suppose keyword <code>if</code> appears next in the input. Since
+<code>if</code> is longer than the single letter <code>i</code>, the second rule
+for the <code>start</code> state applies. Then, in the <code>key</code> state,
+if the keyword is followed by a letter or digit, <code>ifx</code> for example,
+the scanner goes to the <code>id</code> state. Otherwise, <code>if</code> is
+marked as a <code>KEY</code> token. Here are rules for multi-line <code>/*
+*/</code> comments which don't nest:</p>
+
+<pre>start /* comment
+
+comment */ start        &gt;COMMENT
+comment !..~ comment
+comment _ commentGap    &lt;COMMENT
+comment comment         &gt;COMMENT
+
+commentGap _ commentGap
+commentGap comment      &gt;GAP
+</pre>
+
+<p>This divides the comment into words at the spaces. If the end of the line is
+reached without matching the <code>*/</code> end of comment marker, all the
+comment words will have been marked with style <code>COMMENT</code> and the
+scanner will end up in the <code>comment</code> state. The scanner stops at this
+point because all the characters on the line have been processed. The current
+state <code>comment</code> is carried over onto the next line, to deal with the
+rest of the multi-line comment.</p>
+
+<p>A line of minus signs represents the end of the language description, and the
+start of some test examples. The test lines come in pairs where the first is
+program text, and the second shows the scanner output. The characters of a token
+are marked with its style letter, upper case for the first character and lower
+case for the rest.</p>
+
+<p>The scanner being described has different goals from those of a scanner in a
+compiler. On the one hand, it may omit some details needed only for full
+compiling, or it may classify tokens differently. On the other hand, it must be
+able to handle any text, whether lexically correct or not, and it may add
+details to help support editor features.</p>
+
+</body>
+</html>

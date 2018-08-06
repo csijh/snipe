@@ -1,0 +1,51 @@
+// Default key/mouse/window/timer mappings from events to actions. For event X,
+// if S_X or C_X is missing, it defaults to X, and SC_X defaults to C_X. Entries
+// for timer events should be changed only with care. Entries for TEXT, CLICK,
+// DRAG should not normally be changed, because they involve extra text or
+// position information.
+
+BACKSPACE   CutLeftChar
+ENTER       Newline
+LEFT        MoveLeftChar
+RIGHT       MoveRightChar
+UP          MoveUpLine
+DOWN        MoveDownLine
+PAGE_UP     PageUp
+PAGE_DOWN   PageDown
+C_Q         Quit            keyboard quit
+QUIT        Quit            window button quit
+C_S         Save            synchronizing save, later to mean compile/run
+C_H         Help            may need to be customized in settings.txt
+C_+         Bigger          increase font size
+C_=         Bigger          same for keyboards with + above =
+C_-         Smaller         decrease font size
+C_ENTER     CycleTheme      change syntax colours
+LINE_UP     LineUp          scroll with a mouse wheel or touchpad gesture
+LINE_DOWN   LineDown        ditto
+BLINK       Blink           cursor blink timer event
+TICK        Tick            animation event for smooth scrolling
+SAVE        Save            autosave timer event
+TEXT        Insert          typing ordinary text
+CLICK       Point           mouse button down to change cursor
+DRAG        Select          mouse button up (possibly without movement)
+
+// These actions are not yet implemented.
+// C_BACKSPACE CutLeftWord
+// HOME        MoveStartLine
+// S_HOME      MarkStartLine
+// END         MoveEndLine
+// S_END       MarkEndLine
+// S_LEFT      MarkLeftChar
+// C_LEFT      MoveLeftWord
+// SC_LEFT     MarkLeftWord
+// S_RIGHT     MarkRightChar
+// C_RIGHT     MoveRightWord
+// SC_RIGHT    MarkRightWord
+// S_UP        MarkUpLine
+// S_DOWN      MarkDownLine
+// DELETE      CutRightChar
+// C_DELETE    CutRightWord
+// C_C         Copy
+// C_V         Paste
+// C_Y         Redo
+// C_Z         Undo
