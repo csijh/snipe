@@ -139,3 +139,7 @@ map:
 snipe:
 	cp setting.h style.h event.h action.h Makefile help/
 	$(TCC) map.c $(MODEL) $(VIEW) $(UTILS) $(LIBS)
+
+zip:
+	cd .. && zip -r snipe.zip snipe/files snipe/help snipe/languages \
+		snipe/settings.txt snipe/snipe.exe
