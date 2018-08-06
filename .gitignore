@@ -8,4 +8,8 @@ help/action.h
 help/event.h
 help/setting.h
 help/style.h
+indent.c
+in.c
+out.c
+test.c
 snipe
