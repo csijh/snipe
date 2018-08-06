@@ -1,0 +1,30 @@
+// Path to font file, relative to installation directory
+Font files/DejaVuSansMono.ttf
+
+// Nominal pixel size (roughly, the ascent size of the characters)
+FontSize 18
+
+// Number of lines to display
+Rows 24
+
+// Number of characters on each line
+Columns 80
+
+// Whether to print events and actions (on or off).
+Testing off
+
+// Number of milliseconds between cursor blinks, or 0 to switch off blinking
+BlinkRate 500
+
+// Mapping of key/mouse events to actions.
+Map files/map.txt
+
+// Command to open help page in browser for each platform, with % replaced
+// by url. See https://www.dwheeler.com/essays/open-files-urls.html
+HelpLinux   xdg-open %
+HelpMacOS   open %
+HelpWindows start %
+
+// Theme files: cycle through with CTRL+Enter
+Theme files/solarized-dark.txt
+Theme files/solarized-light.txt
