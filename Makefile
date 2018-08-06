@@ -93,11 +93,11 @@ event:
 	$(TCC)
 	./snipe
 
-handler:
+handler: glfw/lib/libglfw3.a
 	$(TCC) event.c theme.c $(UTILS) $(GL)
 	./snipe
 
-display:
+display: glfw/lib/libglfw3.a
 	$(TCC) handler.c event.c font.c theme.c $(UTILS) $(GL) $(FT)
 	./snipe
 
@@ -142,4 +142,4 @@ snipe:
 
 zip:
 	cd .. && zip -r snipe.zip snipe/files snipe/help snipe/languages \
-		snipe/settings.txt snipe/snipe.exe
+		snipe/settings.txt snipe/snipe.exe snipe/snipe
