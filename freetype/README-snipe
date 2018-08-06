@@ -1,0 +1,9 @@
+This is a cut-down version of freetype 2.9 suitable for static linking.  The
+modules.cfg file has been modified, and many files deleted, to remove support
+for everything except ttf font files and. In particular, there are no
+dependencies on platforms and other libraries. To rebuild, type this in the
+freetype directory:
+
+    rm objs/*
+    make setup ansi
+    make
