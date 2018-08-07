@@ -17,6 +17,7 @@ struct map {
     display *dis;
     bool testing;
     action array[COUNT_EVENTS];
+    action listArray[COUNT_EVENTS];
 };
 
 static void fixDefaults(map *m) {
@@ -27,10 +28,11 @@ static void fixDefaults(map *m) {
     }
 }
 
-static void makeEntry(map *m, char *eventName, char *actionName) {
+static void makeEntry(map *m, bool list, char *eventName, char *actionName) {
     event e = findEvent(eventName);
     action a = findAction(actionName);
-    m->array[e] = a;
+    if (list) m->listArray[e] = a;
+    else m->array[e] = a;
 }
 
 map *newMap(document *doc, display *dis, bool testing) {
@@ -45,13 +47,20 @@ map *newMap(document *doc, display *dis, bool testing) {
     m->dis = dis;
     m->testing = testing;
     for (event e = 0; e < COUNT_EVENTS; e++) m->array[e] = Ignore;
+    for (event e = 0; e < COUNT_EVENTS; e++) m->listArray[e] = Ignore;
     for (int i = 0; i < length(lines); i++) {
         char *line = get(lines, i);
         if (! isalpha(line[0]) || line[0] == '\0') continue;
         strings *words = splitWords(line);
+        bool list = false;
         char *eventName = get(words, 0);
         char *actionName = get(words, 1);
-        makeEntry(m, eventName, actionName);
+        if (strcmp(eventName, "List") == 0) {
+            list = true;
+            eventName = actionName;
+            actionName = get(words, 2);
+        }
+        makeEntry(m, list, eventName, actionName);
         freeStrings(words);
     }
     freeStrings(lines);
@@ -66,7 +75,9 @@ void freeMap(map *m) {
 
 // Offer an action to the document, then the display, return whether quitting.
 bool dispatch(map *m, event e, int r, int c, char *t) {
-    action a = m->array[e];
+    action a;
+    if (isDirectory(m->doc)) a = m->listArray[e];
+    else a = m->array[e];
     if (m->testing && e != BLINK && e != SAVE && e != REDRAW && e != TICK) {
         printEvent(e, r, c, t);
         printf("  ->  ");

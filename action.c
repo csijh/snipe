@@ -30,7 +30,7 @@ static char *actionNames[] = {
 
 // Find an action from its name.
 action findAction(char *name) {
-    for (action a = 0; a <= Ignore; a++) {
+    for (action a = 0; a <= COUNT_ACTIONS; a++) {
         if (strcmp(actionNames[a], name) == 0) return a;
     }
     printf("Error: can't find action %s\n", name);

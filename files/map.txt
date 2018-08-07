@@ -2,7 +2,8 @@
 // if S_X or C_X is missing, it defaults to X, and SC_X defaults to C_X. Entries
 // for timer events should be changed only with care. Entries for TEXT, CLICK,
 // DRAG should not normally be changed, because they involve extra text or
-// position information.
+// position information. Entries for List... actions apply to directory listings
+// rather than text files.
 
 BACKSPACE   CutLeftChar
 ENTER       Newline
@@ -28,6 +29,16 @@ SAVE        Save            autosave timer event
 TEXT        Insert          typing ordinary text
 CLICK       Point           mouse button down to change cursor
 DRAG        Select          mouse button up (possibly without movement)
+
+// Directory listings
+List  UP          MoveUpLine
+List  DOWN        MoveDownLine
+List  ENTER       Load
+List  PAGE_UP     PageUp
+List  PAGE_DOWN   PageDown
+List  LINE_UP     LineUp
+List  LINE_DOWN   LineDown
+List  QUIT        Quit
 
 // These actions are not yet implemented.
 // C_BACKSPACE CutLeftWord
