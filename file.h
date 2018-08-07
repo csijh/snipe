@@ -18,8 +18,8 @@ void freeResources(void);
 char *resourcePath(char *directory, char *file, char *extension);
 
 // Expand a file name to a full path, relative to the current directory, if not
-// already absolute. The result string should be freed as soon as it is no
-// longer needed.
+// already absolute. Add a training slash for a directory. The result string
+// should be freed as soon as it is no longer needed.
 char *fullPath(char const *file);
 
 // Check that a file exists, and return its size or -1.

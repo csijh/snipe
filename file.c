@@ -108,12 +108,25 @@ char *resourcePath(char *d, char *f, char *e) {
     return p;
 }
 
+// Check if a path represents a directory.
+static bool isDirPath(const char *path) {
+    struct stat info;
+    stat(path, &info);
+    return S_ISDIR(info.st_mode);
+}
+
 // Allocate a new string even if the path is absolute.
 char *fullPath(char const *file) {
     if (current == NULL) crash("Must call findResources first");
     char *path = current;
     if (absolute(file)) path = "";
-    return addPath(path, file);
+    path = addPath(path, file);
+    if (isDirPath(path)) {
+        char *p = path;
+        path = addPath(path, "/");
+        free(p);
+    }
+    return path;
 }
 
 static void err(char *e, char const *p) { printf("Error, %s: %s\n", e, p); }
