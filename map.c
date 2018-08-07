@@ -16,40 +16,21 @@ struct map {
     document *doc;
     display *dis;
     bool testing;
-    action controlText[128];
-    action plain[COUNT_EVENTS];
-    action shift[COUNT_EVENTS];
-    action control[COUNT_EVENTS];
-    action shiftControl[COUNT_EVENTS];
+    action array[COUNT_EVENTS];
 };
 
 static void fixDefaults(map *m) {
-    for (event e = 0; e < COUNT_EVENTS; e++) {
-        if (m->shift[e] == Ignore) m->shift[e] = m->plain[e];
-        if (m->control[e] == Ignore) m->control[e] = m->plain[e];
-        if (m->shiftControl[e] == Ignore) m->shiftControl[e] = m->control[e];
+    for (event e = 0; e < COUNT_EVENTS / 4; e++) {
+        if (m->array[S_ + e] == Ignore) m->array[S_ + e] = m->array[e];
+        if (m->array[C_ + e] == Ignore) m->array[C_ + e] = m->array[e];
+        if (m->array[SC_ + e] == Ignore) m->array[SC_ + e] = m->array[e];
     }
 }
 
 static void makeEntry(map *m, char *eventName, char *actionName) {
+    event e = findEvent(eventName);
     action a = findAction(actionName);
-    event flag = 0;
-    if (strncmp(eventName, "S_", 2) == 0) { flag = S_; eventName += 2; }
-    if (strncmp(eventName, "C_", 2) == 0) { flag = C_; eventName += 2; }
-    if (strncmp(eventName, "SC_", 3) == 0) { flag = SC_; eventName += 3; }
-    if (strlen(eventName) == 1) {
-        assert(flag == C_);
-        int ch = eventName[0];
-        assert('!' <= ch && ch <= '~');
-        m->controlText[ch] = a;
-    }
-    else {
-        event e = findEvent(eventName);
-        if (flag == SC_) m->shiftControl[e] = a;
-        else if (flag == S_) m->shift[e] = a;
-        else if (flag == C_) m->control[e] = a;
-        else m->plain[e] = a;
-    }
+    m->array[e] = a;
 }
 
 map *newMap(document *doc, display *dis, bool testing) {
@@ -63,11 +44,7 @@ map *newMap(document *doc, display *dis, bool testing) {
     m->doc = doc;
     m->dis = dis;
     m->testing = testing;
-    for (int i = 0; i < 128; i++) m->controlText[i] = Ignore;
-    for (int i = 0; i < COUNT_EVENTS; i++) m->plain[i] = Ignore;
-    for (int i = 0; i < COUNT_EVENTS; i++) m->shift[i] = Ignore;
-    for (int i = 0; i < COUNT_EVENTS; i++) m->control[i] = Ignore;
-    for (int i = 0; i < COUNT_EVENTS; i++) m->shiftControl[i] = Ignore;
+    for (event e = 0; e < COUNT_EVENTS; e++) m->array[e] = Ignore;
     for (int i = 0; i < length(lines); i++) {
         char *line = get(lines, i);
         if (! isalpha(line[0]) || line[0] == '\0') continue;
@@ -89,18 +66,13 @@ void freeMap(map *m) {
 
 // Offer an action to the document, then the display, return whether quitting.
 bool dispatch(map *m, event e, int r, int c, char *t) {
-    action a;
-    event base = clearEventFlags(e);
-    if (e == addEventFlag(C_, TEXT)) a = m->controlText[(int)t[0]];
-    else if (hasEventFlag(SC_, e)) a = m->shiftControl[base];
-    else if (hasEventFlag(S_, e)) a = m->shift[base];
-    else if (hasEventFlag(C_, e)) a = m->control[base];
-    else a = m->plain[base];
+    action a = m->array[e];
     if (m->testing && e != BLINK && e != SAVE && e != REDRAW && e != TICK) {
         printEvent(e, r, c, t);
         printf("  ->  ");
         printAction(a);
     }
+    event base = clearEventFlags(e);
     if (base == TEXT || base == CLICK || base == DRAG) {
         setData(m->doc, r, c, t);
     }

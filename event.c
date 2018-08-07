@@ -5,8 +5,8 @@
 #include <string.h>
 #include <assert.h>
 
-// Event names, excluding prefixes.
-static char *eventNames[] = {
+// Event names, with text keys and prefixes added later.
+static char *eventNames[COUNT_EVENTS] = {
     [WORLD_1]="WORLD_1", [WORLD_2]="WORLD_2", [ESCAPE]="ESCAPE",
     [ENTER]="ENTER", [TAB]="TAB", [BACKSPACE]="BACKSPACE", [INSERT]="INSERT",
     [DELETE]="DELETE", [RIGHT]="RIGHT", [LEFT]="LEFT", [DOWN]="DOWN", [UP]="UP",
@@ -26,6 +26,35 @@ static char *eventNames[] = {
     [SAVE]="SAVE", [QUIT]="QUIT"
 };
 
+// Space for generated strings.
+enum { MAX = 16 };
+static char spare[COUNT_EVENTS][MAX];
+
+// Fill in the names for valid text keys and prefix combinations.
+static void fillTable() {
+    eventNames[C_ + ' '] = "C_";
+    for (int c='!'; c < '~'; c++) {
+        spare[C_ + c][0] = 'C';
+        spare[C_ + c][1] = '_';
+        spare[C_ + c][2] = c;
+        spare[C_ + c][3] = '\0';
+        eventNames[C_ + c] = spare[C_ + c];
+    }
+    for (int i = WORLD_1; i < TEXT; i++) {
+        if (eventNames[i] == NULL) continue;
+        assert(strlen(eventNames[i]) < MAX - 3);
+        strcpy(spare[S_ + i], "S_");
+        strcat(spare[S_ + i], eventNames[i]);
+        eventNames[S_ + i] = spare[S_ + i];
+        strcpy(spare[C_ + i], "C_");
+        strcat(spare[C_ + i], eventNames[i]);
+        eventNames[C_ + i] = spare[C_ + i];
+        strcpy(spare[SC_ + i], "SC_");
+        strcat(spare[SC_ + i], eventNames[i]);
+        eventNames[SC_ + i] = spare[SC_ + i];
+    }
+}
+
 event addEventFlag(event flag, event e) {
     return flag | e;
 }
@@ -38,45 +67,25 @@ event clearEventFlags(event e) {
     return e & ~SC_;
 }
 
-const char *findEventName(event e) { return eventNames[e]; }
+const char *findEventName(event e) {
+    if (eventNames['!'] == NULL) fillTable();
+    return eventNames[e];
+}
 
 event findEvent(char *name) {
-    event flag = 0;
-    if (strncmp(name, "S_", 2) == 0) {
-        flag = S_;
-        name = name + 2;
-    }
-    else if (strncmp(name, "C_", 2) == 0) {
-        flag = C_;
-        name = name + 2;
-    }
-    else if (strncmp(name, "SC_", 3) == 0) {
-        flag = SC_;
-        name = name + 3;
-    }
-    for (event e = 0; e <= QUIT; e++) {
-        if (strcmp(eventNames[e], name) == 0) return addEventFlag(flag, e);
+    if (eventNames['!'] == NULL) fillTable();
+    for (event e = 0; e <= COUNT_EVENTS; e++) {
+        if (eventNames[e] == NULL) continue;
+        if (strcmp(eventNames[e], name) == 0) return e;
     }
     printf("Unknown event name %s\n", name);
     exit(1);
 }
 
 void printEvent(event e, int r, int c, char *t) {
-    if (e == addEventFlag(C_, TEXT)) {
-        printf("C_%s", t);
-        return;
-    }
-    if (hasEventFlag(SC_, e)) printf("SC_");
-    else if (hasEventFlag(S_, e)) printf("S_");
-    else if (hasEventFlag(C_, e)) printf("C_");
-    e = clearEventFlags(e);
-    if (e == TEXT) {
-        printf("TEXT %s", t);
-    } else if (e == CLICK || e == DRAG) {
-        printf("%s r=%d c=%d", findEventName(e), r, c);
-    } else {
-        printf("%s", findEventName(e));
-    }
+    printf("%s", findEventName(e));
+    if (e == TEXT) printf(" %s", t);
+    else if (e == CLICK || e == DRAG) printf(" r=%d c=%d", r, c);
 }
 
 #ifdef test_event
@@ -86,9 +95,16 @@ int main(int n, char const *args[]) {
     assert(hasEventFlag(S_, TAB) == false);
     assert(hasEventFlag(SC_, addEventFlag(SC_, TAB)) == true);
     assert(hasEventFlag(S_, addEventFlag(SC_, TAB)) == false);
-    assert(strcmp(findEventName(TAB), "TAB") == 0);
     assert(findEvent("TAB") == TAB);
     assert(findEvent("S_TAB") == addEventFlag(S_, TAB));
+    assert(findEvent("C_TAB") == addEventFlag(C_, TAB));
+    assert(findEvent("SC_TAB") == addEventFlag(SC_, TAB));
+    assert(strcmp(findEventName(TAB), "TAB") == 0);
+    assert(strcmp(findEventName(addEventFlag(S_, TAB)), "S_TAB") == 0);
+    assert(strcmp(findEventName(addEventFlag(C_, TAB)), "C_TAB") == 0);
+    assert(strcmp(findEventName(addEventFlag(SC_, TAB)), "SC_TAB") == 0);
+    assert(findEvent("C_+") == addEventFlag(C_, '+'));
+    assert(strcmp(findEventName(addEventFlag(C_, '+')), "C_+") == 0);
     printf("Event module OK\n");
     return 0;
 }

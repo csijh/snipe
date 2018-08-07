@@ -94,15 +94,13 @@ int getChar(int key) {
 
 // Create a control text event or return false. Since there is no keyboard
 // layout information for these events, shift is ignored. For example control
-// with 'a' or 'A' both produce C_TEXT with 'A', and control with plus generates
-// C_TEXT with '=' on a keyboard where plus is a shifted equals.
+// with 'a' or 'A' both produce C_A, and control with plus generates C_= on a
+// keyboard where plus is a shifted equals.
 static bool controlText(handler *h, int key) {
     char ch = getChar(key);
     if (ch < 0) return false;
     eventData *ed = push(h);
-    ed->tag = addEventFlag(C_, TEXT);
-    ed->c[0] = ch;
-    ed->c[1] = '\0';
+    ed->tag = addEventFlag(C_, ch);
     return true;
 }
 
