@@ -18,6 +18,9 @@ void freeDocument(document *d);
 // Get the path to the document's file or folder.
 char const *getPath(document *d);
 
+// Check whether the document is a directory.
+bool isDirectory(document *d);
+
 // Get the number of lines.
 int getHeight(document *d);
 

@@ -84,6 +84,11 @@ void freeDocument(document *d) {
 
 char const *getPath(document *d) { return d->path; }
 
+bool isDirectory(document *d) {
+    int n = strlen(d->path);
+    return d->path[n - 1] == '/';
+}
+
 int getHeight(document *d) { return length(getLines(d->content)); }
 
 int getWidth(document *d, int row) {
