@@ -50,7 +50,7 @@ num e+ e- E+ E- num
 num p+ p- P+ P- num
 num start               >NUMBER
 
-char _ start            >CHAR
+char ' start            >CHAR
 char \' char
 char _..~ char
 char start              >BAD
