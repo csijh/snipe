@@ -177,6 +177,23 @@ static void doHelp(document *d) {
     system(line);
 }
 
+// Load the filename selected in a directory listing.
+static void doLoad(document *d) {
+    cursors *cs = getCursors(d->content);
+    ints *lines = getLines(d->content);
+    int p = cursorAt(cs, 0);
+    int r = findRow(lines, p);
+    chars *line = getLine(d, r);
+    int n1 = strlen(d->path);
+    int n2 = length(line) - 1;
+    char *path = malloc(n1 + n2 + 1);
+    strcpy(path, d->path);
+    copy(line, 0, n2, &path[n1]);
+    path[n1 + n2] = '\0';
+    load(d, path);
+    free(path);
+}
+
 void setData(document *d, int row, int col, char *t) {
     ints *lines = getLines(d->content);
     if (row > getHeight(d)) row = getHeight(d);
@@ -227,6 +244,7 @@ void actOnDocument(document *d, action a) {
         case Point: point(cs, d->pos); break;
         case Select: doSelect(cs, d->pos); break;
         case AddPoint: addPoint(cs, d->pos); break;
+        case Load: doLoad(d); break;
         case Save: save(d); break;
         case Quit: save(d); break;
         default: break;

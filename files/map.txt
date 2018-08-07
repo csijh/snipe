@@ -39,6 +39,7 @@ List  PAGE_DOWN   PageDown
 List  LINE_UP     LineUp
 List  LINE_DOWN   LineDown
 List  QUIT        Quit
+List  C_Q         Quit
 
 // These actions are not yet implemented.
 // C_BACKSPACE CutLeftWord
