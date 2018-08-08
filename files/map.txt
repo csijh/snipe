@@ -41,6 +41,7 @@ List  LINE_UP     LineUp
 List  LINE_DOWN   LineDown
 List  QUIT        Quit
 List  C_Q         Quit
+List  CLICK       Point
 List  BLINK       Blink
 
 // These actions are not yet implemented.
