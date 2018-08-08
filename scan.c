@@ -344,6 +344,8 @@ void changeLanguage(scanner *sc, char *lang) {
     freeStrings(styles);
 }
 
+static bool TRACE;
+
 // Scan a line of source text to produce a line of style bytes. At each step:
 // 1) find the range, start <= x < end, of patterns starting with the next char.
 // 2) try to match the ones that are relevant.
@@ -367,23 +369,29 @@ void scan(scanner *sc, int row, chars *line, chars *styles) {
             char *pattern = sc->patterns[p];
             int len = strlen(pattern);
             if (! match(line, i, len, pattern)) continue;
-//            printf("state %s match '%s'", sc->states[state], pattern);
+            if (TRACE) printf("scan %s %s", sc->states[state], pattern);
             i = i + len;
             matched = p;
             break;
         }
-//        if (match == empty) printf("state %s match ''", sc->states[state]);
+        if (TRACE && matched == empty) printf("scan %s", sc->states[state]);
         action act = sc->table[state][matched];
         short st = act.style;
         short base = st & NOFLAGS;
-//        printf(" st=%d\n", st);
         state = act.target;
+        if (TRACE) {
+            printf(" %s", sc->states[state]);
+            if (st == MORE) printf("\n");
+            else if ((st & BEFORE) != 0) printf("    <%s\n", styleName(base));
+            else printf("    >%s\n", styleName(base));
+        }
         if (st == MORE || s == i) continue;
         set(styles, s++, addStyleFlag(base, START));
         if ((st & BEFORE) != 0) { while (s < old) set(styles, s++, base); }
         else while (s < i) set(styles, s++, base);
     }
     set(styles, s, addStyleFlag(GAP, START));
+    if (TRACE) printf("end state %s\n", sc->states[state]);
     sc->endStates = setEndState(sc->endStates, row, state);
 }
 
@@ -449,11 +457,22 @@ static void test() {
     freeScanner(sc);
 }
 
+// Trace scanning of a problem example.
+static void trace() {
+    scanner *sc = newScanner();
+    changeLanguage(sc, "c");
+    assert(check(sc, 0, "//x\n", "NnnG"));
+    assert(check(sc, 0, "//x \n", "NnnGG"));
+    freeScanner(sc);
+}
+
 int main(int n, char *args[n]) {
     setbuf(stdout, NULL);
     findResources(args[0]);
     testReadLine();
-    test();
+    TRACE = true;
+    if (TRACE) trace();
+    else test();
     printf("Scan module OK\n");
     return 0;
 }

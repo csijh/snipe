@@ -88,7 +88,6 @@ int main(int n, char const *args[]) {
         printf("Use: ./snipe filename\n");
         exit(1);
     }
-    char *path = fullPath(args[1]);
     bool testing = strcmp(getSetting(Testing), "on") == 0;
     snipe *s = newSnipe(path, testing);
     run(s);

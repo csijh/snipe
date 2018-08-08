@@ -40,7 +40,8 @@ note _ noteGap          <NOTE
 note start              >NOTE
 
 noteGap _ noteGap
-noteGap note            >GAP
+noteGap !..~ note       <GAP
+noteGap start           >GAP
 
 dot 0..9 num
 dot start               >SIGN
@@ -51,6 +52,7 @@ num p+ p- P+ P- num
 num start               >NUMBER
 
 char ' start            >CHAR
+char \\ char
 char \' char
 char _..~ char
 char start              >BAD
