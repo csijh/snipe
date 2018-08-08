@@ -199,7 +199,7 @@ void setData(document *d, int row, int col, char *t) {
     if (row > getHeight(d)) row = getHeight(d);
     int start = startLine(lines, row);
     int len = lengthLine(lines, row);
-    if (col > len) col = len;
+    if (col >= len) col = len - 1;
     d->pos = start + col;
     d->text = t;
 }
