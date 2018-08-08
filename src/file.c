@@ -56,7 +56,8 @@ static bool absolute(char const *path) {
 }
 
 // Find the installation directory from args[0]. Free the previous value, so
-// that the function can be called multiple times for testing.
+// that the function can be called multiple times for testing. If in the src
+// directory, use the parent.
 static void findInstall(char const *program) {
     if (install != NULL) free(install);
     int n = strlen(program) + 1;
@@ -77,6 +78,10 @@ static void findInstall(char const *program) {
     char *suffix = strrchr(install, '/');
     assert(suffix != NULL);
     suffix[1] = '\0';
+    int n5 = strlen(install) - 5;
+    if (strcmp(install + n5, "/src/") == 0) {
+        install[n5 + 1] = '\0';
+    }
 }
 
 void findResources(char const *program) {

@@ -22,8 +22,8 @@ else
 endif
 
 # Compiler options to include Freetype, and GLFW.
-FT = -Ifreetype/include -Lfreetype/objs/ -lfreetype
-GL = -Iglfw/include -Lglfw/lib -lglfw3 $(SYS)
+FT = -I../freetype/include -L../freetype/objs/ -lfreetype
+GL = -I../glfw/include -L../glfw/lib -lglfw3 $(SYS)
 LIBS = $(FT) $(GL)
 
 # Compiler commands for production compiling, and for test compiling.
@@ -31,21 +31,21 @@ PCC = gcc -std=c11 -o snipe -O2 $@.c
 TCC = gcc -std=c11 -o snipe -Wall -pedantic -g $(DEBUG) -Dtest_$@ $@.c
 
 # Build the glfw static library (with only system dependencies) from source.
-glfw/lib/libglfw3.a:
-	rm -rf glfw/lib
-	mkdir glfw/lib
-	cd glfw/lib && cmake -G "Unix Makefiles" ..
-	cd glfw/lib && make
-	mv glfw/lib/src/libglfw3.a glfw
-	rm -rf glfw/lib/*
-	mv glfw/libglfw3.a glfw/lib
+../glfw/lib/libglfw3.a:
+	rm -rf ../glfw/lib
+	mkdir ../glfw/lib
+	cd ../glfw/lib && cmake -G "Unix Makefiles" ..
+	cd ../glfw/lib && make
+	mv ../glfw/lib/src/libglfw3.a ../glfw
+	rm -rf ../glfw/lib/*
+	mv ../glfw/libglfw3.a ../glfw/lib
 
 # Build a cut down version of freetype (with no dependencies) from source.
-freetype/objs/libfreetype.a:
-	rm -rf freetype/objs
-	mkdir freetype/objs
-	cd freetype && make setup ansi
-	cd freetype && make
+../freetype/objs/libfreetype.a:
+	rm -rf ../freetype/objs
+	mkdir ../freetype/objs
+	cd ../freetype && make setup ansi
+	cd ../freetype && make
 
 # The modules are listed in dependency order.
 
@@ -85,7 +85,7 @@ theme:
 	$(TCC) style.c setting.c string.c list.c file.c
 	./snipe
 
-font: freetype/objs/libfreetype.a
+font: ../freetype/objs/libfreetype.a
 	$(TCC) file.c $(FT)
 	./snipe
 
@@ -93,7 +93,7 @@ event:
 	$(TCC)
 	./snipe
 
-handler: glfw/lib/libglfw3.a
+handler: ../glfw/lib/libglfw3.a
 	$(TCC) event.c theme.c $(UTILS) $(GL)
 	./snipe
 
@@ -137,9 +137,9 @@ map:
 	./snipe
 
 snipe:
-	cp setting.h style.h event.h action.h Makefile help/
+	cp setting.h style.h event.h action.h Makefile ../help/
 	$(TCC) map.c $(MODEL) $(VIEW) $(UTILS) $(LIBS)
 
 zip:
-	cd .. && zip -r snipe.zip snipe/files snipe/help snipe/languages \
-		snipe/settings.txt snipe/snipe.exe snipe/snipe
+	cd ../.. && zip -r snipe.zip snipe/files snipe/help snipe/languages \
+		snipe/settings.txt snipe/src/snipe.exe snipe/src/snipe
