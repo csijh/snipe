@@ -10,7 +10,7 @@ enum setting {
     FontSize,    // Initial size of font in pixels
     Rows,        // Number of rows displayed in the window
     Columns,     // Number of columns displayed in the window
-    BlinkRate,   // Number of milliseconds between cursor blinks (or 0)
+    BlinkRate,   // Number of seconds between cursor blinks (or 0)
     MinScroll,   // Min scroll speed in pixels per frame, e.g. 1
     MaxScroll,   // Max scroll speed in pixels per frame, e.g. 10
     Map,         // Path to file containing key/mouse mappings

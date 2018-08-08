@@ -138,6 +138,7 @@ display *newDisplay() {
     d->scrollTarget = 0;
     initWindow(d);
     d->h = newHandler(d->gw);
+    setBlinkRate(d->h, atof(getSetting(BlinkRate)));
     setFontSize(d);
     paintBackground(d);
     glfwSwapBuffers(d->gw);

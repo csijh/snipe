@@ -294,12 +294,13 @@ event getRawEvent(handler *h, int *x, int *y, char **t) {
             return e->tag;
         }
         double time = glfwGetTime();
-        if (h->blinkRate > 0.0 && time > h->blinkTime) {
+        if (h->blinkRate > 0 && time > h->blinkTime) {
             h->blinkTime += h->blinkRate; return BLINK;
         }
         if (time > h->saveTime) { h->saveTime += h->saveRate; return SAVE; }
         if (h->frame) { h->frame = false; return TICK; }
-        double min = (h->blinkTime < h->saveTime) ? h->blinkTime : h->saveTime;
+        double min = h->saveTime;
+        if (h->blinkRate > 0 && h->blinkTime < h->saveTime) min = h->blinkTime;
         glfwWaitEventsTimeout(min - time);
     }
 }

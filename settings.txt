@@ -13,8 +13,8 @@ Columns 80
 // Whether to print events and actions (on or off).
 Testing off
 
-// Number of milliseconds between cursor blinks, or 0 to switch off blinking
-BlinkRate 500
+// Number of seconds between cursor blinks, or 0 to switch off blinking
+BlinkRate 0.5
 
 // Mapping of key/mouse events to actions.
 Map files/map.txt
