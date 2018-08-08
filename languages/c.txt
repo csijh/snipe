@@ -58,6 +58,7 @@ char _..~ char
 char start              >BAD
 
 string " start          >STRING
+string \\ string
 string \" string
 string _..~ string
 string start            >BAD
