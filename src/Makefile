@@ -4,7 +4,7 @@
 # Find the OS platform using the uname command.
 OS = $(shell uname -s)
 
-# Compiler options to include OpenGL and other system libraries, for the
+# Compiler options to include OpenGL and other system libraries for the
 # Linux/MacOS/Windows platforms.
 ifeq ($(OS), Linux)
 	SYS = -lGL `pkg-config --static --libs glfw3`
@@ -14,11 +14,14 @@ else ifeq ($(OS), MINGW64_NT-6.1)
 	SYS = -lopengl32 -lgdi32
 endif
 
-# Advanced debugging options (not easily available on Windows).
+# Advanced debugging options (not easily available on Windows), and the name of
+# the executable file.
 ifeq ($(OS), MINGW64_NT-6.1)
 	DEBUG =
+	EXEC = snipe.exe
 else
 	DEBUG = -fsanitize=address -fsanitize=undefined
+	EXEC = snipe
 endif
 
 # Compiler options to include Freetype, and GLFW.
@@ -27,8 +30,8 @@ GL = -I../glfw/include -L../glfw/lib -lglfw3 $(SYS)
 LIBS = $(FT) $(GL)
 
 # Compiler commands for production compiling, and for test compiling.
-PCC = gcc -std=c11 -o snipe -O2 $@.c
-TCC = gcc -std=c11 -o snipe -Wall -pedantic -g $(DEBUG) -Dtest_$@ $@.c
+PCC = gcc -std=c11 -o $(EXEC) -O2 $@.c
+TCC = gcc -std=c11 -o $(EXEC) -Wall -pedantic -g $(DEBUG) -Dtest_$@ $@.c
 
 # Build the glfw static library (with only system dependencies) from source.
 ../glfw/lib/libglfw3.a:
@@ -141,5 +144,6 @@ snipe:
 	$(TCC) map.c $(MODEL) $(VIEW) $(UTILS) $(LIBS)
 
 zip:
+	mv $(EXEC) ..
 	cd ../.. && zip -r snipe.zip snipe/files snipe/help snipe/languages \
-		snipe/settings.txt snipe/src/snipe.exe snipe/src/snipe
+		snipe/settings.txt snipe/$(EXEC)
