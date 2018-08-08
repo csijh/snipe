@@ -194,6 +194,13 @@ static void doLoad(document *d) {
     free(path);
 }
 
+// Load the parent directory of the current file.
+static void doOpen(document *d) {
+    char *path = parentPath(d->path);
+    load(d, path);
+    free(path);
+}
+
 void setData(document *d, int row, int col, char *t) {
     ints *lines = getLines(d->content);
     if (row > getHeight(d)) row = getHeight(d);
@@ -246,10 +253,11 @@ void actOnDocument(document *d, action a) {
         case AddPoint: addPoint(cs, d->pos); break;
         case Load: doLoad(d); break;
         case Save: save(d); break;
+        case Open: doOpen(d); break;
         case Quit: save(d); break;
         default: break;
     }
-    mergeCursors(cs);
+    mergeCursors(getCursors(d->content));
 }
 
 #ifdef test_document

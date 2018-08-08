@@ -8,7 +8,7 @@ enum action {
     MarkLeftWord, MarkRightWord, MarkUpLine, MarkDownLine, MarkStartLine,
     MarkEndLine, CutLeftChar, CutRightChar, CutLeftWord, CutRightWord,
     CutUpLine, CutDownLine, CutStartLine, CutEndLine, Point, Select, AddPoint,
-    AddSelect, Newline, Insert, Cut, Copy, Paste, Undo, Redo, Load, Save,
+    AddSelect, Newline, Insert, Cut, Copy, Paste, Undo, Redo, Load, Save, Open,
     Bigger, Smaller, CycleTheme, PageUp, PageDown, Blink, Tick, LineUp,
     LineDown, Help, Quit, Ignore, COUNT_ACTIONS = Ignore + 1
 };

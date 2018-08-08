@@ -81,7 +81,10 @@ static void run(snipe *s) {
 int main(int n, char const *args[]) {
     setbuf(stdout, NULL);
     findResources(args[0]);
-    if (n != 2) {
+    char *path;
+    if (n == 1) path = fullPath(".");
+    else if (n == 2) path = fullPath(args[1]);
+    else {
         printf("Use: ./snipe filename\n");
         exit(1);
     }

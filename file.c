@@ -98,15 +98,18 @@ static char *join(char const *s1, char const *s2) {
     return s;
 }
 
+char *parentPath(char const *path) {
+    int n = strlen(path);
+    if (n > 0 && path[n - 1] == '/') n--;
+    while (n > 0 && path[n - 1] != '/') n--;
+    char *s = malloc(n + 1);
+    strncpy(s, path, n);
+    s[n] = '\0';
+    return s;
+}
+
 char *addPath(char const *path, char const *file) {
-    if (strcmp(file, "..") == 0) {
-        int n = strlen(path) - 1;
-        while (n > 0 && path[n-1] != '/') n--;
-        char *s = malloc(n + 1);
-        strncpy(s, path, n);
-        s[n] = '\0';
-        return s;
-    }
+    if (strcmp(file, "..") == 0) return parentPath(path);
     if (strcmp(file, ".") == 0) file = "";
     else if (absolute(file)) path = "";
     return join(path, file);

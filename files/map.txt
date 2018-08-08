@@ -13,6 +13,7 @@ UP          MoveUpLine
 DOWN        MoveDownLine
 PAGE_UP     PageUp
 PAGE_DOWN   PageDown
+C_O         Open
 C_Q         Quit            keyboard quit
 QUIT        Quit            window button quit
 C_S         Save            synchronizing save, later to mean compile/run
@@ -40,6 +41,7 @@ List  LINE_UP     LineUp
 List  LINE_DOWN   LineDown
 List  QUIT        Quit
 List  C_Q         Quit
+List  BLINK       Blink
 
 // These actions are not yet implemented.
 // C_BACKSPACE CutLeftWord

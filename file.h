@@ -21,6 +21,9 @@ char *resourcePath(char *directory, char *file, char *extension);
 // file name. Deal with the file being . or .. or an absolute file path.
 char *addPath(char const *path, char const *file);
 
+// Create an allocate string containing the parent directory of the given path.
+char *parentPath(char const *path);
+
 // Expand a file name to a full path, relative to the current directory, if not
 // already absolute. Convert \ to / and add a training slash for a directory.
 // The result string should be freed as soon as it is no longer needed.
