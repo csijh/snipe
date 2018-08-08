@@ -28,13 +28,11 @@ static setting convert(char *name) {
         printf("Unknown setting name %s\n", name);
         exit(1);
     }
-#ifdef LINUX
+#ifdef __linux__
     if (strcmp(name, "HelpLinux") == 0) return HelpCommand;
-#endif
-#ifdef MACOS
+#elif __APPLE__
     if (strcmp(name, "HelpMacOS") == 0) return HelpCommand;
-#endif
-#ifdef WINDOWS
+#elif _WIN32
     if (strcmp(name, "HelpWindows") == 0) return HelpCommand;
 #endif
     return -1;

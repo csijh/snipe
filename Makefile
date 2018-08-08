@@ -7,11 +7,11 @@ OS = $(shell uname -s)
 # Compiler options to include OpenGL and other system libraries, for the
 # Linux/MacOS/Windows platforms.
 ifeq ($(OS), Linux)
-	SYS = -DLINUX -lGL `pkg-config --static --libs glfw3`
+	SYS = -lGL `pkg-config --static --libs glfw3`
 else ifeq ($(OS), Darwin)
-	SYS = -DMACOS -lGL `pkg-config --static --libs glfw3`
+	SYS = -lGL `pkg-config --static --libs glfw3`
 else ifeq ($(OS), MINGW64_NT-6.1)
-	SYS = -DWINDOWS -lopengl32 -lgdi32
+	SYS = -lopengl32 -lgdi32
 endif
 
 # Advanced debugging options (not easily available on Windows).
