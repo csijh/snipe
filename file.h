@@ -17,9 +17,13 @@ void freeResources(void);
 // be freed as soon as it is no longer needed.
 char *resourcePath(char *directory, char *file, char *extension);
 
+// Create an allocated path string from a slash terminated directory path and a
+// file name. Deal with the file being . or .. or an absolute file path.
+char *addPath(char const *path, char const *file);
+
 // Expand a file name to a full path, relative to the current directory, if not
-// already absolute. Add a training slash for a directory. The result string
-// should be freed as soon as it is no longer needed.
+// already absolute. Convert \ to / and add a training slash for a directory.
+// The result string should be freed as soon as it is no longer needed.
 char *fullPath(char const *file);
 
 // Check that a file exists, and return its size or -1.

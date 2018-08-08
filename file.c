@@ -55,7 +55,8 @@ static bool absolute(char const *path) {
     return false;
 }
 
-// Find the installation directory from args[0].
+// Find the installation directory from args[0]. Free the previous value, so
+// that the function can be called multiple times for testing.
 static void findInstall(char const *program) {
     if (install != NULL) free(install);
     int n = strlen(program) + 1;
@@ -88,14 +89,27 @@ void freeResources() {
     free(install);
 }
 
-// Allocate a new string even if the path is absolute.
-static char *addPath(char const *path, char const *file) {
-    if (absolute(file)) path = "";
-    int len = strlen(path) + strlen(file) + 1;
+// Join two strings.
+static char *join(char const *s1, char const *s2) {
+    int len = strlen(s1) + strlen(s2) + 1;
     char *s = malloc(len);
-    strcpy(s, path);
-    strcat(s, file);
+    strcpy(s, s1);
+    strcat(s, s2);
     return s;
+}
+
+char *addPath(char const *path, char const *file) {
+    if (strcmp(file, "..") == 0) {
+        int n = strlen(path) - 1;
+        while (n > 0 && path[n-1] != '/') n--;
+        char *s = malloc(n + 1);
+        strncpy(s, path, n);
+        s[n] = '\0';
+        return s;
+    }
+    if (strcmp(file, ".") == 0) file = "";
+    else if (absolute(file)) path = "";
+    return join(path, file);
 }
 
 char *resourcePath(char *d, char *f, char *e) {
@@ -115,17 +129,15 @@ static bool isDirPath(const char *path) {
     return S_ISDIR(info.st_mode);
 }
 
-// Allocate a new string even if the path is absolute.
 char *fullPath(char const *file) {
     if (current == NULL) crash("Must call findResources first");
-    char *path = current;
-    if (absolute(file)) path = "";
-    path = addPath(path, file);
+    char *path = addPath(current, file);
     if (isDirPath(path)) {
         char *p = path;
-        path = addPath(path, "/");
+        path = join(path, "/");
         free(p);
     }
+    for (int i = 0; i < strlen(path); i++) if (path[i] == '\\') path[i] = '/';
     return path;
 }
 
@@ -232,12 +244,10 @@ static void gatherNames(DIR *dir, int n, char *names[n], int t, char text[t]) {
 
 // Check whether a given entry in a given directory is a subdirectory.
 static bool isDir(char const *dir, char *name) {
-    struct stat info;
     char path[strlen(dir) + strlen(name) + 1];
     strcpy(path, dir);
     strcat(path, name);
-    stat(path, &info);
-    return S_ISDIR(info.st_mode);
+    return isDirPath(path);
 }
 
 static char *readDirectory(char const *path) {
@@ -280,17 +290,23 @@ void writeFile(char const *path, int size, char data[size]) {
 }
 
 #ifdef test_file
-
 // Unit testing.
-int main(int n, char *args[n]) {
-    findResources(args[0]);
+
+// Test the program is being run from a directory called snipe.
+static void testSnipe() {
     char *snipe = current + strlen(current) - 6;
     assert(strncmp(snipe, "snipe", 5) == 0);
+}
+
+static void testAbsolute() {
     assert(! absolute(""));
     assert(! absolute("prog.xxx"));
     assert(! absolute("./prog"));
     assert(absolute("/d/prog"));
     assert(absolute("c:/d/prog"));
+}
+
+static void testFindInstall() {
     strcpy(current, "/a/b/");
     findInstall("/a/b/");
     assert(strcmp(install, "/a/b/") == 0);
@@ -300,10 +316,24 @@ int main(int n, char *args[n]) {
     assert(strcmp(install, "/a/b/") == 0);
     findInstall("./prog");
     assert(strcmp(install, "/a/b/") == 0);
-    char *file = "c.txt";
-    char *s = addPath("/a/b/", file);
+}
+
+static void testAddPath() {
+    char *s = addPath("/a/b/", "c.txt");
     assert(strcmp(s, "/a/b/c.txt") == 0);
     free(s);
+    s = addPath("/a/b/", "/c.txt");
+    assert(strcmp(s, "/c.txt") == 0);
+    free(s);
+    s = addPath("/a/b/", ".");
+    assert(strcmp(s, "/a/b/") == 0);
+    free(s);
+    s = addPath("/a/b/", "..");
+    assert(strcmp(s, "/a/") == 0);
+    free(s);
+}
+
+static void testCompare() {
     assert(compare("", "") == 0);
     assert(compare("abcxaaaa", "abcyaaaa") < 0);
     assert(compare("abc", "abcx") < 0);
@@ -313,15 +343,32 @@ int main(int n, char *args[n]) {
     assert(compare("abc9", "abc10") < 0);
     assert(compare("abc9def", "abc09defx") < 0);
     assert(compare("abc09def", "abc9defx") < 0);
+}
+
+static void testSort() {
     char *ss[4] = { "abc10", "abc9", "abc", ".." };
     sort(4, ss);
     assert(strcmp(ss[0], "..") == 0);
     assert(strcmp(ss[1], "abc") == 0);
     assert(strcmp(ss[2], "abc9") == 0);
     assert(strcmp(ss[3], "abc10") == 0);
+}
+
+static void testReadDirectory() {
     char *text = readPath("freetype/");
     assert(strncmp(text, "../\nMakefile", 12) == 0);
     free(text);
+}
+
+int main(int n, char *args[n]) {
+    findResources(args[0]);
+    testSnipe();
+    testAbsolute();
+    testFindInstall();
+    testAddPath();
+    testCompare();
+    testSort();
+    testReadDirectory();
     freeResources();
     printf("File module OK\n");
     return 0;
