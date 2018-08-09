@@ -39,11 +39,11 @@ text *newText() {
 
 void freeText(text *t) {
     if (t == NULL) return;
- free(t->data);
+    free(t->data);
     freeInts(t->lines);
     freeChars(t->styles);
     freeCursors(t->cs);
- free(t);
+    free(t);
 }
 
 ints *getLines(text *t) {
@@ -76,6 +76,7 @@ static void resizeText(text *t, int n) {
 
 // Move the gap to the given position.
 static void moveGap(text *t, int p) {
+    if (p > lengthText(t)) *((char *)NULL) = '!';
     assert(p <= lengthText(t));
     if (p < t->lo) {
         int len = (t->lo - p);
@@ -186,12 +187,25 @@ void deleteAt(text *t) {
     }
 }
 
+static text *emptyText() {
+    int size = 16;
+    char *data = malloc(size);
+    strcpy(data, "\n");
+    text *t = malloc(sizeof(text));
+    *t = (text) { .lo = 1, .hi = size, .end = size, .data = data };
+    t->lines = newInts();
+    t->styles = newChars();
+    t->cs = newCursors(t->lines, t->styles);
+    insertLines(t, 0, data);
+    return t;
+}
+
 text *readText(char const *path) {
     char *data = readPath(path);
-    if (data == NULL) return NULL;
+    if (data == NULL) return emptyText();
     int size = strlen(data);
     char const *message = utf8valid(data, size);
-    if (message != NULL) { err(message, path); free(data); return NULL; }
+    if (message != NULL) { err(message, path); free(data); return emptyText(); }
     size = normalize(data);
     text *t = malloc(sizeof(text));
     *t = (text) { .lo = size, .hi = size + 1, .end = size + 1, .data = data };

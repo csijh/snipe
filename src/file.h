@@ -29,6 +29,8 @@ char *parentPath(char const *path);
 // The result string should be freed as soon as it is no longer needed.
 char *fullPath(char const *file);
 
+bool secure(const char *path);
+
 // Check that a file exists, and return its size or -1.
 int sizeFile(char const *path);
 

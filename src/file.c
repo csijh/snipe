@@ -21,6 +21,7 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 
 // The current working directory on startup, and the installation directory.
 static char *current = NULL;
@@ -129,6 +130,21 @@ char *resourcePath(char *d, char *f, char *e) {
     strcat(p, e);
     return p;
 }
+
+// Check that a directory is owned by the current user, to make sure that it is
+// safe to read customisation information from it.
+#ifdef _WIN32
+bool secure(const char *path) { return true; }
+#else
+bool secure(const char *path) {
+    struct stat info;
+    stat(path, &info);
+    int owner = (int) info.st_uid;
+    int user = (int) getuid();
+    printf("%d %d %s\n", (int)owner, (int)user, path);
+    return (owner == user);
+}
+#endif
 
 // Check if a path represents a directory.
 static bool isDirPath(const char *path) {
@@ -300,10 +316,10 @@ void writeFile(char const *path, int size, char data[size]) {
 #ifdef test_file
 // Unit testing.
 
-// Test the program is being run from a directory called snipe.
+// Test the program is being tested from snipe/src.
 static void testSnipe() {
-    char *snipe = current + strlen(current) - 6;
-    assert(strncmp(snipe, "snipe", 5) == 0);
+    char *snipe = current + strlen(current) - 10;
+    assert(strncmp(snipe, "snipe/src", 9) == 0);
 }
 
 static void testAbsolute() {
@@ -363,13 +379,14 @@ static void testSort() {
 }
 
 static void testReadDirectory() {
-    char *text = readPath("freetype/");
+    char *text = readPath("../freetype/");
     assert(strncmp(text, "../\nMakefile", 12) == 0);
     free(text);
 }
 
 int main(int n, char *args[n]) {
     findResources(args[0]);
+secure(install);
     testSnipe();
     testAbsolute();
     testFindInstall();
