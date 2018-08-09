@@ -4,9 +4,11 @@
 
 // A text object is a flexible array holding the content of a file. It is
 // implemented as a gap buffer. For n bytes, positions in the text run from 0
-// (before the first byte) to n (after the last byte, and therefore 'below' the
-// last line). A text object also looks after the positions of line boundaries,
-// and a set of cursors, which are repaired at each insertion or deletion. Also,
+// (before the first byte) to n (after the last byte, and therefore visually
+// below the last line). If the text has h lines, they are indexed 0 to h-1,
+// but an implicit blank line h is provided for display. A text object looks
+// after the positions of line boundaries, and a set of cursors, which contain
+// text positions which are adjusted at each insertion or deletion. Also,
 // a list of style bytes for the text is maintained.
 struct text;
 typedef struct text text;

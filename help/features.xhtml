@@ -27,17 +27,17 @@ can be seen in the file
 
 <h2>Help</h2>
 
-<p>On typing CTRL+H a help page appears in the browser. The command to do that
-varies by platform, and can be customized in the settings file.</p>
+<p>Typing CTRL+H makes a help page appears in the browser. The command to do
+that varies by platform, and can be customized in the settings file.</p>
 
 <h2>File menu</h2>
 
-<p>On typing CTRL+O a file menu appears. Choose a line with the arrow keys and
-press ENTER to load a file.</p>
+<p>Typing CTRL+O makes a file menu appears. Choose a line with the arrow keys
+and press ENTER to load a file.</p>
 
 <h2>Line endings</h2>
 
-<p>Files are always written out using <code>\n</code> line endings, though the
+<p>Files are always written out using <code>\n</code> line endings. The
 Windows convention <code>\r\n</code> and old Mac convention <code>\r</code> are
 accepted and converted on input. This follows the advice of the <a
 href="http://utf8everywhere.org/">UTF-8 everywhere manifesto</a> which
@@ -53,12 +53,12 @@ user's mental model, and removes the need for frequent saving, which is entirely
 routine and therefore should be automated. Autosave becomes a necessary feature
 of <mark>Snipe</mark> rather than an option. <mark>Snipe</mark> doesn't create
 backups of files, on the basis that programmers use other tools such as
-<code>git</code> for that. Autosaving is done at least every minute, and also
+<code>git</code> for that. Autosaving is done very frequently, including
 when compiling and running programs.</p>
 
 <h2>Final newline</h2>
 
-<p>Files are always written out with a final newline, though a file without a
+<p>Files are always written out with a final newline. A file without a
 final newline has one added when it is read in. That's because: (a) most tools
 expect a final newline and all tools tolerate it (b) some standards require it
 and (c) the opposite convention, treating <code>\n</code> as a separator, is not
@@ -70,8 +70,7 @@ having no notional buffer. The more usual convention of treating a buffer as a
 string with newlines as separators causes a surprising amount of confusion
 because the editor's line count for the buffer doesn't match the normal line
 count for the file. In <mark>Snipe</mark>, it is still reasonable to regard the
-text as a single array of characters but, after every edit, the text is adjusted
-as necessary to maintain a final newline. The last cursor position is after the
+text as a single array of characters. The last cursor position is after the
 final newline, which is naturally below the last line on the screen. However,
 that apparent 'extra' line isn't given a line number or included in the line
 count.</p>
@@ -79,19 +78,16 @@ count.</p>
 <h2>Trailing blank lines and spaces</h2>
 
 <p>A text file shouldn't have trailing blank lines, or trailing spaces on the
-end of a line. That's because they cause visual ambiguity, and can confuse
-file-comparison tools. As well ensuring this property when writing out files,
-<mark>Snipe</mark> maintains it all the time when editing. As a result, the
-cursor is sometimes beyond the end of the notional text on a line, or below the
-last notional line.</p>
+end of a line. <mark>Snipe</mark> removes such extras when the cursor
+moves away from them.</p>
 
 <h2>File separators</h2>
 
 <p>Paths use forward slash <code>/</code> separators. Backslashes <code>\</code>
 are converted to forward slashes in any paths that come from outside the editor.
-The Windows libraries have always accepted forward slashes - it is only tools on
-Windows that prefer backslashes. The editor refuses to handle file or directory
-names that have slashes or backslashes in them, to encourage programmers to use
+The Windows libraries have always accepted forward slashes - it is only tools
+that prefer backslashes. The editor refuses to handle file or directory names
+that have slashes or backslashes in them, to encourage programmers to use
 only platform independent names.</p>
 
 <h2>Soft tabs</h2>
@@ -110,9 +106,8 @@ editor, soft tabs are implemented to behave just like hard tabs, so soft tabs
 have no significant disadvantages.</p>
 
 <p>When full auto-indenting is implemented, the indent width for a file will
-be set according to the first indent found in the
-file itself, or 4 if there aren't any. Any tab width will be allowed, but it
-should
+be set according to the first indent found in the file itself, or 4 if there
+aren't any. Any tab width will be allowed, but it should
 be noted that widths other than 2, 4, 8 are quite unlikely to be supported in
 other editors. To change the indent width of a file, rename the file to have a
 <code>.txt</code> extension, change the first indent in the file, then rename it

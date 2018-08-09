@@ -8,6 +8,7 @@ int startLine(ints *lines, int row) {
     return get(lines, row - 1);
 }
 
+// Pretend there is an extra line containing just a newline.
 int endLine(ints *lines, int row) {
     if (row == length(lines)) return get(lines, row - 1) + 1;
     return get(lines, row);

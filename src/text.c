@@ -92,10 +92,16 @@ static void moveGap(text *t, int p) {
     }
 }
 
+// Pretend there is an extra line containing just a newline.
 void getText(text *t, int p, int n, chars *s) {
-    moveGap(t, p + n);
     resize(s, 0);
-    insert(s, 0, n, &t->data[p]);
+    if (p == lengthText(t) && n == 1) {
+        add(s, '\n');
+    }
+    else {
+        moveGap(t, p + n);
+        insert(s, 0, n, &t->data[p]);
+    }
 }
 
 // Update the list of lines when there is an insertion or deletion.

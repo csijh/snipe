@@ -52,7 +52,7 @@ static void redraw(snipe *s) {
     setScrollTarget(s->dis, topRow);
     int height = getHeight(s->doc);
     for (int r = firstRow(s->dis); r <= lastRow(s->dis); r++) {
-        if (r >= height) break;
+        if (r > height) break;
         int n = getWidth(s->doc, r);
         chars *line = getLine(s->doc, r);
         chars *st = getStyle(s->doc, r);

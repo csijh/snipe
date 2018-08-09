@@ -386,9 +386,7 @@ tools at will.</p>
 
 <p>The issue of whether a file has a final newline is a rather minor one.  Yet,
 judging by the number of discussions about it on the Web, it is an issue which
-causes a surprising amount of confusion.  In fact, reading the code in some well
-known editors reveals confusion among programmers who should know better, too.
-So let's establish the real truth, once and for all.</p>
+causes a surprising amount of confusion.</p>
 
 <p>There are two sensible-sounding conventions for final newlines in multi-line
 text.  The <dfn>terminator</dfn> convention insists that the last line must end
@@ -408,15 +406,15 @@ choice. This is because:</p>
 <li>an empty file contains no lines</li>
 </ul>
 
-<p>With the separator convention, there is no way to represent empty text with
-no lines. An empty file would contain one empty line.  It doesn't seem possible
+<p>With the separator convention, there is no way to represent empty text -
+an empty file would contain one empty line.  It doesn't seem possible
 to come up with a fully consistent and confusion-free scheme based on the
-separator convention, and it is far too late to switch anyway.  It is not going
+separator convention, and it is far too late to switch anyway. It is not going
 too far to say that, in text files, the terminator convention is correct and the
 separator convention is incorrect.</p>
 
 <p>On the other hand, in a text buffer in memory, the separator convention is
-the most obvious choice.  This is because:</p>
+the most obvious choice. This is because:</p>
 
 <ul>
 <li>the text can be treated as an unrestricted array of characters</li>
@@ -431,11 +429,11 @@ The buffer simply is, logically speaking, an editable array of characters.</p>
 <p>The second point concerns the text cursor, often called a
 <dfn>caret</dfn> to distinguish it from a mouse cursor.  When text is displayed
 on screen, it must be possible to put the caret below the last line in order to
-type in new lines.  And, in particular, when the text is empty, there must be a
-line to put the caret on.  Thus empty text appears to consist of a single blank
+type in new lines. And, in particular, when the text is empty, there must be a
+line to put the caret on. Thus empty text appears to consist of a single blank
 line, as with the separator convention.</p>
 
-<p>The two choices are quite reasonable on their own.  What is not reasonable is
+<p>The two choices are quite reasonable on their own. What is not reasonable is
 the way they clash in an editor, and that is what causes the confusion.  The
 number of lines reported or implied by the editor doesn't match the number of
 lines reported by other tools. The feature of adding a final newline on saving
