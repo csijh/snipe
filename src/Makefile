@@ -146,4 +146,4 @@ snipe:
 zip:
 	mv $(EXEC) ..
 	cd ../.. && zip -r snipe.zip snipe/files snipe/help snipe/languages \
-		snipe/settings.txt snipe/$(EXEC)
+	snipe/settings.txt snipe/$(EXEC)

@@ -305,11 +305,30 @@ char *readPath(char const *path) {
     else return readFile(path);
 }
 
+// Write out a Makefile, restoring the tabs.
+static void writeMakefile(FILE *file, int size, char data[size]) {
+    int i = 0, j = 0;
+    while (i < size) {
+        if (data[j] == ' ') {
+            while (data[j] == ' ') j++;
+            fwrite("\t", 1, 1, file);
+            i = j;
+        }
+        while (data[j] != '\n') j++;
+        j++;
+        fwrite(&data[i], j - i, 1, file);
+        i = j;
+    }
+}
+
 void writeFile(char const *path, int size, char data[size]) {
     assert(path[strlen(path) - 1] != '/');
     FILE *file = fopen(path, "wb");
     if (file == NULL) { err("can't write", path); return; }
-    fwrite(data, size, 1, file);
+    if (strcmp(&path[strlen(path) - 9], "/Makefile") == 0) {
+        writeMakefile(file, size, data);
+    }
+    else fwrite(data, size, 1, file);
     fclose(file);
 }
 
