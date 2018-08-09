@@ -139,12 +139,21 @@ static void invalidateStyles(text *t, int p) {
 
 // Insert s at position p, and handle the side effects.
 void insertText(text *t, int p, char const *s) {
-    moveGap(t, p);
     int n = strlen(s);
+    char line[n + 2];
+    bool addLine = p == lengthText(t) && n > 0 && s[n-1] != '\n';
+    if (addLine) {
+        strcpy(line, s);
+        strcat(line, "\n");
+        s = line;
+        n++;
+    }
+    moveGap(t, p);
     if (n > t->hi - t->lo) resizeText(t, n);
     memcpy(&t->data[t->lo], s, n);
     t->lo = t->lo + n;
-    updateCursors(t->cs, p, n);
+    if (addLine) updateCursors(t->cs, p, n-1);
+    else updateCursors(t->cs, p, n);
     updateLines(t, p, n);
     insertLines(t, p, s);
     invalidateStyles(t, p);
@@ -177,6 +186,10 @@ void deleteText(text *t, int p, int n) {
     else {
         moveGap(t, p);
         t->hi = t->hi + n;
+    }
+    if (t->hi == t->end && t->lo > 0 && t->data[t->lo-1] != '\n') {
+        t->data[t->lo++] = '\n';
+        n--;
     }
     updateCursors(t->cs, p, -n);
     deleteLines(t, p, n);
@@ -259,16 +272,16 @@ int main() {
     setbuf(stdout, NULL);
     text *t = newText();
     insertText(t, 0, "abcdz");
-    assert(compare(t, "abcdz..."));
+    assert(compare(t, "abcdz\n..."));
     insertText(t, 4, "efghijklmnopqrstuvwxy");
-    assert(compare(t, "abcdefghijklmnopqrstuvwxy...z"));
+    assert(compare(t, "abcdefghijklmnopqrstuvwxy...z\n"));
     moveGap(t, 5);
-    assert(compare(t, "abcde...fghijklmnopqrstuvwxyz"));
+    assert(compare(t, "abcde...fghijklmnopqrstuvwxyz\n"));
     deleteText(t, 4, 4);
-    assert(compare(t, "abcd...ijklmnopqrstuvwxyz"));
+    assert(compare(t, "abcd...ijklmnopqrstuvwxyz\n"));
     deleteText(t, 0, 7);
-    assert(compare(t, "...lmnopqrstuvwxyz"));
-    deleteText(t, 0, 15);
+    assert(compare(t, "...lmnopqrstuvwxyz\n"));
+    deleteText(t, 0, 16);
     assert(compare(t, "..."));
     insertText(t, 0, "a\nbb\nccc\n");
     assert(compareLines(t, "259"));
