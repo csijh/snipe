@@ -16,6 +16,7 @@ enum setting {
     Map,         // Path to file containing key/mouse mappings
     HelpCommand, // Command to start up help page in browser, taken from
                  // HelpLinux, HelpMacOS, HelpWindows in map file
+    HelpIndex,   // Path of help index page
     Testing,     // Whether to print events and actions (on or off)
     Theme        // Theme file(s)
 };

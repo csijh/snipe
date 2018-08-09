@@ -25,6 +25,9 @@ HelpLinux   xdg-open %
 HelpMacOS   open %
 HelpWindows start %
 
+// Help index file
+HelpIndex help/index.xhtml
+
 // Theme files: cycle through with CTRL+Enter
 Theme files/solarized-dark.txt
 Theme files/solarized-light.txt

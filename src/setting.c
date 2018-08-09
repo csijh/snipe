@@ -15,7 +15,8 @@ static char values[MAX_SETTINGS][MAX_STRING];
 static char *settingNames[] = {
     [Font]="Font", [FontSize]="FontSize", [Rows]="Rows", [Columns]="Columns",
     [BlinkRate]="BlinkRate", [MinScroll]="MinScroll", [MaxScroll]="MaxScroll",
-    [HelpCommand]="Help", [Testing]="Testing", [Map]="Map", [Theme]="Theme"
+    [HelpCommand]="Help", [HelpIndex]="HelpIndex", [Testing]="Testing",
+    [Map]="Map", [Theme]="Theme"
 };
 
 // Convert the name of a setting to a setting constant, or -1 to ignore.

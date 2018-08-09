@@ -170,7 +170,8 @@ static void doNewline(document *d) {
 static void doHelp(document *d) {
     char line[100];
     char *cmd = getSetting(HelpCommand);
-    char *path = resourcePath("help/", "index", ".xhtml");
+    char *index = getSetting(HelpIndex);
+    char *path = resourcePath("", index, "");
     strcpy(line, cmd);
     char *pc = strchr(line, '%');
     strcpy(pc, path);
