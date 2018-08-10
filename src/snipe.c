@@ -22,7 +22,7 @@ typedef struct snipe snipe;
 
 static snipe *newSnipe(char const *path, bool testing) {
     snipe *s = malloc(sizeof(snipe));
-    s->dis = newDisplay();
+    s->dis = newDisplay(path);
     s->doc = newDocument(path);
     s->m = newMap(s->doc, s->dis, testing);
     return s;

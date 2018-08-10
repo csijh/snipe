@@ -66,6 +66,7 @@ static void load(document *d, char const *path) {
     d->undos = newHistory();
     d->redos = newHistory();
     d->changed = false;
+    d->scrollTarget = 0;
 }
 
 document *newDocument(char const *path) {

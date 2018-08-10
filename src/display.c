@@ -88,6 +88,16 @@ static void initWindow(display *d) {
     checkGLError();
 }
 
+void setTitle(display *d, char const *path) {
+    char title[strlen(path) + 6];
+    int i = strlen(path) - 1;
+    if (i > 0 && path[i-1] == '/') i--;
+    while (i > 0 && path[i-1] != '/') i--;
+    strcpy(title, "Snipe ");
+    strcat(title, &path[i]);
+    glfwSetWindowTitle(d->gw, title);
+}
+
 // Set or change the font size. Calculate the display metrics. Load the font
 // image into a texture. Set up an orthogonal projection, with y reversed so 2D
 // graphics (right,down) pixel coordinates can be used. Set the display size and
@@ -125,7 +135,7 @@ static void paintBackground(display *d) {
 }
 
 // Create and initialize the editor display.
-display *newDisplay() {
+display *newDisplay(char const *path) {
     display *d = malloc(sizeof(*d));
     char *fontFile =  getSetting(Font);
     d->fontSize = atoi(getSetting(FontSize));
@@ -137,6 +147,7 @@ display *newDisplay() {
     d->scroll = 0;
     d->scrollTarget = 0;
     initWindow(d);
+    setTitle(d, path);
     d->h = newHandler(d->gw);
     setBlinkRate(d->h, atof(getSetting(BlinkRate)));
     setFontSize(d);

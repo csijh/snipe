@@ -100,7 +100,7 @@ handler: ../glfw/lib/libglfw3.a
 	$(TCC) event.c theme.c $(UTILS) $(GL)
 	./snipe
 
-display: glfw/lib/libglfw3.a
+display: ../glfw/lib/libglfw3.a
 	$(TCC) handler.c event.c font.c theme.c $(UTILS) $(GL) $(FT)
 	./snipe
 

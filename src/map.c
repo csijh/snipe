@@ -89,6 +89,7 @@ bool dispatch(map *m, event e, int r, int c, char *t) {
     }
     actOnDocument(m->doc, a);
     actOnDisplay(m->dis, a);
+    if (a == Open || a == Load) setTitle(m->dis, getPath(m->doc));
     return a == Quit;
 }
 

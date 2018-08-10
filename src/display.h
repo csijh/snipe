@@ -18,10 +18,13 @@ typedef struct display display;
 typedef int action;
 
 // Create a display, with user preference settings.
-display *newDisplay(void);
+display *newDisplay(char const *path);
 
 // Free up the display object and its contents.
 void freeDisplay(display *d);
+
+// Set the window title according to the current file path.
+void setTitle(display *d, char const *path);
 
 // Close the display and shut down graphics.
 void quit(display *d);
