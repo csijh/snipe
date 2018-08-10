@@ -43,6 +43,7 @@ List  QUIT        Quit
 List  C_Q         Quit
 List  CLICK       Point
 List  BLINK       Blink
+List  TICK        Tick
 
 // These actions are not yet implemented.
 // C_BACKSPACE CutLeftWord
