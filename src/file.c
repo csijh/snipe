@@ -188,7 +188,7 @@ static char *readFile(char const *path) {
     char *data = malloc(size + 2);
     int n = fread(data, 1, size, file);
     if (n != size) { free(data); err("read failed", path); return NULL; }
-    if (data[n - 1] != '\n') data[n++] = '\n';
+    if (n > 0 && data[n - 1] != '\n') data[n++] = '\n';
     data[n] = '\0';
     fclose(file);
     return data;
