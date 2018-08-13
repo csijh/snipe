@@ -285,9 +285,6 @@ event getEvent(display *d, int *r, int *c, char **t) {
     return e;
 }
 
-// Return whether a redraw is needed. (Return false for actions which change the
-// window size, because they are better redrawn after resizing, when a REDRAW
-// event is triggered.)
 void actOnDisplay(display *d, action a) {
     switch (a) {
         case Bigger: bigger(d); break;
@@ -295,6 +292,7 @@ void actOnDisplay(display *d, action a) {
         case CycleTheme: cycleTheme(d); break;
         case Blink: blinkCaret(d); break;
         case Tick: smoothScroll(d); break;
+        case Open: case Load: d->scroll = 0; break;
     //    Quit
         default: break;
     }
