@@ -1,5 +1,6 @@
 // The Snipe editor is free and open source, see licence.txt.
 #include "text.h"
+#include <stdbool.h>
 
 // A document holds the contents of a file or folder in memory, with all the
 // information needed to edit it or display it.

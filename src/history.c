@@ -30,23 +30,30 @@ history *newHistory() {
 }
 
 void freeHistory(history *h) {
-    freeChars(h->bs);
+    freeList(h->bs);
     free(h);
+}
+
+// Add a bytes to the history.
+static void add(chars *cs, char c) {
+    int n = length(cs);
+    resize(cs, n + 1);
+    C(cs)[n] = c;
 }
 
 // Push n bytes onto the history.
 static void pushBytes(history *h, int n, char *s) {
     int len = length(h->bs);
     resize(h->bs, len + n);
-    for (int i = 0; i < n; i++) set(h->bs, len + i, s[i]);
+    for (int i = 0; i < n; i++) C(h->bs)[len + i] = s[i];
 }
 
 // Pop n bytes off the history into the given array.
 static void popBytes(history *h, int n, char s[n]) {
     int len = length(h->bs);
     len = len - n;
+    for (int i = 0; i < n; i++) s[i] = C(h->bs)[len + i];
     resize(h->bs, len);
-    copyC(h->bs, len, n, s);
 }
 
 // Push a bytecode op onto the history, operand first.
@@ -64,13 +71,13 @@ static void pushBytecode(history *h, int op, int n) {
 // Pop a bytecode op off the history into the given variables.
 static void popBytecode(history *h, int *pop, int *pn) {
     int len = length(h->bs);
-    unsigned char byte = get(h->bs, --len);
+    unsigned char byte = C(h->bs)[--len];
     *pop = byte >> 5;
     *pn = byte & 0x1F;
     if (*pn >= 28) {
         int n = 0;
         for (int i = 0; i < *pn - 27; i++) {
-            n = (n << 8) + (getC(h->bs, --len) & 0xFF);
+            n = (n << 8) + (C(h->bs)[--len] & 0xFF);
         }
         *pn = n;
     }

@@ -227,7 +227,7 @@ void drawLine(display *d, int row, chars *line, chars *styles) {
     int advance = 0;
     if (n > d->cols) n = d->cols;
     for (int i=0; i<n; i++) {
-        advance += drawChar(d, get(line, i), row, advance, get(styles, i));
+        advance += drawChar(d, C(line)[i], row, advance, C(styles)[i]);
     }
     checkGLError();
 }
@@ -315,23 +315,23 @@ static void testRedraw(display *d) {
         {T,T,T,T,G,N,n,n,n,n,G}
     };
     for (int i=0; i<3; i++) {
-        resize(line, 0);
-        resize(styles, 0);
-        insert(line, 0, strlen(lines[i]), lines[i]);
-        insert(styles, 0, strlen(lines[i]), lineStyles[i]);
+        resize(line, strlen(lines[i]));
+        resize(styles, strlen(lines[i]));
+        for (int j=0; j<strlen(lines[i]); j++) C(line)[j] = lines[i][j];
+        for (int j=0; j<strlen(lines[i]); j++) C(styles)[j] = lineStyles[i][j];
         drawLine(d, i, line, styles);
     }
     showFrame(d);
     checkGLError();
-    freeChars(line);
-    freeChars(styles);
+    freeList(line);
+    freeList(styles);
 }
 
 // Interactive testing.
 int main(int n, char const *args[n]) {
     setbuf(stdout, NULL);
     findResources(args[0]);
-    display *d = newDisplay();
+    display *d = newDisplay("");
     printf("Check visually and test events interactively\n");
     while (1) {
         int r, c;

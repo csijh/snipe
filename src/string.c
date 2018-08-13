@@ -9,6 +9,13 @@
 // For utf8valid, see
 // https://www.w3.org/International/questions/qa-forms-utf-8
 
+// Add a string to a list.
+static void add(strings *xs, char *s) {
+    int n = length(xs);
+    resize(xs, n + 1);
+    S(xs)[n] = s;
+}
+
 strings *splitLines(char *s) {
     strings *lines = newStrings();
     char *line = s;
@@ -159,20 +166,20 @@ static void testSplitLines() {
     char s[] = "a\nbb\nccc\n";
     strings *lines = splitLines(s);
     assert(length(lines) == 3);
-    assert(strcmp(get(lines, 0), "a") == 0);
-    assert(strcmp(get(lines, 1), "bb") == 0);
-    assert(strcmp(get(lines, 2), "ccc") == 0);
-    freeStrings(lines);
+    assert(strcmp(S(lines)[0], "a") == 0);
+    assert(strcmp(S(lines)[1], "bb") == 0);
+    assert(strcmp(S(lines)[2], "ccc") == 0);
+    freeList(lines);
 }
 
 static void testSplitWords() {
     char s[] = "a bb    ccc";
     strings *words = splitWords(s);
     assert(length(words) == 3);
-    assert(strcmp(get(words, 0), "a") == 0);
-    assert(strcmp(get(words, 1), "bb") == 0);
-    assert(strcmp(get(words, 2), "ccc") == 0);
-    freeStrings(words);
+    assert(strcmp(S(words)[0], "a") == 0);
+    assert(strcmp(S(words)[1], "bb") == 0);
+    assert(strcmp(S(words)[2], "ccc") == 0);
+    freeList(words);
 }
 
 static void testGetUTF8() {

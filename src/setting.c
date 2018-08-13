@@ -51,7 +51,7 @@ void readSettings() {
     free(path);
     strings *lines = splitLines(content);
     for (int i = 0; i < length(lines); i++) {
-        char *line = get(lines, i);
+        char *line = S(lines)[i];
         if (! isalpha(line[0])) continue;
         int sp = strchr(line, ' ') - line;
         line[sp] = '\0';
@@ -64,7 +64,7 @@ void readSettings() {
         if (strlen(value) >= MAX_STRING) error("String too long", value);
         strcpy(values[s], value);
     }
-    freeStrings(lines);
+    freeList(lines);
     free(content);
 }
 

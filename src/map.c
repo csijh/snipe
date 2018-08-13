@@ -49,21 +49,21 @@ map *newMap(document *doc, display *dis, bool testing) {
     for (event e = 0; e < COUNT_EVENTS; e++) m->array[e] = Ignore;
     for (event e = 0; e < COUNT_EVENTS; e++) m->listArray[e] = Ignore;
     for (int i = 0; i < length(lines); i++) {
-        char *line = get(lines, i);
+        char *line = S(lines)[i];
         if (! isalpha(line[0]) || line[0] == '\0') continue;
         strings *words = splitWords(line);
         bool list = false;
-        char *eventName = get(words, 0);
-        char *actionName = get(words, 1);
+        char *eventName = S(words)[0];
+        char *actionName = S(words)[1];
         if (strcmp(eventName, "List") == 0) {
             list = true;
             eventName = actionName;
-            actionName = get(words, 2);
+            actionName = S(words)[2];
         }
         makeEntry(m, list, eventName, actionName);
-        freeStrings(words);
+        freeList(words);
     }
-    freeStrings(lines);
+    freeList(lines);
     free(content);
     fixDefaults(m);
     return m;

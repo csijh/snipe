@@ -91,6 +91,13 @@ static char singleSpace[256];
 static char *singles[128];
 static char *empty = "";
 
+// Add a string to a list.
+static void add(strings *xs, char *s) {
+    int n = length(xs);
+    resize(xs, n + 1);
+    S(xs)[n] = s;
+}
+
 // Expand a range x..y into an explicit series of one-character tokens.
 static void expandRange(strings *tokens, char *range) {
     if (singles[0] == NULL) {
@@ -122,16 +129,16 @@ static void readLine(char *line, strings *tokens) {
     strings *words = splitWords(line);
     int n = length(words);
     for (int i = 0; i < n; i++) {
-        char *word = get(words, i);
+        char *word = S(words)[i];
         unescape(word);
         if (strlen(word) == 4 && word[1] == '.' && word[2] == '.') {
             expandRange(tokens, word);
         }
         else add(tokens, word);
     }
-    char *last = get(tokens, length(tokens) - 1);
+    char *last = S(tokens)[length(tokens) - 1];
     if (isalpha(last[0])) add(tokens, empty);
-    freeStrings(words);
+    freeList(words);
 }
 
 // Read in a language file as a string.
@@ -151,7 +158,7 @@ static char *readLanguage(char *lang) {
 // Search for a string in a list.
 int search(strings *xs, char *s) {
     for (int i = 0; i < length(xs); i++) {
-        char *si = get(xs, i);
+        char *si = S(xs)[i];
         if (strcmp(s, si) == 0) return i;
     }
     return -1;
@@ -167,14 +174,14 @@ int find(strings *xs, char *x) {
 
 // Find the state names in a rule.
 static void findStates(strings *tokens, strings *states) {
-    find(states, get(tokens, 0));
-    find(states, get(tokens, length(tokens) - 2));
+    find(states, S(tokens)[0]);
+    find(states, S(tokens)[length(tokens) - 2]);
 }
 
 // Find the patterns in a rule.
 static void findPatterns(strings *tokens, strings *patterns) {
     int n = length(tokens);
-    for (int i = 1; i < n - 2; i++) find(patterns, get(tokens, i));
+    for (int i = 1; i < n - 2; i++) find(patterns, S(tokens)[i]);
 }
 
 // -----------------------------------------------------------------------------
@@ -195,13 +202,13 @@ static int compare(char *s, char *t) {
 static void sort(strings *patterns) {
     int n = length(patterns);
     for (int i = 1; i < n; i++) {
-        char *s = get(patterns, i);
+        char *s = S(patterns)[i];
         int j = i - 1;
-        while (j >= 0 && compare(get(patterns, j), s) > 0) {
-            set(patterns, j + 1, get(patterns, j));
+        while (j >= 0 && compare(S(patterns)[j], s) > 0) {
+            S(patterns)[j + 1] = S(patterns)[j];
             j--;
         }
-        set(patterns, j + 1, s);
+        S(patterns)[j + 1] = s;
     }
 }
 
@@ -222,11 +229,11 @@ static short *makeOffsets(strings *patterns) {
     short *offsets = malloc(128 * sizeof(short));
     int ch = 0, n = length(patterns);
     for (int i = 0; i < n; i++) {
-        char *pattern = get(patterns, i);
+        char *pattern = S(patterns)[i];
         int first = pattern[0];
         while (ch < first) offsets[ch++] = i - 1;
         offsets[ch++] = i;
-        while (i < n - 1 && get(patterns, i + 1)[0] == first) i++;
+        while (i < n - 1 && S(patterns)[i + 1][0] == first) i++;
     }
     while (ch < 128) offsets[ch++] = n - 1;
     return offsets;
@@ -237,9 +244,9 @@ static void addRule(strings *line, action **table, strings *states,
     strings *patterns, strings *styles)
 {
     int n = length(line);
-    short row = search(states, get(line, 0));
-    short target = search(states, get(line, n-2));
-    char *act = get(line, n-1);
+    short row = search(states, S(line)[0]);
+    short target = search(states, S(line)[n-2]);
+    char *act = S(line)[n-1];
     assert(row >= 0 && target >= 0);
     short style = 0;
     if (strlen(act) > 0) {
@@ -260,7 +267,7 @@ static void addRule(strings *line, action **table, strings *states,
         }
     }
     else for (int i = 1; i < n - 2; i++) {
-        char *s = get(line, i);
+        char *s = S(line)[i];
         int col = search(patterns, s);
         assert(col >= 0);
         if (actions[col].style != SKIP) continue;
@@ -274,7 +281,7 @@ static strings **splitTokens(strings *lines) {
     strings **rules = malloc((length(lines) + 1) * sizeof(strings *));
     int j = 0;
     for (int i = 0; i < length(lines); i++) {
-        char *line = get(lines, i);
+        char *line = S(lines)[i];
         if (line[0] == '-') break;
         if (! isalpha(line[0])) continue;
         rules[j] = newStrings();
@@ -336,15 +343,24 @@ void changeLanguage(scanner *sc, char *lang) {
     sc->height = length(states);
     sc->width = length(patterns);
     sc->offsets = makeOffsets(patterns);
-    sc->states = freeze(states);
-    sc->patterns = freeze(patterns);
-    for (int i = 0; rules[i] != NULL; i++) freeStrings(rules[i]);
+    sc->states = S(states);
+    realloc(sc->states, sc->height * sizeof(char *));
+    free(states);
+    sc->patterns = S(patterns);
+    realloc(sc->patterns, sc->width * sizeof(char *));
+    free(patterns);
+    for (int i = 0; rules[i] != NULL; i++) freeList(rules[i]);
     free(rules);
-    freeStrings(lines);
-    freeStrings(styles);
+    freeList(lines);
+    freeList(styles);
 }
 
 static bool TRACE;
+
+// Match part of a list against a string.
+static inline bool match(chars *line, int i, int n, char *pattern) {
+    return strncmp(C(line) + i, pattern, n) == 0;
+}
 
 // Scan a line of source text to produce a line of style bytes. At each step:
 // 1) find the range, start <= x < end, of patterns starting with the next char.
@@ -358,7 +374,7 @@ void scan(scanner *sc, int row, chars *line, chars *styles) {
     int s = 0, i = 0, n = length(line) - 1;
     int empty = sc->offsets[127];
     while (i < n || s < i) {
-        int ch = get(line,i);
+        int ch = C(line)[i];
         int start = sc->offsets[ch];
         int end = sc->offsets[ch + 1];
         int matched = empty;
@@ -386,11 +402,11 @@ void scan(scanner *sc, int row, chars *line, chars *styles) {
             else printf("    >%s\n", styleName(base));
         }
         if (st == MORE || s == i) continue;
-        set(styles, s++, addStyleFlag(base, START));
-        if ((st & BEFORE) != 0) { while (s < old) set(styles, s++, base); }
-        else while (s < i) set(styles, s++, base);
+        C(styles)[s++] = addStyleFlag(base, START);
+        if ((st & BEFORE) != 0) { while (s < old) C(styles)[s++] = base; }
+        else while (s < i) C(styles)[s++] = base;
     }
-    set(styles, s, addStyleFlag(GAP, START));
+    C(styles)[s] = addStyleFlag(GAP, START);
     if (TRACE) printf("end state %s\n", sc->states[state]);
     sc->endStates = setEndState(sc->endStates, row, state);
 }
@@ -405,10 +421,10 @@ static bool checkReadLine(char *t, int n, char *e[n]) {
     readLine(tc, ts);
     if (length(ts) != n) return false;
     for (int i = 0; i < n; i++) {
-        char *t = get(ts, i);
+        char *t = S(ts)[i];
         if (strcmp(t, e[i]) != 0) return false;
     }
-    freeStrings(ts);
+    freeList(ts);
     return true;
 }
 
@@ -426,18 +442,19 @@ static void testReadLine() {
 
 static bool check(scanner *sc, int row, char *l, char *expect) {
     chars *line = newChars();
-    insert(line, 0, strlen(l), l);
+    resize(line, strlen(l));
+    strncpy(C(line), l, strlen(l));
     chars *styles = newChars();
     scan(sc, row, line, styles);
     for (int i = 0; i < length(line); i++) {
-        char st = get(styles, i);
+        char st = C(styles)[i];
         char letter = styleName(clearStyleFlags(st))[0];
         if (! hasStyleFlag(st, START)) letter = tolower(letter);
-        set(styles, i, letter);
+        C(styles)[i] = letter;
     }
     bool matched = match(styles, 0, length(line), expect);
-    freeChars(line);
-    freeChars(styles);
+    freeList(line);
+    freeList(styles);
     return matched;
 }
 

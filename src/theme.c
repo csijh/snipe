@@ -19,6 +19,13 @@ struct theme {
     colour table[COUNT_STYLES];
 };
 
+// Add a string to a list.
+static void add(strings *xs, char *s) {
+    int n = length(xs);
+    resize(xs, n + 1);
+    S(xs)[n] = s;
+}
+
 theme *newTheme() {
     theme *t = malloc(sizeof(theme));
     t->names = newStrings();
@@ -33,7 +40,7 @@ theme *newTheme() {
 }
 
 void freeTheme(theme *t) {
-    freeStrings(t->names);
+    freeList(t->names);
     free(t);
 }
 
@@ -47,7 +54,7 @@ static unsigned char hexByte(char *s) {
 
 void nextTheme(theme *t) {
     t->index = (t->index + 1) % length(t->names);
-    char *filename = get(t->names, t->index);
+    char *filename = S(t->names)[t->index];
     char *path = resourcePath("", filename, "");
     char *content = readPath(path);
     free(path);
@@ -55,19 +62,19 @@ void nextTheme(theme *t) {
     strings *lines = splitLines(content);
     for (int s = 0; s < COUNT_STYLES; s++) t->table[s].a = 0;
     for (int i = 0; i < length(lines); i++) {
-        char *line = get(lines, i);
+        char *line = S(lines)[i];
         if (! isalpha(line[0])) continue;
         strings *words = splitWords(line);
-        char *styleName = get(words, 0);
-        char *hexString = get(words, 1);
+        char *styleName = S(words)[0];
+        char *hexString = S(words)[1];
         int s = (int) findStyle(styleName);
         t->table[s].r = hexByte(&hexString[1]);
         t->table[s].g = hexByte(&hexString[3]);
         t->table[s].b = hexByte(&hexString[5]);
         t->table[s].a = 0xff;
-        freeStrings(words);
+        freeList(words);
     }
-    freeStrings(lines);
+    freeList(lines);
     free(content);
     for (int s = 1; s < COUNT_STYLES; s++) {
         if (t->table[s].a != 0xff) t->table[s] = t->table[s - 1];

@@ -40,8 +40,8 @@ text *newText() {
 void freeText(text *t) {
     if (t == NULL) return;
     free(t->data);
-    freeInts(t->lines);
-    freeChars(t->styles);
+    freeList(t->lines);
+    freeList(t->styles);
     freeCursors(t->cs);
     free(t);
 }
@@ -96,11 +96,14 @@ static void moveGap(text *t, int p) {
 void getText(text *t, int p, int n, chars *s) {
     resize(s, 0);
     if (p == lengthText(t) && n == 1) {
-        add(s, '\n');
+        int n = length(s);
+        resize(s, n + 1);
+        C(s)[n] = '\n';
     }
     else {
         moveGap(t, p + n);
-        insert(s, 0, n, &t->data[p]);
+        resize(s, n);
+        memcpy(C(s), &t->data[p], n);
     }
 }
 
@@ -109,9 +112,9 @@ static void updateLines(text *t, int p, int n) {
     ints *xs = t->lines;
     int count = length(xs);
     for (int i = 0; i < count; i++) {
-        if (get(xs, i) > p) {
-            set(xs, i, get(xs, i) + n);
-            if (get(xs, i) < p) set(xs, i, p);
+        if (I(xs)[i] > p) {
+            I(xs)[i] = I(xs)[i] + n;
+            if (I(xs)[i] < p) I(xs)[i] = p;
         }
     }
 }
@@ -123,10 +126,11 @@ static void insertLines(text *t, int p, char const *s) {
     for (int i = 0; i < strlen(s); i++) if (s[i] == '\n') count++;
     if (count == 0) return;
     int len = length(lines);
-    while (index < len && get(lines, index) <= p) index++;
+    while (index < len && I(lines)[index] <= p) index++;
     for (int i = 0; i < strlen(s); i++) if (s[i] == '\n') {
         int n = p + i + 1;
-        insert(lines, index++, 1, &n);
+        expand(lines, index, 1);
+        I(lines)[index++] = n;
     }
 }
 
@@ -171,8 +175,8 @@ static void deleteLines(text *t, int p, int n) {
     ints *lines = t->lines;
     int count = 0, index = 0;
     int len = length(lines);
-    while (index < len && get(lines, index) <= p) index++;
-    for (int i = index; i < len && get(lines, i) <= p+n; i++) count++;
+    while (index < len && I(lines)[index] <= p) index++;
+    for (int i = index; i < len && I(lines)[i] <= p+n; i++) count++;
     if (count > 0) delete(lines, index, count);
 }
 
@@ -263,7 +267,7 @@ static bool compareLines(text *t, char *p) {
     int n = strlen(p);
     if (n != length(lines)) return false;
     for (int i = 0; i < strlen(p); i++) {
-        if (get(lines, i) != (p[i] - '0')) return false;
+        if (I(lines)[i] != (p[i] - '0')) return false;
     }
     return true;
 }

@@ -30,7 +30,7 @@ GL = -I../glfw/include -L../glfw/lib -lglfw3 $(SYS)
 LIBS = $(FT) $(GL)
 
 # Compiler commands for production compiling, and for test compiling.
-PCC = gcc -std=c11 -o $(EXEC) -O2 $@.c
+PCC = gcc -std=c11 -o $(EXEC) -O2 -DNDEBUG $@.c
 TCC = gcc -std=c11 -o $(EXEC) -Wall -pedantic -g $(DEBUG) -Dtest_$@ $@.c
 
 # Build the glfw static library (with only system dependencies) from source.

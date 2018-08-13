@@ -158,8 +158,8 @@ void markRightChar(cursors *cs) {
 void markLeftWord(cursors *cs) {
     for (int i = 0; i < cs->length; i++) {
         cursor *c = &cs->cs[i];
-        if (c->at > 0 && hasStyleFlag(get(cs->styles, c->at), START)) c->at--;
-        while (! hasStyleFlag(get(cs->styles, c->at), START)) c->at--;
+        if (c->at > 0 && hasStyleFlag(C(cs->styles)[c->at], START)) c->at--;
+        while (! hasStyleFlag(C(cs->styles)[c->at], START)) c->at--;
         c->col = -1;
     }
     mergeCursors(cs);
@@ -169,8 +169,8 @@ void markRightWord(cursors *cs) {
     int end = startLine(cs->lines, length(cs->lines));
     for (int i = 0; i < cs->length; i++) {
         cursor *c = &cs->cs[i];
-        if (c->at < end && hasStyleFlag(get(cs->styles, c->at), START)) c->at++;
-        while (! hasStyleFlag(get(cs->styles, c->at), START)) c->at++;
+        if (c->at < end && hasStyleFlag(C(cs->styles)[c->at], START)) c->at++;
+        while (! hasStyleFlag(C(cs->styles)[c->at], START)) c->at++;
         c->col = -1;
     }
     mergeCursors(cs);
@@ -260,8 +260,8 @@ void moveLeftWord(cursors *cs) {
         cursor *c = &cs->cs[i];
         if (selecting(c)) collapseL(c);
         else {
-            if (c->at > 0 && hasStyleFlag(get(cs->styles, c->at), START)) c->at--;
-            while (! hasStyleFlag(get(cs->styles, c->at), START)) c->at--;
+            if (c->at > 0 && hasStyleFlag(C(cs->styles)[c->at], START)) c->at--;
+            while (! hasStyleFlag(C(cs->styles)[c->at], START)) c->at--;
             c->col = -1;
             c->from = c->at;
         }
@@ -275,8 +275,8 @@ void moveRightWord(cursors *cs) {
         if (selecting(c)) collapseR(c);
         else {
             int end = startLine(cs->lines, length(cs->lines));
-            if (c->at < end && hasStyleFlag(get(cs->styles, c->at), START)) c->at++;
-            while (! hasStyleFlag(get(cs->styles, c->at), START)) c->at++;
+            if (c->at < end && hasStyleFlag(C(cs->styles)[c->at], START)) c->at++;
+            while (! hasStyleFlag(C(cs->styles)[c->at], START)) c->at++;
             c->col = -1;
             c->from = c->at;
         }
@@ -402,14 +402,14 @@ void applyCursors(cursors *cs, int row, chars *styles) {
         if (c->at < start && c->from <= start) continue;
         if (c->at > end && c->from >= end) continue;
         if (c->at >= start && c->at < end) {
-            char st = addStyleFlag(get(styles, c->at - start), POINT);
-            set(styles, c->at - start, st);
+            char st = addStyleFlag(C(styles)[c->at - start], POINT);
+            C(styles)[c->at - start] = st;
         }
         for (int i = 0; i < n; i++) {
             if ((c->at <= start + i && start + i + 1 <= c->from) ||
                 (c->from <= start + i && start + i + 1 <= c->at)) {
-                char st = addStyleFlag(get(styles, i), SELECT);
-                set(styles, i, st);
+                char st = addStyleFlag(C(styles)[i], SELECT);
+                C(styles)[i] = st;
             }
         }
     }
@@ -447,7 +447,11 @@ static ints *makeLines(char *pattern) {
     for (int i = 0; i < strlen(pattern); i++) {
         char ch = pattern[i];
         if (ch == '.' || ch == '[' || ch == ']') continue;
-        if (ch == ';') add(lines, p + 1);
+        if (ch == ';') {
+            int n = length(lines);
+            resize(lines, n + 1);
+            I(lines)[n] = p + 1;
+        }
         p++;
     }
     return lines;
@@ -492,7 +496,7 @@ static void testLeftRight() {
     makeCursor(cs, 0, "]ab[;c;");
     assert(check(moveRightChar, cs, "ab.;c;"));
     freeCursors(cs);
-    freeInts(lines);
+    freeList(lines);
 }
 
 static void testUpDown() {
@@ -509,7 +513,7 @@ static void testUpDown() {
     assert(check(moveUpLine, cs, "ab.c;d;efg;"));
     assert(check(moveUpLine, cs, "ab.c;d;efg;"));
     freeCursors(cs);
-    freeInts(lines);
+    freeList(lines);
 }
 
 static void testMoveWord() {
@@ -521,7 +525,9 @@ static void testMoveWord() {
     style N = addStyleFlag(NUMBER, START), n = NUMBER;
     char st[] = { K,k,k,G,I,S,N,n,G,I,G };
     chars *styles = newChars();
-    insert(styles, 0, 11, st);
+    resize(styles, 11);
+    for (int i=0; i<11; i++) C(styles)[i] = st[i];
+//    insert(styles, 0, 11, st);
     cursors *cs = newCursors(lines, styles);
     makeCursor(cs, 0, ".int n=42;x;");
     assert(check(moveRightWord, cs, "int. n=42;x;"));
@@ -537,8 +543,8 @@ static void testMoveWord() {
     assert(check(moveLeftWord, cs, "int. n=42;x;"));
     assert(check(moveLeftWord, cs, ".int n=42;x;"));
     freeCursors(cs);
-    freeInts(lines);
-    freeChars(styles);
+    freeList(lines);
+    freeList(styles);
 }
 
 static void testMark() {
@@ -567,7 +573,7 @@ static void testMark() {
     assert(check(markDownLine, cs, "[ab;c;]"));
     assert(check(moveLeftChar, cs, ".ab;c;"));
     freeCursors(cs);
-    freeInts(lines);
+    freeList(lines);
 }
 
 static void testMarkWord() {
@@ -579,7 +585,9 @@ static void testMarkWord() {
     style N = addStyleFlag(NUMBER, START), n = NUMBER;
     char st[] = { K,k,k,G,I,S,N,n,G,I,G };
     chars *styles = newChars();
-    insert(styles, 0, 11, st);
+    resize(styles, 11);
+    for (int i=0; i<11; i++) C(styles)[i] = st[i];
+//    insert(styles, 0, 11, st);
     cursors *cs = newCursors(lines, styles);
     makeCursor(cs, 0, ".int n=42;x;");
     assert(check(markRightWord, cs, "[int] n=42;x;"));
@@ -595,8 +603,8 @@ static void testMarkWord() {
     assert(check(markLeftWord, cs, "[int] n=42;x;"));
     assert(check(markLeftWord, cs, ".int n=42;x;"));
     freeCursors(cs);
-    freeInts(lines);
-    freeChars(styles);
+    freeList(lines);
+    freeList(styles);
 }
 
 int main() {

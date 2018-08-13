@@ -5,13 +5,13 @@
 
 int startLine(ints *lines, int row) {
     if (row == 0) return 0;
-    return get(lines, row - 1);
+    return I(lines)[row - 1];
 }
 
 // Pretend there is an extra line containing just a newline.
 int endLine(ints *lines, int row) {
-    if (row == length(lines)) return get(lines, row - 1) + 1;
-    return get(lines, row);
+    if (row == length(lines)) return I(lines)[row - 1] + 1;
+    return I(lines)[row];
 }
 
 int lengthLine(ints *lines, int row) {
@@ -35,9 +35,8 @@ int findRow(ints *lines, int p) {
 int main() {
     setbuf(stdout, NULL);
     ints *lines = newInts();
-    add(lines, 3);
-    add(lines, 6);
-    add(lines, 9);
+    resize(lines, 3);
+    I(lines)[0] = 3; I(lines)[1] = 6; I(lines)[2] = 9;
     assert(findRow(lines, 0) == 0);
     assert(findRow(lines, 2) == 0);
     assert(findRow(lines, 3) == 1);
@@ -45,7 +44,7 @@ int main() {
     assert(findRow(lines, 6) == 2);
     assert(findRow(lines, 8) == 2);
     assert(findRow(lines, 9) == 3);
-    freeInts(lines);
+    freeList(lines);
     printf("Line module OK\n");
     return 0;
 }

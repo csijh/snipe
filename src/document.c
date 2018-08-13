@@ -78,8 +78,8 @@ document *newDocument(char const *path) {
 void freeDocument(document *d) {
     freeDocumentData(d);
     freeScanner(d->sc);
-    freeChars(d->line);
-    freeChars(d->lineStyles);
+    freeList(d->line);
+    freeList(d->lineStyles);
     free(d);
 }
 
@@ -118,12 +118,13 @@ chars *getStyle(document *d, int row) {
         getText(d->content, p, n, d->line);
         scan(d->sc, r, d->line, d->lineStyles);
         assert(length(styles) >= p);
-        resize(styles, p);
-        addList(styles, d->lineStyles);
+        resize(styles, p + n);
+        memcpy(&C(styles)[p], C(d->lineStyles), n);
     }
     int n = getWidth(d, row);
     int p = startLine(lines, row);
-    sublist(styles, p, n, d->lineStyles);
+    resize(d->lineStyles, n);
+    memcpy(C(d->lineStyles), &C(styles)[p], n);
     return d->lineStyles;
 }
 
@@ -190,7 +191,8 @@ static void doLoad(document *d) {
     int n2 = length(line) - 1;
     char *path = malloc(n1 + n2 + 1);
     strcpy(path, d->path);
-    copy(line, 0, n2, &path[n1]);
+    resize(line, n2);
+    memcpy(C(line), &path[n1], n2);
     path[n1 + n2] = '\0';
     load(d, path);
     free(path);
@@ -272,7 +274,7 @@ int main(int n, char *args[n]) {
     int len = getWidth(d, 0);
     chars *line = getLine(d, 0);
     char *t = "// The Snipe editor is free and open source, see licence.txt.\n";
-    assert(match(line, 0, len, t));
+    assert(strncmp(C(line), t, len) == 0);
     freeDocument(d);
     printf("Document module OK\n");
     return 0;
