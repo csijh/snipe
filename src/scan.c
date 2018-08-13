@@ -344,10 +344,10 @@ void changeLanguage(scanner *sc, char *lang) {
     sc->width = length(patterns);
     sc->offsets = makeOffsets(patterns);
     sc->states = S(states);
-    realloc(sc->states, sc->height * sizeof(char *));
+    sc->states = realloc(sc->states, sc->height * sizeof(char *));
     free(states);
     sc->patterns = S(patterns);
-    realloc(sc->patterns, sc->width * sizeof(char *));
+    sc->patterns = realloc(sc->patterns, sc->width * sizeof(char *));
     free(patterns);
     for (int i = 0; rules[i] != NULL; i++) freeList(rules[i]);
     free(rules);
