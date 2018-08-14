@@ -82,7 +82,9 @@ void nextTheme(theme *t) {
 }
 
 extern inline colour *findColour(theme *t, char style) {
-    return &t->table[(int)style];
+    colour *c = &t->table[(int)style];
+    if (c->a == 0) c = &t->table[(int)styleDefault(style)];
+    return c;
 }
 
 extern inline unsigned char red(colour *c) { return c->r; }
