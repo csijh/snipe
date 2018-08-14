@@ -137,7 +137,10 @@ static void cutLeft(document *d) {
     d->changed = true;
 }
 
-static void cutRight(document *d) { deleteAt(d->content); d->changed = true; }
+static void cutRight(document *d) {
+    deleteAt(d->content);
+    d->changed = true;
+}
 
 static void doPageUp(document *d) {
     d->scrollTarget -= 30;
@@ -159,7 +162,9 @@ static void doLineDown(document *d) {
     if (d->scrollTarget > getHeight(d) - 10) d->scrollTarget = getHeight(d) - 10;
 }
 
+// Delete any selection before inserting.
 static void doInsert(document *d) {
+    cutLeft(d);
     insertAt(d->content, d->text);
     d->changed = true;
 }
@@ -237,8 +242,8 @@ void actOnDocument(document *d, action a) {
         case MarkDownLine: markDownLine(cs); break;
         case MarkStartLine: markStartLine(cs); break;
         case MarkEndLine: markEndLine(cs); break;
-        case CutLeftChar: markLeftChar(cs); cutLeft(d); break;
-        case CutRightChar: markRightChar(cs); cutRight(d); break;
+        case CutLeftChar: pMarkLeftChar(cs); cutLeft(d); break;
+        case CutRightChar: pMarkRightChar(cs); cutRight(d); break;
         case CutLeftWord: markLeftWord(cs); cutLeft(d); break;
         case CutRightWord: markRightWord(cs); cutRight(d); break;
         case CutUpLine: markUpLine(cs); cutLeft(d); break;

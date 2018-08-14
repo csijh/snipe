@@ -136,24 +136,36 @@ void mergeCursors(cursors *cs) {
     }
 }
 
-void markLeftChar(cursors *cs) {
+// Mark left, including when selecting or not
+static void ifMarkLeftChar(cursors *cs, bool ifSelect) {
     for (int i = 0; i < cs->length; i++) {
         cursor *c = &cs->cs[i];
+        if (! ifSelect && selecting(c)) continue;
         if (c->at > 0) c->at--;
         c->col = -1;
     }
     mergeCursors(cs);
 }
 
-void markRightChar(cursors *cs) {
+void markLeftChar(cursors *cs) { ifMarkLeftChar(cs, true); }
+
+void pMarkLeftChar(cursors *cs) { ifMarkLeftChar(cs, false); }
+
+// Mark left, including when selecting or not
+static void ifMarkRightChar(cursors *cs, bool ifSelect) {
     int end = startLine(cs->lines, length(cs->lines));
     for (int i = 0; i < cs->length; i++) {
         cursor *c = &cs->cs[i];
+        if (! ifSelect && selecting(c)) continue;
         if (c->at < end) c->at++;
         c->col = -1;
     }
     mergeCursors(cs);
 }
+
+void markRightChar(cursors *cs) { ifMarkRightChar(cs, true); }
+
+void pMarkRightChar(cursors *cs) { ifMarkRightChar(cs, false); }
 
 void markLeftWord(cursors *cs) {
     for (int i = 0; i < cs->length; i++) {

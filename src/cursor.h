@@ -36,7 +36,7 @@ void mergeCursors(cursors *cs);
 // Apply selection and caret information to the style bytes for a line.
 void applyCursors(cursors *cs, int row, chars *styles);
 
-// Carry out a move/mark edit action on cursors.
+// Carry out a move, mark, provisional-mark edit action on cursors.
 void moveLeftChar(cursors *cs);
 void moveRightChar(cursors *cs);
 void moveLeftWord(cursors *cs);
@@ -53,6 +53,8 @@ void markUpLine(cursors *cs);
 void markDownLine(cursors *cs);
 void markStartLine(cursors *cs);
 void markEndLine(cursors *cs);
+void pMarkLeftChar(cursors *cs);
+void pMarkRightChar(cursors *cs);
 
 // Set the cursor to a text position, discarding extra cursors.
 void point(cursors *cs, int p);
