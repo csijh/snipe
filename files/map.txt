@@ -14,10 +14,11 @@ DOWN        MoveDownLine
 PAGE_UP     PageUp
 PAGE_DOWN   PageDown
 C_O         Open
+C_V         Paste
 C_Q         Quit            keyboard quit
 QUIT        Quit            window button quit
-C_S         Save            synchronizing save, later to mean compile/run
 C_H         Help            may need to be customized in settings.txt
+C_S         Save            synchronizing save, later to mean compile/run
 C_+         Bigger          increase font size
 C_=         Bigger          same for keyboards with + above =
 C_-         Smaller         decrease font size
@@ -62,6 +63,5 @@ List  TICK        Tick
 // DELETE      CutRightChar
 // C_DELETE    CutRightWord
 // C_C         Copy
-// C_V         Paste
 // C_Y         Redo
 // C_Z         Undo

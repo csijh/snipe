@@ -17,4 +17,4 @@ map *newMap(document *doc, display *dis, bool testing);
 void freeMap(map *m);
 
 // Offer an action both to the document and to the display.
-bool dispatch(map *m, event e, int r, int c, char *t);
+bool dispatch(map *m, event e, int r, int c, char const *t);

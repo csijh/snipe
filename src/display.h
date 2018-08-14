@@ -46,7 +46,7 @@ void cycleTheme(display *d);
 // Get the next event. For a mouse click, (r,c) are set to the character
 // coordinates in the document. For text input, t is set to the text, which is
 // valid only until the following event.
-event getEvent(display *d, int *r, int *c, char **t);
+event getEvent(display *d, int *r, int *c, char const **t);
 
 // Create an image of a line from its row number, text, and style info.
 void drawLine(display *d, int row, chars *line, chars *styles);

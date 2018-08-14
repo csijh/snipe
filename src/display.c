@@ -279,7 +279,7 @@ static void charPosition(display *d, int x, int y, int *row, int *col) {
     *col = (x - d->pad + d->charWidth / 2) / d->charWidth;
 }
 
-event getEvent(display *d, int *r, int *c, char **t) {
+event getEvent(display *d, int *r, int *c, char const **t) {
     int x, y;
     event e = getRawEvent(d->h, &x, &y, t);
     charPosition(d, x, y, r, c);
@@ -294,7 +294,7 @@ void actOnDisplay(display *d, action a) {
         case Blink: blinkCaret(d); break;
         case Tick: smoothScroll(d); break;
         case Open: case Load: d->scroll = 0; break;
-    //    Quit
+        case Paste: pasteEvent(d->h); break;
         default: break;
     }
 }

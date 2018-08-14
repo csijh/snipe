@@ -82,7 +82,7 @@ event findEvent(char *name) {
     exit(1);
 }
 
-void printEvent(event e, int r, int c, char *t) {
+void printEvent(event e, int r, int c, char const *t) {
     printf("%s", findEventName(e));
     if (e == TEXT) printf(" %s", t);
     else if (e == CLICK || e == DRAG) printf(" r=%d c=%d", r, c);

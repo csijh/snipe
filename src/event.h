@@ -47,4 +47,4 @@ const char *findEventName(event e);
 event findEvent(char *name);
 
 // Print out an event, e.g. for testing.
-void printEvent(event e, int r, int c, char *t);
+void printEvent(event e, int r, int c, char const *t);

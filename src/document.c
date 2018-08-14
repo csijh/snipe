@@ -29,7 +29,7 @@ struct document {
     scanner *sc;
     chars *line, *lineStyles;
     int pos;
-    char *text;
+    char const *text;
 };
 
 static document *newEmptyDocument() {
@@ -210,7 +210,7 @@ static void doOpen(document *d) {
     free(path);
 }
 
-void setData(document *d, int row, int col, char *t) {
+void setData(document *d, int row, int col, char const *t) {
     ints *lines = getLines(d->content);
     if (row > getHeight(d)) row = getHeight(d);
     int start = startLine(lines, row);

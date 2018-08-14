@@ -17,14 +17,15 @@
 // The size of the event queue.
 enum { SIZE = 1000 };
 
-// Add a code for events which are to be discarded.
-event IGNORE = QUIT + 1;
+// Add a code for events which are to be discarded, and a code for a paste.
+event IGNORE = COUNT_EVENTS;
+event PASTE = COUNT_EVENTS + 1;
 
 // An event structure holds a tag and two coordinates or a string or character.
 struct position { int x, y; };
 struct eventData {
     event tag;
-    union { struct position p; char *s; char c[5]; };
+    union { struct position p; char const *s; char c[5]; };
 };
 typedef struct eventData eventData;
 
@@ -48,6 +49,15 @@ static eventData *push(handler *h) {
 // Generate a frame tick event, e.g. when smooth scrolling.
 void frameTick(handler *h) {
     h->frame = true;
+}
+
+// Generate a paste event. Since events are handled synchronously, it should be
+// OK to hang on to GLFW's pointer until the event is processed.
+void pasteEvent(handler *h) {
+    eventData *ed = push(h);
+    ed->tag = PASTE;
+    ed->s = glfwGetClipboardString(h->w);
+    if (ed->s == NULL) ed->s = "";
 }
 
 // ----- Keyboard --------------------------------------------------------------
@@ -270,7 +280,7 @@ void setBlinkRate(handler *h, double br) {
 
 // Get the next event, possibly with a pause. Note that glfwWaitEventsTimeout
 // returns early, even e.g. for mouse movements with no callback.
-event getRawEvent(handler *h, int *x, int *y, char **t) {
+event getRawEvent(handler *h, int *x, int *y, char const **t) {
     while (true) {
         glfwPollEvents();
         if (h->head != h->tail) {
@@ -280,6 +290,11 @@ event getRawEvent(handler *h, int *x, int *y, char **t) {
             if (base == TEXT) {
                 *x = *y = 0;
                 *t = e->c;
+            }
+            else if (base == PASTE) {
+                e->tag = TEXT;
+                *x = *y = 0;
+                *t = e->s;
             }
             else if (base == CLICK || base == DRAG) {
                 *x = e->p.x;

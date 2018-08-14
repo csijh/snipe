@@ -24,7 +24,10 @@ void freeHandler(handler *h);
 void setBlinkRate(handler *h, double br);
 
 // Get the next event, possibly with a pause.
-event getRawEvent(handler *h, int *x, int *y, char **t);
+event getRawEvent(handler *h, int *x, int *y, char const **t);
 
 // Generate a frame tick event. Call when drawing a frame with vsync.
 void frameTick(handler *h);
+
+// Generate a paste event. Call when C_V is pressed.
+void pasteEvent(handler *h);

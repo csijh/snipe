@@ -42,7 +42,7 @@ void addCursorFlags(document *d, int row, int n, chars *styles);
 
 // Set row/col/text data for the next event. The text is only valid until the
 // following event.
-void setData(document *d, int r, int c, char *t);
+void setData(document *d, int r, int c, char const *t);
 
 // Carry out an action on the document.
 void actOnDocument(document *d, action a);

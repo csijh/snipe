@@ -74,7 +74,7 @@ void freeMap(map *m) {
 }
 
 // Offer an action to the document, then the display, return whether quitting.
-bool dispatch(map *m, event e, int r, int c, char *t) {
+bool dispatch(map *m, event e, int r, int c, char const *t) {
     action a;
     if (isDirectory(m->doc)) a = m->listArray[e];
     else a = m->array[e];

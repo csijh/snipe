@@ -70,7 +70,7 @@ static void run(snipe *s) {
     redraw(s);
     while (! quitting) {
         int r, c;
-        char *t;
+        char const *t;
         event e = getEvent(s->dis, &r, &c, &t);
 //        if (e == QUIT) quitting = true;
         quitting = dispatch(s->m, e, r, c, t);
