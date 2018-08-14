@@ -273,9 +273,10 @@ static void smoothScroll(display *d) {
     if (d->scroll != d->scrollTarget) frameTick(d->h);
 }
 
+// Round to nearest column.
 static void charPosition(display *d, int x, int y, int *row, int *col) {
     *row = (y + d->scroll) / d->charHeight;
-    *col = (x - d->pad) / d->charWidth;
+    *col = (x - d->pad + d->charWidth / 2) / d->charWidth;
 }
 
 event getEvent(display *d, int *r, int *c, char **t) {
