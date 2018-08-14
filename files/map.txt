@@ -14,6 +14,8 @@ DOWN        MoveDownLine
 PAGE_UP     PageUp
 PAGE_DOWN   PageDown
 C_O         Open
+C_X         Cut
+C_C         Copy
 C_V         Paste
 C_Q         Quit            keyboard quit
 QUIT        Quit            window button quit
@@ -62,6 +64,5 @@ List  TICK        Tick
 // S_DOWN      MarkDownLine
 // DELETE      CutRightChar
 // C_DELETE    CutRightWord
-// C_C         Copy
 // C_Y         Redo
 // C_Z         Undo

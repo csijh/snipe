@@ -44,5 +44,5 @@ void addCursorFlags(document *d, int row, int n, chars *styles);
 // following event.
 void setData(document *d, int r, int c, char const *t);
 
-// Carry out an action on the document.
-void actOnDocument(document *d, action a);
+// Carry out an action on the document. Return cut/copy text.
+char const *actOnDocument(document *d, action a);

@@ -222,7 +222,7 @@ void setData(document *d, int row, int col, char const *t) {
 
 // Get the styles up to date up to the maximum cursor position before dispatch.
 // Return a flag to say whether the display should be redrawn.
-void actOnDocument(document *d, action a) {
+char const *actOnDocument(document *d, action a) {
     cursors *cs = getCursors(d->content);
     getStyle(d, maxRow(cs));
     switch (a) {
@@ -267,6 +267,7 @@ void actOnDocument(document *d, action a) {
         default: break;
     }
     mergeCursors(getCursors(d->content));
+    return d->text;
 }
 
 #ifdef test_document
