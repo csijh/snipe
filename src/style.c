@@ -16,6 +16,12 @@ static char *styleNames[] = {
     [COMMENT]="COMMENT", [NOTE]="NOTE", [BAD]="BAD",
 };
 
+static style styleDefaults[] = {
+    [NAME]=WORD, [ID]=WORD, [VARIABLE]=WORD, [FIELD]=WORD, [FUNCTION]=WORD,
+    [RESERVED]=KEY, [PROPERTY]=KEY, [TYPE]=KEY, [LABEL]=SIGN, [OP]=SIGN,
+    [CHAR]=STRING, [NOTE]=COMMENT,
+};
+
 static char styleLetters[] = {
     [START] = '?', [POINT]='?', [SELECT]='?', [GAP]='G',
     [WORD]='W', [NAME]='M', [ID]='I', [VARIABLE]='V',
@@ -40,6 +46,12 @@ style findStyle(char *name) {
     }
     if (result == -1) error("Unknown style name", name);
     return result;
+}
+
+style styleDefault(style s) {
+    style d = styleDefaults[s];
+    if (d == 0) d = s;
+    return d;
 }
 
 char *styleName(style s) { return styleNames[s]; }

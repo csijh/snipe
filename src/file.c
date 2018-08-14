@@ -1,5 +1,8 @@
 // The Snipe editor is free and open source, see licence.txt.
 
+// TODO: handle security by checking for being within HONE rather than being
+// writable.
+
 // Find the path to the installation directory from args[0]. This appears to be
 // the only simple cross-platform technique which doesn't involve making an
 // installer. Also find the current working directory on startup,
@@ -234,9 +237,10 @@ static bool valid(char *name) {
 }
 
 // Measure the number of entries and text length of a directory (including room
-// for adding final slashes).
-static void measureDirectory(DIR *dir, int *n, int *t) {
-    *n = *t = 0;
+// for its path and for adding final slashes).
+static void measureDirectory(char const *path, DIR *dir, int *n, int *t) {
+    *n = 1;
+    *t = strlen(path) + 1;
     struct dirent *entry;
     while (true) {
         entry = readdir(dir);
@@ -249,8 +253,12 @@ static void measureDirectory(DIR *dir, int *n, int *t) {
 }
 
 // Gather names from a directory, leaving room for adding slashes.
-static void gatherNames(DIR *dir, int n, char *names[n], int t, char text[t]) {
-    int i = 0, length = 0;
+static void gatherNames(
+    char const *path, DIR *dir, int n, char *names[n], int t, char text[t]
+) {
+    strcpy(text, path);
+    names[0] = text;
+    int i = 1, length = strlen(path) + 1;
     struct dirent *entry;
     while (true) {
         entry = readdir(dir);
@@ -279,16 +287,16 @@ static char *readDirectory(char const *path) {
     DIR *dir = opendir(path);
     if (dir == NULL) { err("can't read dir", path); return NULL; }
     int count, size;
-    measureDirectory(dir, &count, &size);
+    measureDirectory(path, dir, &count, &size);
     rewinddir(dir);
     char **names = malloc(count * sizeof(char *));
     char *text = malloc(size);
-    gatherNames(dir, count, names, size, text);
+    gatherNames(path, dir, count, names, size, text);
     closedir(dir);
     for (int i=0; i<count; i++) {
         if (isDir(path, names[i])) strcat(names[i], "/");
     }
-    sort(count, names);
+    sort(count - 1, &names[1]);
     char *result = malloc(size);
     result[0] = '\0';
     for (int i = 0; i < count; i++) {

@@ -1,34 +1,36 @@
 // The Snipe editor is free and open source, see licence.txt.
 #include <stdbool.h>
 
-// A style indicates a property of a text byte such as its token type and,
-// except for START, is associated in a theme with a background or foreground
-// colour for syntax highlighting. A style byte can contain any of the first
-// three styles as flags, plus one of the other styles. Each non-flag style
-// has a letter, which is upper case for the start of a token, otherwise lower.
+// A style indicates a syntactic property of a text byte. A style byte can
+// contain any of the first three styles as flags, plus one of the other styles.
+// For syntax highlighting, any style except the START flag can be associated in
+// a theme with a background or foreground colour. Many styles have defaults,
+// allowing them to be used to support syntactic editor features without needing
+// a separate colour. Each non-flag style has a letter for visualization or
+// testing, which is upper case for the start of a token, otherwise lower.
 enum style {
     START,        // flag: first text byte of a token
-    POINT,        // flag: preceded by text caret; colour of caret
+    POINT,        // flag: character preceded by text caret; colour of caret
     SELECT,       // flag: selected character; background colour for selections
-    GAP,          // G space; default background colour
+    GAP,          // G space; display background colour
     WORD,         // W default text
-    NAME,         // M word forming a name
-    ID,           // I identifier
-    VARIABLE,     // V variable name
-    FIELD,        // D field name, e.g. following '.'
-    FUNCTION,     // F function name, e.g. followed by '('
+    NAME,         // M word forming a name, default colour WORD
+    ID,           // I identifier, default colour WORD
+    VARIABLE,     // V variable name, default colour WORD
+    FIELD,        // D field name, e.g. following '.', default colour WORD
+    FUNCTION,     // F function name, e.g. followed by '(', default colour WORD
     KEY,          // K keyword
-    RESERVED,     // R reserved word
-    PROPERTY,     // P property
-    TYPE,         // T type name
+    RESERVED,     // R reserved word, default colour KEY
+    PROPERTY,     // P property, default colour KEY
+    TYPE,         // T type name, default colour KEY
     SIGN,         // X key symbol or punctuation
-    LABEL,        // L colon or other indication of a label
-    OP,           // O operator
+    LABEL,        // L colon or other indication of a label, default colour SIGN
+    OP,           // O operator, , default colour SIGN
     NUMBER,       // N numerical literal
     STRING,       // S quoted string literal
-    CHAR,         // C quoted character literal
+    CHAR,         // C quoted character literal, default colour STRING
     COMMENT,      // Z multi-line comment
-    NOTE,         // Y one-line comment
+    NOTE,         // Y one-line comment, default colour COMMENT
     BAD,          // B illegal token
     COUNT_STYLES = BAD + 1
 };
@@ -37,6 +39,9 @@ typedef unsigned char compoundStyle;
 
 // Find a style constant from its name or unique abbreviation.
 style findStyle(char *name);
+
+// Find the default for a style, or return the style unchanged.
+style styleDefault(style s);
 
 // Find a style name from its constant.
 char *styleName(style s);

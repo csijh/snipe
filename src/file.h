@@ -36,8 +36,9 @@ int sizeFile(char const *path);
 
 // Read in the contents of a text file or directory. For a file, a final newline
 // is added, if necessary, plus a null terminator. For a directory, there is one
-// line per name including ../ in natural order, with slashes on the end of the
-// directory names. On failure, a message is printed and NULL is returned.
+// line per name including the full path and ../ in natural order, with slashes
+// on the end of the directory names. On failure, a message is printed and NULL
+// is returned.
 char *readPath(char const *path);
 
 // Write the given data to the given file. On failure, a message is printed.

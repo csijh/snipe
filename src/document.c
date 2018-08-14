@@ -192,7 +192,7 @@ static void doLoad(document *d) {
     char *path = malloc(n1 + n2 + 1);
     strcpy(path, d->path);
     resize(line, n2);
-    memcpy(C(line), &path[n1], n2);
+    memcpy(&path[n1], C(line), n2);
     path[n1 + n2] = '\0';
     load(d, path);
     free(path);
