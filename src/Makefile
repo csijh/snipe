@@ -108,12 +108,16 @@ display: ../glfw/lib/libglfw3.a
 MODEL = document.c text.c history.c cursor.c line.c scan.c
 .PHONY: $(MODEL)
 
+line:
+	$(TCC) list.c
+	./snipe
+
 scan:
 	$(TCC) $(UTILS)
 	./snipe
 
-line:
-	$(TCC) list.c
+indent:
+	$(TCC)
 	./snipe
 
 cursor:

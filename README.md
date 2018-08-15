@@ -11,7 +11,7 @@ Only Linux and Windows binary zip files are currently provided. For MacOS or
 for a platform where the binary doesn't work, compile from source.
 
 To install, download the zip file and unzip. You can double click on the
-exectable, or on the help index file. Put the installation directory in your
+executable, or on the help index file. Put the installation directory in your
 path so you can launch the editor from anywhere. In the editor, type CTRL+H to
 open the help documentation. The available key and mouse gestures can be
 gleaned from files/map.txt.

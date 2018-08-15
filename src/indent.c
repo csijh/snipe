@@ -1,3 +1,5 @@
+// The Snipe editor is free and open source, see licence.txt.
+#include "indent.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -22,10 +24,6 @@ static bool match(char o, char c) {
     return false;
 }
 
-// Match brackets. Only brackets marked SIGN are recognized, others are assumed
-// to be inside comments or strings. After matching, matched brackets remain
-// marked SIGN, mismatched brackets are marked BAD, and unmatched brackets are
-// marked OPEN or CLOSE. Attempt to mark only one of a mismatched pair as BAD.
 void matchBrackets(int n, char const line[n], char styles[n]) {
     char stack[n];
     int top = 0;
@@ -48,7 +46,7 @@ void matchBrackets(int n, char const line[n], char styles[n]) {
             i--;
             continue;
         }
-        if (top > 0 && match(line[stack[top-1]],c)) {
+        if (top > 0 && match(line[(int)stack[top-1]],c)) {
             styles[j] = BAD;
             int k = stack[--top];
             styles[k] = styles[i] = SIGN;
@@ -111,6 +109,8 @@ int show(char *line, int indent, int cl, int op, FILE *out) {
 }
 */
 
+#ifdef test_indent
+
 static bool checkMatch(char const *line, char const *out) {
     int n = strlen(line);
     char in[n + 1];
@@ -133,6 +133,7 @@ static void testMatch() {
 
 int main(int n, char const *args[n]) {
     testMatch();
+    printf("Indent module OK\n");
     /*
     FILE *in = fopen(args[1], "r");
     FILE *out = fopen(args[2], "w");
@@ -183,6 +184,8 @@ int main(int n, char const *args[n]) {
     */
     return 0;
 }
+
+#endif
 
 /*
 Lookahead
