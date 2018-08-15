@@ -31,3 +31,6 @@ void frameTick(handler *h);
 
 // Generate a paste event. Call when C_V is pressed.
 void pasteEvent(handler *h);
+
+// Copy text from the document back to the OS.
+void clip(handler *h, char const *text);

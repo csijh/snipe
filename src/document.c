@@ -260,6 +260,8 @@ char const *actOnDocument(document *d, action a) {
         case Point: point(cs, d->pos); break;
         case Select: doSelect(cs, d->pos); break;
         case AddPoint: addPoint(cs, d->pos); break;
+        case Copy: gatherText(d->content, d->line); break;
+        case Cut: gatherText(d->content, d->line); cutLeft(d); break;
         case Load: doLoad(d); break;
         case Save: save(d); break;
         case Open: doOpen(d); break;
@@ -267,7 +269,7 @@ char const *actOnDocument(document *d, action a) {
         default: break;
     }
     mergeCursors(getCursors(d->content));
-    return d->text;
+    return C(d->line);
 }
 
 #ifdef test_document

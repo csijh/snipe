@@ -286,7 +286,7 @@ event getEvent(display *d, int *r, int *c, char const **t) {
     return e;
 }
 
-void actOnDisplay(display *d, action a) {
+void actOnDisplay(display *d, action a, char const *s) {
     switch (a) {
         case Bigger: bigger(d); break;
         case Smaller: smaller(d); break;
@@ -295,6 +295,7 @@ void actOnDisplay(display *d, action a) {
         case Tick: smoothScroll(d); break;
         case Open: case Load: d->scroll = 0; break;
         case Paste: pasteEvent(d->h); break;
+        case Cut: case Copy: clip(d->h, s); break;
         default: break;
     }
 }

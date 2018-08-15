@@ -36,6 +36,10 @@ void insertText(text *t, int p, char const *s);
 // Insert text at cursor positions
 void insertAt(text *t, char const *s);
 
+// Copy text from the selection into the given string. If there are multiple
+// selections, gather them separated by newlines.
+void gatherText(text *t, chars *s);
+
 // Delete text specified by cursor selections.
 void deleteAt(text *t);
 

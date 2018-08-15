@@ -58,4 +58,4 @@ void blinkCaret(display *d);
 void showFrame(display *d);
 
 // Carry out the given action, if relevant.
-void actOnDisplay(display *d, action a);
+void actOnDisplay(display *d, action a, char const *s);

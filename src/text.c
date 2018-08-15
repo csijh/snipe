@@ -201,6 +201,28 @@ void deleteText(text *t, int p, int n) {
     invalidateStyles(t, p);
 }
 
+// Gather selections for cut/copy.
+void gatherText(text *t, chars *s) {
+    resize(s, 0);
+    for (int i = 0; i < countCursors(t->cs); i++) {
+        int p = cursorAt(t->cs, i);
+        int q = cursorFrom(t->cs, i);
+        if (q == p) continue;
+        if (q < p) { int t = p; p = q; q = t; }
+        int n = length(s);
+        if (n > 0) {
+            resize(s, n + 1);
+            C(s)[n] = '\n';
+            n++;
+        }
+        resize(s, n + (q - p));
+        memcpy(&C(s)[n], &t->data[p], q - p);
+    }
+    int n = length(s);
+    resize(s, n + 1);
+    C(s)[n] = '\0';
+}
+
 void deleteAt(text *t) {
     for (int i = 0; i < countCursors(t->cs); i++) {
         int p = cursorAt(t->cs, i);

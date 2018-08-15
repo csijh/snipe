@@ -60,6 +60,11 @@ void pasteEvent(handler *h) {
     if (ed->s == NULL) ed->s = "";
 }
 
+// Copy text to the clipboard.
+void clip(handler *h, char const *s) {
+    glfwSetClipboardString(h->w, s);
+}
+
 // ----- Keyboard --------------------------------------------------------------
 // Platforms provide character and key events. Character events are used for
 // text input, because shift key information isn't provided in key events, and

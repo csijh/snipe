@@ -87,8 +87,8 @@ bool dispatch(map *m, event e, int r, int c, char const *t) {
     if (base == TEXT || base == CLICK || base == DRAG) {
         setData(m->doc, r, c, t);
     }
-    actOnDocument(m->doc, a);
-    actOnDisplay(m->dis, a);
+    char const *copy = actOnDocument(m->doc, a);
+    actOnDisplay(m->dis, a, copy);
     if (a == Open || a == Load) setTitle(m->dis, getPath(m->doc));
     return a == Quit;
 }
