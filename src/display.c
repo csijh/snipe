@@ -199,6 +199,7 @@ static void paintRect(colour *c, float x1, float y1, float x2, float y2) {
 // draw the selection background colour first. If the character is preceded by a
 // caret, draw it afterwards.
 static int drawChar(display *d, int ch, int row, int pos, char style) {
+    if (ch == '\n') ch = ' ';
     int index = ch % 256;
     float du = 1 / 256.0, dv = 1.0;
     float u = index / 256.0, v = 0.0;
@@ -225,7 +226,7 @@ static int drawChar(display *d, int ch, int row, int pos, char style) {
 void drawLine(display *d, int row, chars *line, chars *styles) {
     int n = length(line);
     int advance = 0;
-    if (n > d->cols) n = d->cols;
+    if (n > d->cols + 1) n = d->cols + 1;
     for (int i=0; i<n; i++) {
         advance += drawChar(d, C(line)[i], row, advance, C(styles)[i]);
     }

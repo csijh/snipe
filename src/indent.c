@@ -58,6 +58,13 @@ void matchBrackets(int n, char const line[n], char styles[n]) {
     }
 }
 
+// TODO: auto-indenting. A line contains any number of closers and openers.
+// There can't be a closer after an opener, because that would cause a mismatch.
+// There is a running indent carried from line to line. Each closer reduces
+// the indent on the current line, and each opener increases the indent on
+// the following line. Closers or openers at the start of a line are spaced out,
+// e.g. ...}...}   or   ...{...{...text
+
 /*
 int findOpeners(int n, char line[n], char styles[n]) {
     int openerCurly = -1, openerSquare = -1, openerRound = -1;
