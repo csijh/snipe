@@ -1,4 +1,5 @@
 // The Snipe editor is free and open source, see licence.txt.
+#include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
 #include <string.h>
@@ -14,6 +15,11 @@ void *newArray(int stride) {
     array *a = malloc(sizeof(array) + (cap * stride));
     *a = (array) { .cap = cap, .len = 0, .stride = stride };
     return a->data;
+}
+
+void freeArray(void *xs) {
+    array *a = (array *) (((char *) xs) - offsetof(array, data));
+    free(a);
 }
 
 int size(void *xs) {
@@ -54,6 +60,7 @@ int main() {
     assert(strcmp(s, "x") == 0);
     s = setSize(s, 0, 0);
     assert(strcmp(s, "") == 0);
+    printf("Array module OK\n");
 }
 
 #endif

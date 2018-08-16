@@ -23,6 +23,7 @@
 // always at least one more than the length, so that the length can exclude
 // a terminator if desired. The terminator is preserved across resizing.
 void *newArray(int itemSize);
+void freeArray(void *xs);
 
 // Find the length of an array.
 int size(void *xs);
