@@ -56,6 +56,10 @@ TCC = gcc -std=c11 -o $(EXEC) -Wall -pedantic -g $(DEBUG) -Dtest_$@ $@.c
 UTILS = action.c style.c setting.c string.c list.c file.c
 .PHONY: $(UTILS)
 
+array:
+	$(TCC)
+	./snipe
+
 file:
 	$(TCC)
 	./snipe
@@ -117,7 +121,7 @@ scan:
 	./snipe
 
 indent:
-	$(TCC)
+	$(TCC) array.c
 	./snipe
 
 cursor:

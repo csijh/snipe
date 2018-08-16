@@ -1,4 +1,8 @@
 // The Snipe editor is free and open source, see licence.txt.
+#include "array.h"
+
+// Synonym for flexible array of characters with terminator.
+typedef char string;
 
 // Provide bracket matching and auto-indenting. Bracket matching can be applied
 // to any programming language. It just changes the styles and thus the syntax
@@ -11,4 +15,8 @@
 // marked SIGN, mismatched brackets are marked BAD, and unmatched brackets are
 // marked OPEN or CLOSE. Only one of a mismatched pair of brackets is marked as
 // BAD where reasonably possible.
-void matchBrackets(int n, char const line[n], char styles[n]);
+void matchBrackets(string *line, string *styles);
+
+// Correct the indenting of a line, given the running indent and the result of
+// bracket-matching. Return the new running indent.
+int autoIndent(int indent, string **linep, string **stylesp);

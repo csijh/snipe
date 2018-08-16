@@ -1,5 +1,6 @@
 // The Snipe editor is free and open source, see licence.txt.
 #include "indent.h"
+#include "array.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -8,12 +9,9 @@
 #include <assert.h>
 
 // Match brackets. Mark mismatched brackets as errors, and unmatched brackets as
-// openers or closers. Mark brackets such as (] or [) as mismatched, but mark
-// only one of the two brackets as mismatched where reasonable, e.g. mark only
-// the middle bracket as mismatched in "[(]" or "[)]".
-
-// TODO: allow multiple opener/closers on a line.
-// TODO: do the Horstmann indenting after an open bracket starter.
+// openers or closers. With mismatched brackets such as (] or [), mark only
+// one of the two as an error where reasonable, e.g. mark only the middle
+// bracket as an error in [(] or [)].
 
 enum { S='S', SIGN=S, B='B', BAD=B, O='O', OPEN=O, C='C', CLOSE=C };
 
@@ -25,8 +23,9 @@ static bool match(char o, char c) {
     return false;
 }
 
-void matchBrackets(int n, char const line[n], char styles[n]) {
-    char stack[n];
+void matchBrackets(string *line, string *styles) {
+    int n = size(line);
+    int stack[n];
     int top = 0;
     for (int i = 0; i < n; i++) {
         if (styles[i] != SIGN) continue;
@@ -47,7 +46,7 @@ void matchBrackets(int n, char const line[n], char styles[n]) {
             i--;
             continue;
         }
-        if (top > 0 && match(line[(int)stack[top-1]],c)) {
+        if (top > 0 && match(line[stack[top-1]],c)) {
             styles[j] = BAD;
             int k = stack[--top];
             styles[k] = styles[i] = SIGN;
@@ -59,53 +58,28 @@ void matchBrackets(int n, char const line[n], char styles[n]) {
     }
 }
 
-// TODO: auto-indenting. A line contains any number of closers and openers.
-// There can't be a closer after an opener, because that would cause a mismatch.
-// There is a running indent carried from line to line. Each closer reduces
-// the indent on the current line, and each opener increases the indent on
-// the following line. Closers or openers at the start of a line are spaced out,
-// e.g. ...}...}   or   ...{...{...text
+// A line
+// contains any number of closers and openers. There can't be a closer after an
+// opener, because that would cause a mismatch. There is a running indent
+// carried from line to line. Each closer reduces the indent on the current
+// line, and each opener increases the indent on the following line. Closers or
+// openers at the start of a line are spaced out, e.g. ...}...} or ...{...{...
+
+int autoIndent(int indent, string **linep, string **stylesp) {
+    string *line = *linep, *styles = *stylesp;
+    int n = size(line);
+    int closers = 0, openers = 0;
+    for (int i = 0; i < n; i++) {
+        if (styles[i] == CLOSE) closers++;
+        else if (styles[i] == OPEN) openers++;
+    }
+    indent += closers;
+    printf("this indent %d\n", indent);
+    printf("next indent %d\n", indent + openers);
+    return indent + openers;
+}
 
 /*
-int findOpeners(int n, char line[n], char styles[n]) {
-    int openerCurly = -1, openerSquare = -1, openerRound = -1;
-    for (int i = 0; i < strlen(line); i++) {
-        char ch = line[i];
-        switch (ch) {
-            case '{': openerCurly = i; break;
-            case '}': openerCurly = -1; break;
-            case '[': openerSquare = i; break;
-            case ']': openerSquare = -1; break;
-            case '(': openerRound = i; break;
-            case ')': openerRound = -1; break;
-        }
-    }
-    int opener = openerCurly;
-    if (openerSquare > opener) opener = openerSquare;
-    if (openerRound > opener) opener = openerRound;
-    return opener;
-}
-
-int findCloser(char *line) {
-    int closerCurly = INT_MAX, closerSquare = INT_MAX, closerRound = INT_MAX;
-    for (int i = strlen(line) - 1; i >= 0; i--) {
-        char ch = line[i];
-        switch (ch) {
-            case '{': closerCurly = -1; break;
-            case '}': closerCurly = i; break;
-            case '[': closerSquare = -1; break;
-            case ']': closerSquare = i; break;
-            case '(': closerRound = -1; break;
-            case ')': closerRound = i; break;
-        }
-    }
-    int closer = closerCurly;
-    if (closerSquare < closer) closer = closerSquare;
-    if (closerRound < closer) closer = closerRound;
-    if (closer == INT_MAX) closer = -1;
-    return closer;
-}
-
 int show(char *line, int indent, int cl, int op, FILE *out) {
     int margin = indent;
     if (cl == 0 && margin >= 4) margin = margin - 4;
@@ -119,13 +93,20 @@ int show(char *line, int indent, int cl, int op, FILE *out) {
 
 #ifdef test_indent
 
-static bool checkMatch(char const *line, char const *out) {
-    int n = strlen(line);
-    char in[n + 1];
+static bool checkMatch(char *txt, char *out) {
+    int n = strlen(txt);
+    string *line = newArray(sizeof(char));
+    setSize(line, 0, n);
+    strcpy(line, txt);
+    string *in = newArray(sizeof(char));
+    in[0] = '\0';
+    setSize(in, 0, n);
     for (int i=0; i<n; i++) in[i] = S;
-    in[n] = '\0';
-    matchBrackets(n, line, in);
-    return strcmp(in, out) == 0;
+    matchBrackets(line, in);
+    bool ok = strcmp(in, out) == 0;
+    freeArray(in);
+    freeArray(line);
+    return ok;
 }
 
 static void testMatch() {
