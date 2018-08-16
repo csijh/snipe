@@ -8,8 +8,9 @@
 #include <assert.h>
 
 // Match brackets. Mark mismatched brackets as errors, and unmatched brackets as
-// openers or closers. Mark only one bracket as mismatched where reasonable,
-// e.g. mark only the middle bracket as mismatched in "[(]" and "[)]".
+// openers or closers. Mark brackets such as (] or [) as mismatched, but mark
+// only one of the two brackets as mismatched where reasonable, e.g. mark only
+// the middle bracket as mismatched in "[(]" or "[)]".
 
 // TODO: allow multiple opener/closers on a line.
 // TODO: do the Horstmann indenting after an open bracket starter.
