@@ -73,7 +73,7 @@ void matchBrackets(string *line, string *styles) {
 }
 
 // Change the indent of a non-blank line to the given amount.
-static void fixIndex(int indent, string **pline, string **pstyles) {
+static void fixIndent(int indent, string **pline, string **pstyles) {
     string *line = *pline, *styles = *pstyles;
     int old = 0;
     for (int i = 0; i < size(line); i++) if (line[i] == ' ') old++;
@@ -103,7 +103,8 @@ int autoIndent(int indent, string **linep, string **stylesp) {
     }
     indent -= outdenters * TAB;
     if (indent < 0) indent = 0;
-    line = *linep = fixIndent(line, indent);
+    fixIndent(indent, linep, stylesp);
+    line = *linep; styles = *stylesp;
     for (int i = 0; i < n; i++) {
         if (styles[i] == CLOSE || styles[i] == OPEN) styles[i] = SIGN;
     }
