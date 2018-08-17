@@ -37,8 +37,7 @@ static inline int top(int s[]) { return s[s[0]-1]; }
 // ...() is found, it becomes a match, but if ...(] is found then ( is
 // popped and accepted as an error. At the end, all tentative markings are
 // accepted without further work.
-void matchBrackets(string *line, string *styles) {
-    int n = size(line);
+void matchBrackets(int n, char const line[n], char styles[n]) {
     int stack[n+1];
     make(stack);
     for (int i = 0; i < n; i++) {
@@ -71,6 +70,16 @@ void matchBrackets(string *line, string *styles) {
         styles[i] = BAD;
     }
 }
+
+// Count the number of indenters and outdenters.
+static void countInOut(int *in, int *out, int n, char const styles[n]) {
+    *in = 0;
+    *out = 0;
+    for (int i = 0; i < n; i++) {
+        if (styles[i] == CLOSE) *out++;
+        else if (styles[i] == OPEN) *in++;
+    }
+ }
 
 // Change the indent of a non-blank line to the given amount.
 static void fixIndent(int indent, string **pline, string **pstyles) {
@@ -124,7 +133,7 @@ static bool checkMatch(char *txt, char *out) {
     in[0] = '\0';
     reSize(in, 0, n);
     for (int i=0; i<n; i++) in[i] = S;
-    matchBrackets(line, in);
+    matchBrackets(size(line), line, in);
     bool ok = strcmp(in, out) == 0;
     freeArray(in);
     freeArray(line);

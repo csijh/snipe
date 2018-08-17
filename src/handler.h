@@ -20,6 +20,9 @@ handler *newHandler(void *w);
 // Free up the handler and its data.
 void freeHandler(handler *h);
 
+// Check whether the window has the input focus.
+bool focused(handler *h);
+
 // Set a new blink rate.
 void setBlinkRate(handler *h, double br);
 

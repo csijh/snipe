@@ -237,9 +237,10 @@ void drawLine(display *d, int row, int n, char *line, char *styles) {
     checkGLError();
 }
 
-// Toggle whether the caret is displayed.
+// Toggle whether the caret is displayed. Check whether the focus has been lost.
 void blinkCaret(display *d) {
-    d->showCaret = ! d->showCaret;
+    if (! focused(d->h)) d->showCaret = false;
+    else d->showCaret = ! d->showCaret;
 }
 
 // Scroll the display by a small amount, according to the (+ve or -ve) speed.
