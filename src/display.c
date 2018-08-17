@@ -103,14 +103,14 @@ void setTitle(display *d, char const *path) {
 // graphics (right,down) pixel coordinates can be used. Set the display size and
 // make it visible, if it isn't already.
 static void setFontSize(display *d) {
-    int target = d->scrollTarget / d->charHeight;
+    int targetRow = d->scrollTarget / d->charHeight;
     d->p = getPage(d->f, d->fontSize, 0);
     d->charWidth = pageWidth(d->p) / 256;
     d->charHeight = pageHeight(d->p);
     d->width = d->pad + d->cols * d->charWidth + d->pad;
     d->height = d->rows * d->charHeight + d->pad;
     d->showCaret = true;
-    d->scrollTarget = target * d->charHeight;
+    d->scrollTarget = targetRow * d->charHeight;
     d->scroll = d->scrollTarget;
     glBindTexture(GL_TEXTURE_2D, d->fontTextureId);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -200,7 +200,6 @@ static void paintRect(colour *c, float x1, float y1, float x2, float y2) {
 // draw the selection background colour first. If the character is preceded by a
 // caret, draw it afterwards.
 static int drawChar(display *d, int ch, int row, int pos, char style) {
-    if (ch == '\n') ch = ' ';
     int index = ch % 256;
     float du = 1 / 256.0, dv = 1.0;
     float u = index / 256.0, v = 0.0;
@@ -226,10 +225,20 @@ static int drawChar(display *d, int ch, int row, int pos, char style) {
 // Draw a line.
 void drawLine(display *d, int row, chars *line, chars *styles) {
     int n = length(line);
+    bool longLine = n > d->cols + 1;
     int advance = 0;
     if (n > d->cols + 1) n = d->cols + 1;
     for (int i=0; i<n; i++) {
-        advance += drawChar(d, C(line)[i], row, advance, C(styles)[i]);
+        char ch = C(line)[i];
+        char st = C(styles)[i];
+        if (longLine && i == d->cols) { ch = '\0'; st = BAD; }
+        else if (ch == '\n') ch = ' ';
+        advance += drawChar(d, ch, row, advance, st);
+    }
+    if (length(line) > d->cols + 1) {
+        float x = d->pad + advance;
+        float y = d->charHeight * row - d->scroll;
+        paintRect(findColour(d->t, BAD), x, y, x+5.0, y+d->charHeight);
     }
     checkGLError();
 }
