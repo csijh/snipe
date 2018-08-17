@@ -34,7 +34,7 @@ struct display {
     GLFWwindow *gw;
     GLuint fontTextureId;
     int rows, cols, charWidth, charHeight, advance, pad, width, height;
-    int caretRow, caretCol, scroll, scrollTarget;
+    int scroll, scrollTarget;
     bool showCaret;
     page *p;
 };
@@ -103,14 +103,15 @@ void setTitle(display *d, char const *path) {
 // graphics (right,down) pixel coordinates can be used. Set the display size and
 // make it visible, if it isn't already.
 static void setFontSize(display *d) {
+    int target = d->scrollTarget / d->charHeight;
     d->p = getPage(d->f, d->fontSize, 0);
     d->charWidth = pageWidth(d->p) / 256;
     d->charHeight = pageHeight(d->p);
     d->width = d->pad + d->cols * d->charWidth + d->pad;
     d->height = d->rows * d->charHeight + d->pad;
     d->showCaret = true;
-    d->caretRow = d->caretCol = 0;
-    d->scroll = 0;
+    d->scrollTarget = target * d->charHeight;
+    d->scroll = d->scrollTarget;
     glBindTexture(GL_TEXTURE_2D, d->fontTextureId);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
