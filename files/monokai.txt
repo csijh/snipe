@@ -1,0 +1,30 @@
+POINT       #F8F8F0
+SELECT      #49483E
+GAP         #272822
+COMMENT     #75715E
+WORD        #F8F8F2
+KEY         #F92672
+RESERVED    #66D9EF
+SIGN        #F8F8F2
+OP          #F8F8F2
+NUMBER      #AE81FF
+STRING      #E6DB74
+ID          #F8F8F2
+PROPERTY    #F8F8F2
+FUNCTION    #A6E22E
+BAD         #F92672
+
+// Built-in constant #AE81FF
+// User-defined constant #AE81FF
+// Storage #F92672
+// Storage Type italic
+// Class underline #A6E22E
+// Inherited class italic underline #A6E22E
+// argument italic #FD971F
+// Tag #F92672
+// tag attribute #A6E22E
+// Library function #66D9EF
+// Library constant #66D9EF
+// Library class/type italic #66D9EF
+// invalid background #F92672 foreground #F8F8F0
+// deprecated background #AE81FF foreground #F8F8F0

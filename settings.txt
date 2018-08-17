@@ -31,3 +31,4 @@ HelpIndex help/index.xhtml
 // Theme files: cycle through with CTRL+Enter
 Theme files/solarized-dark.txt
 Theme files/solarized-light.txt
+Theme files/monokai.txt

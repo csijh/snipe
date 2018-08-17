@@ -10,11 +10,12 @@ typedef char string;
 // applied to a line after editing and before display to establish the right
 // indent amount automatically.
 
-// Match brackets. Only brackets marked SIGN are recognized, others are assumed
-// to be inside comments or strings. After matching, matched brackets remain
-// marked SIGN, mismatched brackets are marked BAD, and unmatched brackets are
-// marked OPEN or CLOSE. Only one of a mismatched pair of brackets is marked as
-// BAD where reasonably possible.
+// Match brackets. Only brackets marked by the scanner as signs are recognized.
+// Others are assumed to be inside comments or strings. Mismatched brackets are
+// marked as errors. Unmatched brackets are temporarily flagged as indenters or
+// outdenters, ready for auto-indenting. Only one of a mismatched pair of
+// brackets (] is marked as an error where reasonably possible, e.g. in cases
+// (]..) and [..(] only the middle bracket is marked as an error.
 void matchBrackets(string *line, string *styles);
 
 // Correct the indenting of a line, given the running indent and the result of

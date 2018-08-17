@@ -8,12 +8,10 @@
 #include <limits.h>
 #include <assert.h>
 
-// Match brackets. Mark mismatched brackets as errors, and unmatched brackets as
-// openers or closers. With mismatched brackets such as (] or [), mark only
-// one of the two as an error where reasonable, e.g. mark only the middle
-// bracket as an error in [(] or [)].
-
+// Match brackets. leave matched brackets as signs. Mark mismatched brackets as
+// errors. Mark unmatched brackets as indenters or outdenters.
 enum { S='S', SIGN=S, B='B', BAD=B, O='O', OPEN=O, C='C', CLOSE=C };
+enum { TAB = 4; }
 
 // Match two bracket characters.
 static bool match(char o, char c) {
@@ -23,21 +21,37 @@ static bool match(char o, char c) {
     return false;
 }
 
+// Implement a stack as an array s of ints with the top index at s[0].
+static inline void make(int s[]) { s[0] = 1; }
+static inline bool empty(int s[]) { return s[0] == 1; }
+static inline void push(int s[], int i) { s[s[0]++] = i; }
+static inline int pop(int s[]) { return s[--s[0]]; }
+static inline int top(int s[]) { return s[s[0]-1]; }
+
+// Use a variation on the usual stack-based algorithm. An open bracket is
+// tentatively marked as an indenter and pushed on the stack. If ...[] is found,
+// both brackets are marked as matched. If ] is found on its own, it is marked
+// as an outdenter. If ...[(] is found, ( is marked as an error and [] as a
+// match. Otherwise, if ...(] is found, ] is marked as an error, and ( is
+// tentatively marked as an error and left on the stack. If subsequently
+// ...() is found, it becomes a match, but if ...(] is found then ( is
+// popped and accepted as an error. At the end, all tentative markings are
+// accepted without further work.
 void matchBrackets(string *line, string *styles) {
     int n = size(line);
-    int stack[n];
-    int top = 0;
+    int stack[n+1];
+    make(stack);
     for (int i = 0; i < n; i++) {
         if (styles[i] != SIGN) continue;
         char c = line[i];
         if (c == '{' || c == '[' || c == '(') {
             styles[i] = OPEN;
-            stack[top++] = i;
+            push(stack, i);
             continue;
         }
         if (c != '}' && c != ']' && c != ')') continue;
-        if (top == 0) { styles[i] = CLOSE; continue; }
-        int j = stack[--top];
+        if (empty(stack)) { styles[i] = CLOSE; continue; }
+        int j = pop(stack);
         if (match(line[j], c)) {
             styles[j] = styles[i] = SIGN;
             continue;
@@ -46,50 +60,39 @@ void matchBrackets(string *line, string *styles) {
             i--;
             continue;
         }
-        if (top > 0 && match(line[stack[top-1]],c)) {
+        if (!empty(stack) && match(line[top(stack)], c)) {
             styles[j] = BAD;
-            int k = stack[--top];
+            int k = pop(stack);
             styles[k] = styles[i] = SIGN;
             continue;
         }
-        styles[j] = BAD;  // tentative
-        stack[top++] = j; // put it back
+        styles[j] = BAD;
+        push(stack,j);
         styles[i] = BAD;
     }
 }
 
-// A line
-// contains any number of closers and openers. There can't be a closer after an
-// opener, because that would cause a mismatch. There is a running indent
-// carried from line to line. Each closer reduces the indent on the current
-// line, and each opener increases the indent on the following line. Closers or
-// openers at the start of a line are spaced out, e.g. ...}...} or ...{...{...
-
+// A line contains any number of indenters and outdenters. There can't be an
+// outdenter after an indenter, because that would cause a mismatch. There is a
+// running indent carried from line to line. Each outdenter reduces the indent
+// on the current line, and each indenter increases the indent on the following
+// line. Outdenters or indenters at the start of a line are spaced out,
+// e.g. ...}...} or ...{...{...text.
 int autoIndent(int indent, string **linep, string **stylesp) {
     string *line = *linep, *styles = *stylesp;
     int n = size(line);
-    int closers = 0, openers = 0;
+    int outdenters = 0, indenters = 0;
     for (int i = 0; i < n; i++) {
-        if (styles[i] == CLOSE) closers++;
-        else if (styles[i] == OPEN) openers++;
+        if (styles[i] == CLOSE) outdenters++;
+        else if (styles[i] == OPEN) indenters++;
     }
-    indent += closers;
+    indent -= outdenters * TAB;
+    if (indent < 0) indent = 0;
     printf("this indent %d\n", indent);
-    printf("next indent %d\n", indent + openers);
-    return indent + openers;
-}
-
-/*
-int show(char *line, int indent, int cl, int op, FILE *out) {
-    int margin = indent;
-    if (cl == 0 && margin >= 4) margin = margin - 4;
-    for (int i=0; i<margin; i++) fprintf(out, " ");
-    fprintf(out, "%s", line);
-    if (cl >= 0 && indent >= 4) indent -= 4;
-    if (op >= 0) indent += 4;
+    indent += indenters * TAB;
+    printf("next indent %d\n", indent);
     return indent;
 }
-*/
 
 #ifdef test_indent
 
@@ -123,54 +126,6 @@ static void testMatch() {
 int main(int n, char const *args[n]) {
     testMatch();
     printf("Indent module OK\n");
-    /*
-    FILE *in = fopen(args[1], "r");
-    FILE *out = fopen(args[2], "w");
-    fseek(in, 0L, SEEK_END);
-    int size = ftell(in);
-    fseek(in, 0L, SEEK_SET);
-    char *text = malloc(size);
-    fread(text, 1, size, in);
-    char *styles = malloc(size);
-    for (int i=0; i<size; i++) styles[i] = S;
-    int start = 0;
-    for (int end = 0; end < size; end++) {
-        if (text[end] == '\n') {
-            text[end] = '\0';
-            styles[end] = '\0';
-            matchBrackets(end - start, &text[start], &styles[start]);
-            printf("%s\n%s\n", &text[start], &styles[start]);
-            start = end + 1;
-        }
-    }
-    */
-/*
-    char *line;
-    size_t len;
-    ssize_t result;
-    int indent = 0;
-    result = readline(&line, &len, in);
-    while (result != -1) {
-        char styles[len+1];
-        for (int i=0; i<len; i++) styles[i] = S;
-        styles[len] = '\0';
-        matchBrackets(len, line, styles);
-        printf("%s\n%s\n", line, styles);
-*/
-/*
-        while (line[0] == ' ') line++;
-        int op = findOpener(line), cl = findCloser(line);
-        if (cl >= 0 && op >= 0 && cl > op) cl = op = -1;
-        indent = show(line, indent, cl, op, out);
-*/
-/*
-        result = getline(&line, &len, in);
-    }
-*/
-/*
-    fclose(in);
-    fclose(out);
-    */
     return 0;
 }
 
@@ -196,7 +151,7 @@ With the exception of the above, each line is scanned independently.
 AFTER scanning, indent and semicolon adjustment is done.
 Do not bother trying to synchronize.
 On every edit, scan from the 1st line affected to the end of the visible display
-Workspace size can be estimated [add indent + tab + semicolon].
+Workspace size can be estimated [add indent + tabs + semicolon].
 # lines count as one line comments
 Can have two kinds of spaces, so cursor moves past autoindents,
     or cursor is adjusted after each movement.
@@ -207,7 +162,7 @@ Commenting at start, end.
 Continuing, to be continued.
 Comma [inside round or square or init or enum, comma not a continuation]
 Semi [inside standalone block or attached block or structure, semi expected]
-CloseSemi [inside round or square or structure or init, closer needs semi]
+CloseSemi [inside round or square or structure or init, outdenter needs semi]
 
 Outdent [margin to decrease next line]  =>  end margin
 Indent [increase]  =>  end margin
@@ -219,18 +174,4 @@ Actual margin = special spaces, after adjustment.
 If user presses space/tab just after special space, disallowed, nothing happens.
 Otherwise, the cursor goes beyond the end of the line length.
 This includes blank lines.
-
-Indent rules
-------------
-After scanning, look at brackets.
-An opener is an open bracket not followed by any brackets of the same kind.
-Only the last opener on a line counts.
-Similarly closer.
-A closer with a later opener is OK.
-If the opener is followed by the closer, neither count.
-Remaining unmatched brackets are marked.
-
-An opener indents on the next line [Horstmann: user handles first indent]
-A closer outdents, on the same line at start, next line otherwise.
-First continuation line outdents.
 */
