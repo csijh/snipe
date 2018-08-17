@@ -5,14 +5,14 @@
 // cope with the fact that an array may move when it is resized. Synonym type
 // names are used, e.g. (chars *) rather than (char *) as a reminder. Whenever
 // the array is resized, the variable holding it needs to be updated, e.g.
-// xs = setSize(xs...) rather than just setSize(xs...). Flexible arrays are
+// xs = reSize(xs...) rather than just reSize(xs...). Flexible arrays are
 // passed by reference to functions which might update them, so that the
 // caller's variable can be updated as well as the local variable e.g.
 //
 //   void f(chars **pxs) {
 //     chars *xs = *pxs;
 //     ...
-//     xs = *pxs = setSize(xs...);
+//     xs = *pxs = reSize(xs...);
 //     ...
 //   }
 //
@@ -28,8 +28,7 @@ void freeArray(void *xs);
 // Find the length of an array.
 int size(void *xs);
 
-// Change the size of an array to n, and return the possibly moved array so
-// that variables referring to it can be updated. If the size is increased,
-// room is made for more items at position i where 0 <= i <= size(xs). If the
-// size is decreased, items are deleted from position i.
-void *setSize(void *xs, int i, int n);
+// Change the size of an array by n at index i, deleting (n < 0) or making
+// room for an insertion (n > 0). Return the possibly moved array so that
+// variables referring to it can be updated.
+void *reSize(void *xs, int i, int n);

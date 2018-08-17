@@ -72,13 +72,19 @@ void matchBrackets(string *line, string *styles) {
     }
 }
 
-// Change the indent of a line to the given amount. If the line is blank,
-// make the indent zero.
-static string *fixIndex(int indent, string **pline, string **pstyles) {
+// Change the indent of a non-blank line to the given amount.
+static void fixIndex(int indent, string **pline, string **pstyles) {
     string *line = *pline, *styles = *pstyles;
     int old = 0;
     for (int i = 0; i < size(line); i++) if (line[i] == ' ') old++;
     if (old == size(line)) indent = 0;
+    line = *pline = reSize(line, 0, indent-old);
+    styles = *pstyles = reSize(styles, 0, indent - old);
+    for (int i = old; i < indent; i++) {
+        line[i] = ' ';
+        styles[i] = SIGN;
+    }
+    // TODO space out initial brackets.
 }
 
 // A line contains any number of indenters and outdenters. There can't be an
@@ -92,12 +98,15 @@ int autoIndent(int indent, string **linep, string **stylesp) {
     int n = size(line);
     int outdenters = 0, indenters = 0;
     for (int i = 0; i < n; i++) {
-        if (styles[i] == CLOSE) { outdenters++; styles[i] = SIGN; }
-        else if (styles[i] == OPEN) { indenters++; styles[i] = SIGN; }
+        if (styles[i] == CLOSE) outdenters++;
+        else if (styles[i] == OPEN) indenters++;
     }
     indent -= outdenters * TAB;
     if (indent < 0) indent = 0;
     line = *linep = fixIndent(line, indent);
+    for (int i = 0; i < n; i++) {
+        if (styles[i] == CLOSE || styles[i] == OPEN) styles[i] = SIGN;
+    }
     indent += indenters * TAB;
     printf("next indent %d\n", indent);
     return indent;
@@ -108,11 +117,11 @@ int autoIndent(int indent, string **linep, string **stylesp) {
 static bool checkMatch(char *txt, char *out) {
     int n = strlen(txt);
     string *line = newArray(sizeof(char));
-    setSize(line, 0, n);
+    reSize(line, 0, n);
     strcpy(line, txt);
     string *in = newArray(sizeof(char));
     in[0] = '\0';
-    setSize(in, 0, n);
+    reSize(in, 0, n);
     for (int i=0; i<n; i++) in[i] = S;
     matchBrackets(line, in);
     bool ok = strcmp(in, out) == 0;
