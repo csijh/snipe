@@ -19,12 +19,17 @@ start _ gap
 start _..~ start        >BAD
 start start             >BAD
 
+sign start              >SIGN
+
+op start                >OP
+
 key a..z A..Z 0..9 id
 key __ \U \u id
 key start               >KEY
 
 id a..z A..Z 0..9 id
 id __ \U \u id
+id ( sign               <FUNCTION
 id start                >ID
 
 comment */ start        >COMMENT
