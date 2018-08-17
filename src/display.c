@@ -223,22 +223,16 @@ static int drawChar(display *d, int ch, int row, int pos, char style) {
 }
 
 // Draw a line.
-void drawLine(display *d, int row, chars *line, chars *styles) {
-    int n = length(line);
+void drawLine(display *d, int row, int n, char *line, char *styles) {
     bool longLine = n > d->cols + 1;
     int advance = 0;
     if (n > d->cols + 1) n = d->cols + 1;
     for (int i=0; i<n; i++) {
-        char ch = C(line)[i];
-        char st = C(styles)[i];
+        char ch = line[i];
+        char st = styles[i];
         if (longLine && i == d->cols) { ch = '\0'; st = BAD; }
         else if (ch == '\n') ch = ' ';
         advance += drawChar(d, ch, row, advance, st);
-    }
-    if (length(line) > d->cols + 1) {
-        float x = d->pad + advance;
-        float y = d->charHeight * row - d->scroll;
-        paintRect(findColour(d->t, BAD), x, y, x+5.0, y+d->charHeight);
     }
     checkGLError();
 }
@@ -316,8 +310,8 @@ void actOnDisplay(display *d, action a, char const *s) {
 // Redraw with text for testing.
 static void testRedraw(display *d) {
     paintBackground(d);
-    chars *line = newChars();
-    chars *styles = newChars();
+//    chars *line = newChars();
+//    chars *styles = newChars();
     char *lines[] =  { "Line one\n", "Line two\n", "Line three\n" };
     char K=KEY, G=GAP, I=ID, S=SIGN, Q=STRING, T=TYPE;
     char N = addStyleFlag(addStyleFlag(NUMBER, POINT), SELECT);
@@ -328,16 +322,16 @@ static void testRedraw(display *d) {
         {T,T,T,T,G,N,n,n,n,n,G}
     };
     for (int i=0; i<3; i++) {
-        resize(line, strlen(lines[i]));
-        resize(styles, strlen(lines[i]));
-        for (int j=0; j<strlen(lines[i]); j++) C(line)[j] = lines[i][j];
-        for (int j=0; j<strlen(lines[i]); j++) C(styles)[j] = lineStyles[i][j];
-        drawLine(d, i, line, styles);
+//        resize(line, strlen(lines[i]));
+//        resize(styles, strlen(lines[i]));
+//        for (int j=0; j<strlen(lines[i]); j++) C(line)[j] = lines[i][j];
+//        for (int j=0; j<strlen(lines[i]); j++) C(styles)[j] = lineStyles[i][j];
+        drawLine(d, i, strlen(lines[i]), lines[i], lineStyles[i]);
     }
     showFrame(d);
     checkGLError();
-    freeList(line);
-    freeList(styles);
+//    freeList(line);
+//    freeList(styles);
 }
 
 // Interactive testing.
@@ -348,7 +342,7 @@ int main(int n, char const *args[n]) {
     printf("Check visually and test events interactively\n");
     while (1) {
         int r, c;
-        char *t;
+        char const *t;
         event et = getEvent(d, &r, &c, &t);
         if (et != BLINK) { printEvent(et, r, c, t); printf("\n"); }
         if (et == BLINK) blinkCaret(d);

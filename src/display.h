@@ -8,7 +8,6 @@
 // TODO: add overlays.
 // TODO: handle multiple fonts and multiple pages and UTF8.
 #include "handler.h"
-#include "list.h"
 
 // The editor's graphical user interface.
 struct display;
@@ -49,7 +48,7 @@ void cycleTheme(display *d);
 event getEvent(display *d, int *r, int *c, char const **t);
 
 // Create an image of a line from its row number, text, and style info.
-void drawLine(display *d, int row, chars *line, chars *styles);
+void drawLine(display *d, int row, int n, char *line, char *styles);
 
 // Toggle the caret.
 void blinkCaret(display *d);

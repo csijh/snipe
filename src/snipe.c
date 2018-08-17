@@ -57,7 +57,7 @@ static void redraw(snipe *s) {
         chars *line = getLine(s->doc, r);
         chars *st = getStyle(s->doc, r);
         addCursorFlags(s->doc, r, n, st);
-        drawLine(s->dis, r, line, st);
+        drawLine(s->dis, r, length(line), C(line), C(st));
     }
     showFrame(s->dis);
 }
