@@ -1,7 +1,7 @@
 // The Snipe editor is free and open source, see licence.txt.
 #include "array.h"
 
-// Synonym for flexible array of characters with terminator.
+// Synonym for flexible array of characters with nul terminator.
 typedef char string;
 
 // Provide bracket matching and auto-indenting. Bracket matching can be applied

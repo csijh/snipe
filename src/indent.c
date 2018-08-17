@@ -9,9 +9,9 @@
 #include <assert.h>
 
 // Match brackets. leave matched brackets as signs. Mark mismatched brackets as
-// errors. Mark unmatched brackets as indenters or outdenters.
+// errors. Flag unmatched brackets as indenters or outdenters.
 enum { S='S', SIGN=S, B='B', BAD=B, O='O', OPEN=O, C='C', CLOSE=C };
-enum { TAB = 4; }
+enum { TAB = 4 };
 
 // Match two bracket characters.
 static bool match(char o, char c) {
@@ -72,23 +72,32 @@ void matchBrackets(string *line, string *styles) {
     }
 }
 
+// Change the indent of a line to the given amount. If the line is blank,
+// make the indent zero.
+static string *fixIndex(int indent, string **pline, string **pstyles) {
+    string *line = *pline, *styles = *pstyles;
+    int old = 0;
+    for (int i = 0; i < size(line); i++) if (line[i] == ' ') old++;
+    if (old == size(line)) indent = 0;
+}
+
 // A line contains any number of indenters and outdenters. There can't be an
 // outdenter after an indenter, because that would cause a mismatch. There is a
 // running indent carried from line to line. Each outdenter reduces the indent
 // on the current line, and each indenter increases the indent on the following
 // line. Outdenters or indenters at the start of a line are spaced out,
-// e.g. ...}...} or ...{...{...text.
+// e.g. ...}...} or ...{...{...text. The flags on brackets are removed.
 int autoIndent(int indent, string **linep, string **stylesp) {
     string *line = *linep, *styles = *stylesp;
     int n = size(line);
     int outdenters = 0, indenters = 0;
     for (int i = 0; i < n; i++) {
-        if (styles[i] == CLOSE) outdenters++;
-        else if (styles[i] == OPEN) indenters++;
+        if (styles[i] == CLOSE) { outdenters++; styles[i] = SIGN; }
+        else if (styles[i] == OPEN) { indenters++; styles[i] = SIGN; }
     }
     indent -= outdenters * TAB;
     if (indent < 0) indent = 0;
-    printf("this indent %d\n", indent);
+    line = *linep = fixIndent(line, indent);
     indent += indenters * TAB;
     printf("next indent %d\n", indent);
     return indent;
