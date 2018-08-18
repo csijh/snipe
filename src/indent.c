@@ -71,13 +71,13 @@ void matchBrackets(int n, char const line[n], char styles[n]) {
     }
 }
 
-// Count the number of indenters and outdenters.
-static void countInOut(int *in, int *out, int n, char const styles[n]) {
+// Count the number of outdenters and indenters.
+static void countOutIn(int *out, int *in, int n, char const styles[n]) {
     *in = 0;
     *out = 0;
     for (int i = 0; i < n; i++) {
-        if (styles[i] == CLOSE) *out++;
-        else if (styles[i] == OPEN) *in++;
+        if (styles[i] == CLOSE) *out = *out + 1;
+        else if (styles[i] == OPEN) *in = *in + 1;
     }
  }
 
@@ -106,10 +106,7 @@ int autoIndent(int indent, string **linep, string **stylesp) {
     string *line = *linep, *styles = *stylesp;
     int n = size(line);
     int outdenters = 0, indenters = 0;
-    for (int i = 0; i < n; i++) {
-        if (styles[i] == CLOSE) outdenters++;
-        else if (styles[i] == OPEN) indenters++;
-    }
+    countOutIn(&outdenters, &indenters, n, styles);
     indent -= outdenters * TAB;
     if (indent < 0) indent = 0;
     fixIndent(indent, linep, stylesp);
