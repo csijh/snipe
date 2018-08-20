@@ -1,6 +1,6 @@
 // The Snipe editor is free and open source, see licence.txt.
 #include "indent.h"
-#include "array.h"
+#include "style.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -8,10 +8,11 @@
 #include <limits.h>
 #include <assert.h>
 
-// Match brackets. leave matched brackets as signs. Mark mismatched brackets as
-// errors. Flag unmatched brackets as indenters or outdenters.
-enum { S='S', SIGN=S, B='B', BAD=B, O='O', OPEN=O, C='C', CLOSE=C };
+// Fix tabs at four spaces for now.
 enum { TAB = 4 };
+
+// Reuse the POINT/SELECT flags temopiorarily as indenter/outdenter markers.
+enum { IN = POINT, OUT = SELECT };
 
 // Match two bracket characters.
 static bool match(char o, char c) {
@@ -37,19 +38,19 @@ static inline int top(int s[]) { return s[s[0]-1]; }
 // ...() is found, it becomes a match, but if ...(] is found then ( is
 // popped and accepted as an error. At the end, all tentative markings are
 // accepted without further work.
-void matchBrackets(int n, char const line[n], char styles[n]) {
+static void matchBrackets(int n, char const line[n], char styles[n]) {
     int stack[n+1];
     make(stack);
     for (int i = 0; i < n; i++) {
         if (styles[i] != SIGN) continue;
         char c = line[i];
         if (c == '{' || c == '[' || c == '(') {
-            styles[i] = OPEN;
+            styles[i] = addStyleFlag(SIGN, IN);
             push(stack, i);
             continue;
         }
         if (c != '}' && c != ']' && c != ')') continue;
-        if (empty(stack)) { styles[i] = CLOSE; continue; }
+        if (empty(stack)) { styles[i] = addStyleFlag(SIGN, OUT); continue; }
         int j = pop(stack);
         if (match(line[j], c)) {
             styles[j] = styles[i] = SIGN;
@@ -71,16 +72,22 @@ void matchBrackets(int n, char const line[n], char styles[n]) {
     }
 }
 
-// Count the number of outdenters and indenters.
-static void countOutIn(int *out, int *in, int n, char const styles[n]) {
+// Count the number of outdenters and indenters, and remove their flags. A line
+// contains any number of them. There can't be an outdenter after an indenter,
+// because that would cause a mismatch. Each outdenter reduces the indent on the
+// current line, and each indenter increases the indent on the following line.
+static void countOutIn(int *out, int *in, int n, char styles[n]) {
     *in = 0;
     *out = 0;
     for (int i = 0; i < n; i++) {
-        if (styles[i] == CLOSE) *out = *out + 1;
-        else if (styles[i] == OPEN) *in = *in + 1;
+        if (hasStyleFlag(styles[i], OUT)) *out = *out + 1;
+        else if (hasStyleFlag(styles[i], IN)) *in = *in + 1;
+        else continue;
+        styles[i] = clearStyleFlags(styles[i]);
     }
  }
 
+/*
 // Change the indent of a non-blank line to the given amount.
 static void fixIndent(int indent, string **pline, string **pstyles) {
     string *line = *pline, *styles = *pstyles;
@@ -118,38 +125,70 @@ int autoIndent(int indent, string **linep, string **stylesp) {
     printf("next indent %d\n", indent);
     return indent;
 }
+*/
+
+// Match brackets then update the running indent according to the outdenters
+// and indenters. Make the indent zero for a blank line.
+int findIndent(int *runningIndent, int n, char const line[n], char styles[n]) {
+    int indent = *runningIndent;
+    int outdenters, indenters, result;
+    matchBrackets(n, line, styles);
+    countOutIn(&outdenters, &indenters, n, styles);
+    indent -= outdenters * TAB;
+    if (indent < 0) indent = 0;
+    result = indent;
+    if (n == 0) result = 0;
+    indent += indenters * TAB;
+    *runningIndent = indent;
+    return result;
+}
 
 #ifdef test_indent
 
-static bool checkMatch(char *txt, char *out) {
-    int n = strlen(txt);
-    string *line = newArray(sizeof(char));
-    reSize(line, 0, n);
-    strcpy(line, txt);
-    string *in = newArray(sizeof(char));
-    in[0] = '\0';
-    reSize(in, 0, n);
-    for (int i=0; i<n; i++) in[i] = S;
-    matchBrackets(size(line), line, in);
-    bool ok = strcmp(in, out) == 0;
-    freeArray(in);
-    freeArray(line);
+static bool checkMatch(char *line, char *out) {
+    int n = strlen(line);
+    char styles[n+1];
+    styles[n] = '\0';
+    for (int i=0; i<n; i++) styles[i] = SIGN;
+    matchBrackets(n, line, styles);
+    for (int i=0; i<n; i++) {
+        if (hasStyleFlag(styles[i], IN)) styles[i] = 'I';
+        else if (hasStyleFlag(styles[i], OUT)) styles[i] = 'O';
+        else styles[i] = styleLetter(styles[i]);
+    }
+    bool ok = strcmp(styles, out) == 0;
     return ok;
 }
 
+static bool checkIndent(int prev, char *line, int current, int next) {
+    int n = strlen(line);
+    char styles[n];
+    for (int i=0; i<n; i++) styles[i] = SIGN;
+    int indent = findIndent(&prev, n, line, styles);
+    return (prev == next) && (indent == current);
+}
+
 static void testMatch() {
-    assert(checkMatch("...", "SSS"));
-    assert(checkMatch("()", "SS"));
-    assert(checkMatch("(", "O"));
-    assert(checkMatch(")", "C"));
-    assert(checkMatch("(]", "BB"));
-    assert(checkMatch("](", "CO"));
-    assert(checkMatch("[(]", "SBS"));
-    assert(checkMatch("[)]", "SBS"));
+    assert(checkMatch("...", "xxx"));
+    assert(checkMatch("()", "xx"));
+    assert(checkMatch("(", "I"));
+    assert(checkMatch(")", "O"));
+    assert(checkMatch("(]", "bb"));
+    assert(checkMatch("](", "OI"));
+    assert(checkMatch("[(]", "xbx"));
+    assert(checkMatch("[)]", "xbx"));
+}
+
+static void testIndent() {
+    assert(checkIndent(0, "x", 0, 0));
+    assert(checkIndent(0, "f() {", 0, 4));
+    assert(checkIndent(4, "}", 0, 0));
+    assert(checkIndent(4, "} else {", 0, 4));
 }
 
 int main(int n, char const *args[n]) {
     testMatch();
+    testIndent();
     printf("Indent module OK\n");
     return 0;
 }

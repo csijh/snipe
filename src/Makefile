@@ -121,7 +121,7 @@ scan:
 	./snipe
 
 indent:
-	$(TCC) array.c
+	$(TCC) style.c
 	./snipe
 
 cursor:
