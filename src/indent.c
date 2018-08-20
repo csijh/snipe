@@ -91,7 +91,7 @@ static void fixIndent(int indent, string **pline, string **pstyles) {
 // outdenter after an indenter, because that would cause a mismatch. There is a
 // running indent carried from line to line. Each outdenter reduces the indent
 // on the current line, and each indenter increases the indent on the following
-// line. Outdenters or indenters at the start of a line are spaced out,
+// line. TODO: Outdenters or indenters at the start of a line are spaced out,
 // e.g. ...}...} or ...{...{...text. The flags on brackets are removed.
 int autoIndent(int indent, string **linep, string **stylesp) {
     string *line = *linep, *styles = *stylesp;
