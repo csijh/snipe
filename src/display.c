@@ -247,7 +247,8 @@ static void drawSize(display *d) {
     memmove(&line[d->cols - k], &line[0], k);
     for (int i = 0; i < d->cols - k; i++) line[i] = ' ';
     for (int i = 0; i < d->cols; i++) styles[i] = BAD;
-    drawLine(d, d->rows - 1, d->cols, line, styles);
+    int row = d->rows - 1 + d->scroll / d->charHeight;
+    drawLine(d, row, d->cols, line, styles);
 }
 
 // Toggle whether the caret is displayed. Check whether the focus has been lost.
@@ -369,6 +370,7 @@ int main(int n, char const *args[n]) {
         }
         else if (et == addEventFlag(C_, ENTER)) cycleTheme(d);
         else if (et == QUIT) quit(d);
+        else if (et == RESIZE) checkResize(d);
         testRedraw(d);
     }
     printf("Display module OK\n");
