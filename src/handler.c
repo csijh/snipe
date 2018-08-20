@@ -35,7 +35,7 @@ struct handler {
     int head, tail;
     double blinkRate, saveRate;
     double blinkTime, saveTime;
-    bool frame;
+    bool frameTime, focused;
 };
 
 // Prepare to add an event to the queue, returning a pointer to the next slot.
@@ -46,9 +46,13 @@ static eventData *push(handler *h) {
     return e;
 }
 
+bool focused(handler *h) {
+    return h->focused;
+}
+
 // Generate a frame tick event, e.g. when smooth scrolling.
 void frameTick(handler *h) {
-    h->frame = true;
+    h->frameTime = true;
 }
 
 // Generate a paste event. Since events are handled synchronously, it should be
@@ -254,6 +258,15 @@ static void resizeCB(GLFWwindow *w, int width, int height) {
     ed->tag = REDRAW;
 }
 
+// Generate one last blink event before they are switched off, to make sure the
+// display makes the cursor invisible. 
+static void focusCB(GLFWwindow *w, int focused) {
+    handler *h = glfwGetWindowUserPointer(w);
+    h->focused = focused;
+    eventData *ed = push(h);
+    ed->tag = BLINK;
+}
+
 // Create handler and set up all the desired callbacks.
 handler *newHandler(void *w) {
     handler *h = malloc(sizeof(handler));
@@ -263,7 +276,8 @@ handler *newHandler(void *w) {
     h->saveRate = 60.0;
     h->blinkTime = h->blinkRate;
     h->saveTime = h->saveRate;
-    h->frame = false;
+    h->frameTime = false;
+    h->focused = true;
     glfwSetWindowUserPointer(h->w, h);
     glfwSetKeyCallback(h->w, keyCB);
     glfwSetCharCallback(h->w, charCB);
@@ -272,6 +286,7 @@ handler *newHandler(void *w) {
     glfwSetWindowCloseCallback(h->w, closeCB);
 //    glfwSetWindowRefreshCallback(h->w, redrawCB);
     glfwSetWindowSizeCallback(h->w, resizeCB);
+    glfwSetWindowFocusCallback(h->w, focusCB);
     return h;
 }
 
@@ -314,13 +329,15 @@ event getRawEvent(handler *h, int *x, int *y, char const **t) {
             return e->tag;
         }
         double time = glfwGetTime();
-        if (h->blinkRate > 0 && time > h->blinkTime) {
+        if (h->focused && h->blinkRate > 0 && time > h->blinkTime) {
             h->blinkTime += h->blinkRate; return BLINK;
         }
         if (time > h->saveTime) { h->saveTime += h->saveRate; return SAVE; }
-        if (h->frame) { h->frame = false; return TICK; }
+        if (h->frameTime) { h->frameTime = false; return TICK; }
         double min = h->saveTime;
-        if (h->blinkRate > 0 && h->blinkTime < h->saveTime) min = h->blinkTime;
+        if (h->focused && h->blinkRate > 0 && h->blinkTime < h->saveTime) {
+            min = h->blinkTime;
+        }
         glfwWaitEventsTimeout(min - time);
     }
 }

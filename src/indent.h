@@ -16,7 +16,7 @@ typedef char string;
 // outdenters, ready for auto-indenting. Only one of a mismatched pair of
 // brackets (] is marked as an error where reasonably possible, e.g. in cases
 // (]..) and [..(] only the middle bracket is marked as an error.
-void matchBrackets(string *line, string *styles);
+void matchBrackets(int n, char const line[n], char styles[n]);
 
 // Correct the indenting of a line, given the running indent and the result of
 // bracket-matching. Return the new running indent.
