@@ -322,6 +322,7 @@ event getRawEvent(handler *h, int *x, int *y, char const **t) {
         double time = glfwGetTime();
         if (h->frameTime) { h->frameTime = false; return TICK; }
         if (h->focused && h->blinkRate > 0 && time > h->blinkTime) {
+            if (h->blinkTime < time - h->blinkRate) h->blinkTime = time;
             h->blinkTime += h->blinkRate; return BLINK;
         }
         if (time > h->saveTime) { h->saveTime += h->saveRate; return SAVE; }
