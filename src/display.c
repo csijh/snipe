@@ -24,8 +24,8 @@
 // display is a viewport of size rows x cols onto a notional grid of characters
 // representing the entire document. Pad is the number of pixels round the edge
 // of the window. Scroll is the pixel scroll position, from the overall top of
-// the text, and scrollTarget is the pixel position smooth scroll animation is
-// aiming for. Event handling is delegated to a handler object.
+// the text, and scrollTarget is the pixel position to aim for when smooth
+// scrolling. Event handling is delegated to a handler object.
 struct display {
     handler *h;
     font *f;
@@ -36,6 +36,7 @@ struct display {
     int rows, cols, charWidth, charHeight, advance, pad, width, height;
     int scroll, scrollTarget;
     bool showCaret;
+    int showSize;
     page *p;
 };
 
@@ -98,11 +99,12 @@ void setTitle(display *d, char const *path) {
     glfwSetWindowTitle(d->gw, title);
 }
 
-// Set or change the font size. Calculate the display metrics. Load the font
-// image into a texture. Set up an orthogonal projection, with y reversed so 2D
+// Set or change the size of the window as the result of a user window resize or
+// a change of font size. Calculate the display metrics. Load the font image
+// into a texture. Set up an orthogonal projection, with y reversed so 2D
 // graphics (right,down) pixel coordinates can be used. Set the display size and
 // make it visible, if it isn't already.
-static void setFontSize(display *d) {
+static void setSize(display *d) {
     int targetRow = d->scrollTarget / d->charHeight;
     d->p = getPage(d->f, d->fontSize, 0);
     d->charWidth = pageWidth(d->p) / 256;
@@ -147,11 +149,13 @@ display *newDisplay(char const *path) {
     d->pad = 4;
     d->scroll = 0;
     d->scrollTarget = 0;
+    d->showCaret = false;
+    d->showSize = 0;
     initWindow(d);
     setTitle(d, path);
     d->h = newHandler(d->gw);
     setBlinkRate(d->h, atof(getSetting(BlinkRate)));
-    setFontSize(d);
+    setSize(d);
     paintBackground(d);
     glfwSwapBuffers(d->gw);
     paintBackground(d);
@@ -169,12 +173,12 @@ void freeDisplay(display *d) {
 
 void bigger(display *d) {
     if (d->fontSize <= 35) d->fontSize++;
-    setFontSize(d);
+    setSize(d);
 }
 
 void smaller(display *d) {
     if (d->fontSize >= 5) d->fontSize--;
-    setFontSize(d);
+    setSize(d);
 }
 
 void cycleTheme(display *d) {
@@ -237,23 +241,33 @@ void drawLine(display *d, int row, int n, char *line, char *styles) {
     checkGLError();
 }
 
+static void drawSize(display *d) {
+    char line[d->cols], styles[d->cols];
+    int k = snprintf(line, d->cols, "%dx%d", d->cols, d->rows);
+    memmove(&line[d->cols - k], &line[0], k);
+    for (int i = 0; i < d->cols - k; i++) line[i] = ' ';
+    for (int i = 0; i < d->cols; i++) styles[i] = BAD;
+    drawLine(d, d->rows - 1, d->cols, line, styles);
+}
+
 // Toggle whether the caret is displayed. Check whether the focus has been lost.
-void blinkCaret(display *d) {
+static void blinkCaret(display *d) {
     if (! focused(d->h)) d->showCaret = false;
     else d->showCaret = ! d->showCaret;
 }
 
-// Scroll the display by a small amount, according to the (+ve or -ve) speed.
-// The total number of lines of text is given, to limit the scrolling.
-void scrollBy(display *d, int speed, int total) {
-    int pixels = 1;
-    if (speed < 0) { pixels = -1; speed = -speed; }
-    for (int i=0; i<speed-1; i++) pixels *= 2;
-    d->scroll = d->scroll + pixels;
-    if (d->scroll < 0) d->scroll = 0;
-    int maxScroll = (total - d->rows) * d->charHeight;
-    if (maxScroll < 0) maxScroll = 0;
-    if (d->scroll > maxScroll) d->scroll = maxScroll;
+static void checkResize(display *d) {
+    int width, height;
+    glfwGetWindowSize(d->gw, &width, &height);
+    int cols = (width - 2 * d->pad) / d->charWidth;
+    int rows = (height - d->pad) / d->charHeight;
+    if (cols != d->cols || rows != d->rows) {
+        d->cols = cols;
+        d->rows = rows;
+        setSize(d);
+    }
+    d->showSize = 5;
+    drawSize(d);
 }
 
 int firstRow(display *d) {
@@ -268,6 +282,7 @@ int lastRow(display *d) {
 // Show the page. Draw the background ready for the next frame. If scrolling,
 // generate an animation tick.
 void showFrame(display *d) {
+    if (d->showSize > 0) { drawSize(d); d->showSize--; }
     glfwSwapBuffers(d->gw);
     paintBackground(d);
 }
@@ -302,6 +317,7 @@ void actOnDisplay(display *d, action a, char const *s) {
         case Open: case Load: d->scroll = 0; break;
         case Paste: pasteEvent(d->h); break;
         case Cut: case Copy: clip(d->h, s); break;
+        case Resize: checkResize(d); break;
         default: break;
     }
 }

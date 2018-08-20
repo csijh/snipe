@@ -242,24 +242,15 @@ static void closeCB(GLFWwindow *w) {
     ed->tag = QUIT;
 }
 
-/*
-// Callback for uncover, or any other event requiring a complete redraw.
-static void redrawCB(GLFWwindow *w) {
-    handler *h = glfwGetWindowUserPointer(w);
-    eventData *ed = push(h);
-    ed->tag = REDRAW;
-}
-*/
-
-// Callback for resize (apparently needed as well as the above).
+// Callback for resize.
 static void resizeCB(GLFWwindow *w, int width, int height) {
     handler *h = glfwGetWindowUserPointer(w);
     eventData *ed = push(h);
-    ed->tag = REDRAW;
+    ed->tag = RESIZE;
 }
 
 // Generate one last blink event before they are switched off, to make sure the
-// display makes the cursor invisible. 
+// display makes the cursor invisible.
 static void focusCB(GLFWwindow *w, int focused) {
     handler *h = glfwGetWindowUserPointer(w);
     h->focused = focused;

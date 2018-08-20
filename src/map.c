@@ -78,7 +78,7 @@ bool dispatch(map *m, event e, int r, int c, char const *t) {
     action a;
     if (isDirectory(m->doc)) a = m->listArray[e];
     else a = m->array[e];
-    if (m->testing && e != BLINK && e != SAVE && e != REDRAW && e != TICK) {
+    if (m->testing && e != BLINK && e != SAVE && e != RESIZE && e != TICK) {
         printEvent(e, r, c, t);
         printf("  ->  ");
         printAction(a);

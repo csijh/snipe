@@ -23,9 +23,9 @@ static char *actionNames[] = {
     [CycleTheme]="CycleTheme", [Point]="Point", [Select]="Select",
     [AddPoint]="AddPoint", [AddSelect]="AddSelect", [Insert]="Insert",
     [Cut]="Cut", [Copy]="Copy", [Paste]="Paste", [PageUp]="PageUp",
-    [PageDown]="PageDown", [Undo]="Undo", [Redo]="Redo", [Blink]="Blink",
-    [Tick]="Tick", [LineUp]="LineUp", [LineDown]="LineDown", [Load]="Load",
-    [Save]="Save", [Open]="Open", [Help]="Help", [Quit]="Quit",
+    [PageDown]="PageDown", [Undo]="Undo", [Redo]="Redo", [Resize]="Resize",
+    [Blink]="Blink", [Tick]="Tick", [LineUp]="LineUp", [LineDown]="LineDown",
+    [Load]="Load", [Save]="Save", [Open]="Open", [Help]="Help", [Quit]="Quit",
     [Ignore]="Ignore"
 };
 

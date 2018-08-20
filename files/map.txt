@@ -31,6 +31,7 @@ BLINK       Blink           cursor blink timer event
 TICK        Tick            animation event for smooth scrolling
 SAVE        Save            autosave timer event
 TEXT        Insert          typing ordinary text
+RESIZE      Resize          resize window
 CLICK       Point           mouse button down to change cursor
 DRAG        Select          mouse button up (possibly without movement)
 
@@ -45,6 +46,7 @@ List  LINE_DOWN   LineDown
 List  QUIT        Quit
 List  C_Q         Quit
 List  CLICK       Point
+List  RESIZE      Resize
 List  BLINK       Blink
 List  TICK        Tick
 

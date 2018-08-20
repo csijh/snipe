@@ -9,7 +9,7 @@ enum action {
     MarkEndLine, CutLeftChar, CutRightChar, CutLeftWord, CutRightWord,
     CutUpLine, CutDownLine, CutStartLine, CutEndLine, Point, Select, AddPoint,
     AddSelect, Newline, Insert, Cut, Copy, Paste, Undo, Redo, Load, Save, Open,
-    Bigger, Smaller, CycleTheme, PageUp, PageDown, Blink, Tick, LineUp,
+    Bigger, Smaller, CycleTheme, PageUp, PageDown, Resize, Blink, Tick, LineUp,
     LineDown, Help, Quit, Ignore, COUNT_ACTIONS = Ignore + 1
 };
 typedef int action;
@@ -22,4 +22,3 @@ char *findActionName(action a);
 
 // Print out an action, e.g. for testing.
 void printAction(action a);
-

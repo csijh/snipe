@@ -51,7 +51,7 @@ event getEvent(display *d, int *r, int *c, char const **t);
 void drawLine(display *d, int row, int n, char *line, char *styles);
 
 // Toggle the caret.
-void blinkCaret(display *d);
+// void blinkCaret(display *d);
 
 // Make recent changes appear on screen, with a vertical sync delay.
 void showFrame(display *d);
