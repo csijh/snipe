@@ -112,6 +112,10 @@ display: ../glfw/lib/libglfw3.a
 MODEL = document.c text.c history.c cursor.c line.c scan.c
 .PHONY: $(MODEL)
 
+lines:
+	$(TCC) array.c
+	./snipe
+
 line:
 	$(TCC) list.c
 	./snipe

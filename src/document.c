@@ -14,7 +14,6 @@
 #include <assert.h>
 
 // TODO: move scanner into text.
-// TODO: add cut/copy/paste, including for multiple cursors.
 
 // A document holds the path of a file or folder, its content, undo and redo
 // lists, a scroll target, whether or not there have been any changes since the
