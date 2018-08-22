@@ -12,7 +12,9 @@ ifdef $(Linux)
 	SYS = -lglfw -lGL -lm -ldl -lXrandr -lXinerama -lXcursor -lpthread \
 	-lXxf86vm -lX11
 else ifdef $(MacOS)
-	SYS = -lglfw -lGL
+	MM = mmmm
+	SYS = -lglfw -framework Cocoa -framework IOKit -framework CoreFoundation \
+	-framework CoreVideo -framework OpenGL
 else ifdef $(Windows)
 	SYS = -lopengl32 -lgdi32
 endif
@@ -66,6 +68,7 @@ file:
 array:
 	$(TCC)
 	./snipe
+	echo m $(MM)
 
 list:
 	$(TCC)
