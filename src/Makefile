@@ -2,21 +2,24 @@
 # about module dependencies.
 
 # Find the OS platform using the uname command.
-OS = $(shell uname -s)
+Linux := $(findstring Linux, $(shell uname -s))
+MacOS := $(findstring Darwin, $(shell uname -s))
+Windows := $(findstring NT, $(shell uname -s))
 
-# Compiler options to include OpenGL and other system libraries for the
+# Compiler options to include OpenGL and system libraries needed by GLFW for the
 # Linux/MacOS/Windows platforms.
-ifeq ($(OS), Linux)
-	SYS = -lGL `pkg-config --static --libs glfw3`
-else ifeq ($(OS), Darwin)
-	SYS = -lGL `pkg-config --static --libs glfw3`
-else ifeq ($(OS), MINGW64_NT-6.1)
+ifdef $(Linux)
+	SYS = -lglfw -lGL -lm -ldl -lXrandr -lXinerama -lXcursor -lpthread \
+	-lXxf86vm -lX11
+else ifdef $(MacOS)
+	SYS = -lglfw -lGL
+else ifdef $(Windows)
 	SYS = -lopengl32 -lgdi32
 endif
 
 # Advanced debugging options (not easily available on Windows), and the name of
 # the executable file.
-ifeq ($(OS), MINGW64_NT-6.1)
+ifdef $(Windows)
 	DEBUG =
 	EXEC = snipe.exe
 else
@@ -56,11 +59,11 @@ TCC = gcc -std=c11 -o $(EXEC) -Wall -pedantic -g $(DEBUG) -Dtest_$@ $@.c
 UTILS = action.c style.c setting.c string.c list.c file.c
 .PHONY: $(UTILS)
 
-array:
+file:
 	$(TCC)
 	./snipe
 
-file:
+array:
 	$(TCC)
 	./snipe
 
