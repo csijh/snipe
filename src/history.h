@@ -8,9 +8,11 @@
 struct history;
 typedef struct history history;
 
-// An opcode specifies an insertion or deletion. The four deletion variants
-// allow the cursor to be reconstructed accurately when the edit is undone.
-enum opcode { Ins, DelRight, DelLeft, CutRight, CutLeft };
+// An opcode specifies an insertion, deletion with no reference to a cursor,
+// deletion with a cursor at the left or right end, or deletion of a
+// left-to-right or right-to-left selection. These allow the cursor to be
+// reconstructed when the edit is undone.
+enum opcode { Ins, Del, DelL, DelR, DelLR, DelRL };
 typedef int opcode;
 
 // Create a new history stack.

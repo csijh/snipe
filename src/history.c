@@ -85,7 +85,7 @@ static void popBytecode(history *h, int *pop, int *pn) {
 }
 
 // Add two more opcodes.
-enum { Left = CutLeft + 1, Right = CutLeft + 2 };
+enum { Left = DelRL + 1, Right = DelRL + 2 };
 
 // Push an edit onto the history. Start with the insert/delete, then maybe add
 // left/right movement, and a begin/end marker.
@@ -197,9 +197,9 @@ static void testEdit() {
     popEdit(h, &op, &at, &n, s, &last);
     assert(op == Ins && at == 20 && n == 3 && last == true);
     assert(length(h->bs) == 0);
-    pushEdit(h, DelLeft, 3, 1, "x", true);
+    pushEdit(h, DelR, 3, 1, "x", true);
     popEdit(h, &op, &at, &n, s, &last);
-    assert(op == DelLeft && at == 3 && n == 1 && last == true);
+    assert(op == DelR && at == 3 && n == 1 && last == true);
     assert(strncmp(s, "x", n) == 0);
     assert(length(h->bs) == 0);
     freeHistory(h);
