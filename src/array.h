@@ -2,17 +2,16 @@
 
 // Flexible arrays. A flexible array has information stored before the pointer
 // so that it can be indexed as normal. Careful conventions are needed to
-// cope with the fact that an array may move when it is resized. Synonym type
-// names are used, e.g. (chars *) rather than (char *) as a reminder. Whenever
-// the array is resized, the variable holding it needs to be updated, e.g.
-// xs = reSize(xs...) rather than just reSize(xs...). Flexible arrays are
-// passed by reference to functions which might update them, so that the
-// caller's variable can be updated as well as the local variable e.g.
+// cope with the fact that an array may move when it is increaed in size.
+// Synonym type names are used, e.g. (chars *) rather than (char *) as a
+// reminder. Whenever the array size is increased, the variable holding it
+// needs to be updated. Flexible arrays are passed by reference to functions
+// which might increase them, e.g.
 //
 //   void f(chars **pxs) {
 //     chars *xs = *pxs;
 //     ...
-//     xs = *pxs = reSize(xs...);
+//     xs = increase(pxs...);
 //     ...
 //   }
 //
@@ -28,7 +27,10 @@ void freeArray(void *xs);
 // Find the length of an array.
 int size(void *xs);
 
-// Change the size of an array by n at index i, deleting (n < 0) or making
-// room for an insertion (n > 0). Return the possibly moved array so that
-// variables referring to it can be updated.
-void *reSize(void *xs, int i, int n);
+// Increase the size of an array, making room to insert n items at index i. A
+// pointer to the array variable is passed in so that it can be updated if the
+// array is moved. The new array is also returned for convenience.
+void *increase(void *pxs, int i, int n);
+
+// Decrease the size of an array by deleting n items at index i.
+void *decrease(void *xs, int i, int n);
