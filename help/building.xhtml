@@ -13,11 +13,118 @@
       background-color: white;
     }
 </style>
-<title>Snipe Implementation</title>
+<title>Building Snipe</title>
 </head>
 <body>
 
-<h1>Implementation</h1>
+<h1>Building from source</h1>
+
+<p>Binary releases are provided for each of three main platform families. They
+should work for most users. It is the simplest approach, avoiding the
+creation of platform-specific installers or the inclusion of the
+editor in a wide range of software repositories. For other platforms, or
+unusual variations, Snipe has to be compiled from source.</p>
+
+<p>If the binary release for your platform doesn't work for you, this is
+almost certainly because there is something awkward about your computer which
+may be difficult to track down, so the instructions here are far from
+foolproof.</p>
+
+<p>One possibility is that OpenGL is not installed on your
+computer. It is possible that you may be able to install it and then use the
+binary release, so that is worth checking first. Otherwise try the
+instructions for the closest platform family. If necessary, check the
+background information at the end of this page.</p>
+
+<h2>General</h2>
+
+<p>This applies to all platforms. Download the Snipe source code using the
+source zip file in the latest release. Work in the <code>src</code>
+directory.</p>
+
+<p>Any module can be compiled and tested individually, e.g. the
+<code>file</code> module can be tested with <code>make file</code>. This will
+compile the module into an executable file <code>snipe</code> (or
+<code>snipe.exe</code> on Windows), and then run it to execute the module's
+unit tests.</p>
+
+<p>The command <code>make snipe</code> will build the whole editor,
+which can be run with <code>./snipe</code> or it can be copied to the directory
+above and run with <code>../snipe</code> to move it out of the way of
+subsequent unit tests.</p>
+
+<p>The modules most likely to cause difficulties, and which should probably be
+tested separately before building the whole editor, are <code>font</code>,
+<code>handler</code> and <code>display</code>.</p>
+
+<p>The command <code>make font</code> causes the <code>freetype</code> library
+to be built. Since the cut down source of the freetype library provided
+has no dependencies, this is quite likely to work. If it doesn't,
+<code>freetype</code>'s own make system will have to be investigated.</p>
+
+<p>The command <code>make handler</code> causes the <code>glfw</code> library
+to be built from the sources provided. This is a complex build, first using
+<code>cmake</code> to configure <code>glfw</code> for your computer, then
+<code>make</code> to compile the result. Finally the compiler arranges to
+dynamically link the resulting program with a collection of system libraries
+(to do with window, mouse and keyboard handling). Although there is a typical
+list of libraries in the Makefile, the list does differ between computers, and
+this is the most likely problem area.</p>
+
+<p>The command <code>make display</code> causes the OpenGL library to be
+linked, as well as <code>glfw</code>. As long as OpenGL is available on
+your computer, this is likely to work. If not, it is possible that further
+system libraries are needed.</p>
+
+<h2>Linux or other Unix-based systems</h2>
+
+<p>First make sure <code>git</code>, <code>make</code> and <code>cmake</code>
+are installed, or install them with commands such as <code>sudo apt install
+git</code> or equivalent.</p>
+
+<p>Check that the command
+<code>uname -s</code> produces something containing <code>Linux</code> or
+change
+<code>Makefile</code> so that it recognizes whatever is produced. Change
+<code>gcc</code> in the <code>Makefile</code> to <code>clang</code> if it
+helps (e.g. if your <code>gcc</code> is old and difficult to upgrade, so
+that installing <code>clang</code> is a better option).</p>
+
+<p>One way to find the necessary libraries (in fact the technique used to
+create the original list) is to install <code>glfw3</code> temporarily
+with a command such as <code>sudo apt install libglfw3-dev libglfw3</code>
+and then use <code>pkg-config --static --libs glfw3</code> to list the
+libraries needed for dynamic linking when <code>glfw</code> is compiled
+statically into a program, as with Snipe. The libraries can be copied into the
+Makefile. If that works, they can be deleted one by one to see which ones
+are actually necessary.</p>
+
+<h2>Macs</h2>
+
+<p>The first step is to install <code>homebrew</code> from its web site. This
+has three good effects. Installing it causes the command line tools associated
+with XCode to be installed (without the IDE which is not recommended for
+cross-platform programmers). It provides the command <code>brew</code> which
+acts as a package manager to install further software. And it provides
+the command <code>brew doctor</code> which checks consistency of installed
+software, and suggests fixes if it finds problems. Install <code>cmake</code>
+with <code>brew install cmake</code>. The commands <code>git</code> and
+<code>make</code> should be already installed. The <code>gcc</code> command
+is probably a synonym for the Mac version of <code>clang</code>.</p>
+
+<p>Download the Snipe source using the source zip file in the latest release.
+Work in the <code>src</code> directory. Check that the command
+<code>uname -s</code> produces something containing <code>Darwin</code> or
+change
+<code>Makefile</code> so that it recognizes whatever is produced.</p>
+
+<h2>Introduction</h2>
+
+<p>Some general
+information about building OpenGL/GLFW programs for the three main platforms can
+be gleaned from sites like <a
+href="http://web.eecs.umich.edu/~sugih/courses/eecs487/glfw-howto/">this
+how-to</a>.</p>
 
 <p>The main implementation goals are for <mark>Snipe</mark> to:</p>
 
@@ -25,7 +132,7 @@
 <li>be cross-platform</li>
 <li>be fast-loading</li>
 <li>have a single code base</li>
-<li>use a portable binary</li>
+<li>provide portable binaries</li>
 </ul>
 
 <p>A variety of libraries have been tried (in several programming languages) to
@@ -41,12 +148,13 @@ applications. In the end, low level C libraries have been chosen:</p>
 <li><a href="https://www.opengl.org/">OpenGL</a> for graphics rendering</li>
 </ul>
 
-<p>OpenGL is reliably available across most platforms. The only current problems
-with it appear to involve old versions of Windows or obscure features, neither
-of which are relevant to <mark>Snipe</mark>. It is old, which is good for
-supporting old computers. Using Vulkan instead or as well will probably be
-appropriate at some point, to support newer computers, such as Macs which may
-stop supporting OpenGL.</p>
+<p>OpenGL is reliably available across most platforms, without users having to
+install it. The only current problems with it appear to involve old versions of
+Windows or obscure features, neither of which are very relevant to
+<mark>Snipe</mark>. It is old, which is good for supporting old computers.
+Using Vulkan (replacement open standard, not currently widely available without
+installing a driver) or Metal (for Macs only, given that OpenGL may be dropped)
+will probably become appropriate at some point.</p>
 
 <p>To produce reasonably portable binaries for each of the three main platform
 families, Freetype and GLFW are statically linked. The sources of Freetype and
@@ -62,11 +170,11 @@ this choice of low level libraries, are C or C++. C has been chosen as, used
 with care, it is simpler. There are no real practical advantages of C++, given
 that no specific C++ libraries are needed.</p>
 
-<h2>Platforms</h2>
-
 <p>It is desirable to have similar build environments on all three main platform
 families. A command line build environment works well on Linux and MacOS, but
 takes more care to set up on Windows.</p>
+
+<h2>Building on Windows</h2>
 
 <p>The Windows C compiler is avoided, to make sure the same compiler, meeting
 the C11 standard, is used on all platforms. On the other hand, Cygwin is
@@ -86,17 +194,10 @@ buffering. A few Posix functions beyond the C11 standard are required to handle
 directories properly, but fortunately the MSYS2 environment provides what is
 needed.</p>
 
+
+
 <h2>Portability</h2>
 
-<p>Providing reasonably portable binaries, one for each of the three main
-platform families, is a compromise. It avoids the need for users to compile
-<mark>Snipe</mark> from source in most cases. But it also avoids the
-inconvenience of building installer packages for a wide range of platforms, or
-arranging for inclusion in a wide range of distributions. Some general
-information about building OpenGL/GLFW programs for the three main platforms can
-be gleaned from sites like <a
-href="http://web.eecs.umich.edu/~sugih/courses/eecs487/glfw-howto/">this
-how-to</a>.</p>
 
 <p>On Windows, the binary created uses calls to system libraries which have been
 standard for some time, and there are no known difficulties.</p>
