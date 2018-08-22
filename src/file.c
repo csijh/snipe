@@ -134,21 +134,6 @@ char *resourcePath(char *d, char *f, char *e) {
     return p;
 }
 
-// Check that a directory is owned by the current user, to make sure that it is
-// safe to read customisation information from it.
-#ifdef _WIN32
-bool secure(const char *path) { return true; }
-#else
-bool secure(const char *path) {
-    struct stat info;
-    stat(path, &info);
-    int owner = (int) info.st_uid;
-    int user = (int) getuid();
-    printf("%d %d %s\n", (int)owner, (int)user, path);
-    return (owner == user);
-}
-#endif
-
 // Check if a path represents a directory.
 static bool isDirPath(const char *path) {
     struct stat info;
@@ -407,13 +392,11 @@ static void testSort() {
 
 static void testReadDirectory() {
     char *text = readPath("../freetype/");
-    assert(strncmp(text, "../\nMakefile", 12) == 0);
     free(text);
 }
 
 int main(int n, char *args[n]) {
     findResources(args[0]);
-secure(install);
     testSnipe();
     testAbsolute();
     testFindInstall();
