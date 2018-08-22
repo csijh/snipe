@@ -11,7 +11,7 @@
 // Fix tabs at four spaces for now.
 enum { TAB = 4 };
 
-// Reuse the POINT/SELECT flags temopiorarily as indenter/outdenter markers.
+// Reuse the POINT/SELECT flags temporarily as indenter/outdenter markers.
 enum { IN = POINT, OUT = SELECT };
 
 // Match two bracket characters.
@@ -42,33 +42,36 @@ static void matchBrackets(int n, char const line[n], char styles[n]) {
     int stack[n+1];
     make(stack);
     for (int i = 0; i < n; i++) {
-        if (styles[i] != SIGN) continue;
+        if (styles[i] != addStyleFlag(SIGN,START)) continue;
         char c = line[i];
         if (c == '{' || c == '[' || c == '(') {
-            styles[i] = addStyleFlag(SIGN, IN);
+            styles[i] = addStyleFlag(styles[i], IN);
             push(stack, i);
             continue;
         }
         if (c != '}' && c != ']' && c != ')') continue;
-        if (empty(stack)) { styles[i] = addStyleFlag(SIGN, OUT); continue; }
-        int j = pop(stack);
-        if (match(line[j], c)) {
-            styles[j] = styles[i] = SIGN;
+        if (empty(stack)) {
+            styles[i] = addStyleFlag(styles[i], OUT);
             continue;
         }
-        if (styles[j] == BAD) {
+        int j = pop(stack);
+        if (match(line[j], c)) {
+            styles[j] = styles[i] = addStyleFlag(SIGN,START);
+            continue;
+        }
+        if (styles[j] == addStyleFlag(BAD,START)) {
             i--;
             continue;
         }
         if (!empty(stack) && match(line[top(stack)], c)) {
-            styles[j] = BAD;
+            styles[j] = addStyleFlag(BAD,START);
             int k = pop(stack);
-            styles[k] = styles[i] = SIGN;
+            styles[k] = styles[i] = addStyleFlag(SIGN,START);
             continue;
         }
-        styles[j] = BAD;
+        styles[j] = addStyleFlag(BAD,START);
         push(stack,j);
-        styles[i] = BAD;
+        styles[i] = addStyleFlag(BAD,START);
     }
 }
 
@@ -83,49 +86,9 @@ static void countOutIn(int *out, int *in, int n, char styles[n]) {
         if (hasStyleFlag(styles[i], OUT)) *out = *out + 1;
         else if (hasStyleFlag(styles[i], IN)) *in = *in + 1;
         else continue;
-        styles[i] = clearStyleFlags(styles[i]);
+        styles[i] = addStyleFlag(clearStyleFlags(styles[i]), START);
     }
  }
-
-/*
-// Change the indent of a non-blank line to the given amount.
-static void fixIndent(int indent, string **pline, string **pstyles) {
-    string *line = *pline, *styles = *pstyles;
-    int old = 0;
-    for (int i = 0; i < size(line); i++) if (line[i] == ' ') old++;
-    if (old == size(line)) indent = 0;
-    line = *pline = reSize(line, 0, indent-old);
-    styles = *pstyles = reSize(styles, 0, indent - old);
-    for (int i = old; i < indent; i++) {
-        line[i] = ' ';
-        styles[i] = SIGN;
-    }
-    // TODO space out initial brackets.
-}
-
-// A line contains any number of indenters and outdenters. There can't be an
-// outdenter after an indenter, because that would cause a mismatch. There is a
-// running indent carried from line to line. Each outdenter reduces the indent
-// on the current line, and each indenter increases the indent on the following
-// line. TODO: Outdenters or indenters at the start of a line are spaced out,
-// e.g. ...}...} or ...{...{...text. The flags on brackets are removed.
-int autoIndent(int indent, string **linep, string **stylesp) {
-    string *line = *linep, *styles = *stylesp;
-    int n = size(line);
-    int outdenters = 0, indenters = 0;
-    countOutIn(&outdenters, &indenters, n, styles);
-    indent -= outdenters * TAB;
-    if (indent < 0) indent = 0;
-    fixIndent(indent, linep, stylesp);
-    line = *linep; styles = *stylesp;
-    for (int i = 0; i < n; i++) {
-        if (styles[i] == CLOSE || styles[i] == OPEN) styles[i] = SIGN;
-    }
-    indent += indenters * TAB;
-    printf("next indent %d\n", indent);
-    return indent;
-}
-*/
 
 // Match brackets then update the running indent according to the outdenters
 // and indenters. Make the indent zero for a blank line.
@@ -149,7 +112,7 @@ static bool checkMatch(char *line, char *out) {
     int n = strlen(line);
     char styles[n+1];
     styles[n] = '\0';
-    for (int i=0; i<n; i++) styles[i] = SIGN;
+    for (int i=0; i<n; i++) styles[i] = addStyleFlag(SIGN,START);
     matchBrackets(n, line, styles);
     for (int i=0; i<n; i++) {
         if (hasStyleFlag(styles[i], IN)) styles[i] = 'I';
@@ -163,20 +126,20 @@ static bool checkMatch(char *line, char *out) {
 static bool checkIndent(int prev, char *line, int current, int next) {
     int n = strlen(line);
     char styles[n];
-    for (int i=0; i<n; i++) styles[i] = SIGN;
+    for (int i=0; i<n; i++) styles[i] = addStyleFlag(SIGN,START);
     int indent = findIndent(&prev, n, line, styles);
     return (prev == next) && (indent == current);
 }
 
 static void testMatch() {
-    assert(checkMatch("...", "xxx"));
-    assert(checkMatch("()", "xx"));
+    assert(checkMatch("...", "XXX"));
+    assert(checkMatch("()", "XX"));
     assert(checkMatch("(", "I"));
     assert(checkMatch(")", "O"));
-    assert(checkMatch("(]", "bb"));
+    assert(checkMatch("(]", "BB"));
     assert(checkMatch("](", "OI"));
-    assert(checkMatch("[(]", "xbx"));
-    assert(checkMatch("[)]", "xbx"));
+    assert(checkMatch("[(]", "XBX"));
+    assert(checkMatch("[)]", "XBX"));
 }
 
 static void testIndent() {
