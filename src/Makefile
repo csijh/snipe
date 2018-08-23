@@ -6,37 +6,46 @@ Linux := $(findstring Linux, $(shell uname -s))
 MacOS := $(findstring Darwin, $(shell uname -s))
 Windows := $(findstring NT, $(shell uname -s))
 
-# Compiler options to include OpenGL and system libraries needed by GLFW for the
-# Linux/MacOS/Windows platforms.
-ifdef $(Linux)
+# Compiler options to include OpenGL and system libraries needed by GLFW,
+# advanced debugging options where available, and the name of the executable,
+# for the Linux platform.
+ifdef Linux
 	SYS = -lglfw -lGL -lm -ldl -lXrandr -lXinerama -lXcursor -lpthread \
 	-lXxf86vm -lX11
-else ifdef $(MacOS)
+	DEBUG = -fsanitize=address -fsanitize=undefined
+	EXEC = snipe
+endif
+
+# Same for the MacOS platform
+ifdef MacOS
 	MM = mmmm
 	SYS = -lglfw -framework Cocoa -framework IOKit -framework CoreFoundation \
 	-framework CoreVideo -framework OpenGL
-else ifdef $(Windows)
-	SYS = -lopengl32 -lgdi32
-endif
-
-# Advanced debugging options (not easily available on Windows), and the name of
-# the executable file.
-ifdef $(Windows)
-	DEBUG =
-	EXEC = snipe.exe
-else
 	DEBUG = -fsanitize=address -fsanitize=undefined
 	EXEC = snipe
+endif
+
+# Same for the Windows platform
+ifdef Windows
+	SYS = -lopengl32 -lgdi32
+	DEBUG =
+	EXEC = snipe.exe
 endif
 
 # Compiler options to include Freetype, and GLFW.
 FT = -I../freetype/include -L../freetype/objs/ -lfreetype
 GL = -I../glfw/include -L../glfw/lib -lglfw3 $(SYS)
-LIBS = $(FT) $(GL)
 
 # Compiler commands for production compiling, and for test compiling.
 PCC = gcc -std=c11 -o $(EXEC) -O2 -DNDEBUG $@.c
 TCC = gcc -std=c11 -o $(EXEC) -Wall -pedantic -g $(DEBUG) -Dtest_$@ $@.c
+
+# Build a cut down version of freetype (with no dependencies) from source.
+../freetype/objs/libfreetype.a:
+	rm -rf ../freetype/objs
+	mkdir ../freetype/objs
+	cd ../freetype && make setup ansi
+	cd ../freetype && make
 
 # Build the glfw static library (with only system dependencies) from source.
 ../glfw/lib/libglfw3.a:
@@ -48,17 +57,11 @@ TCC = gcc -std=c11 -o $(EXEC) -Wall -pedantic -g $(DEBUG) -Dtest_$@ $@.c
 	rm -rf ../glfw/lib/*
 	mv ../glfw/libglfw3.a ../glfw/lib
 
-# Build a cut down version of freetype (with no dependencies) from source.
-../freetype/objs/libfreetype.a:
-	rm -rf ../freetype/objs
-	mkdir ../freetype/objs
-	cd ../freetype && make setup ansi
-	cd ../freetype && make
-
 # The modules are listed in dependency order.
+# ------------------------------------------
 
 # The modules which are shared by the view and the model.
-UTILS = action.c style.c setting.c string.c list.c file.c
+UTILS = action.c style.c setting.c string.c list.c array.c file.c
 .PHONY: $(UTILS)
 
 file:
@@ -68,7 +71,6 @@ file:
 array:
 	$(TCC)
 	./snipe
-	echo m $(MM)
 
 list:
 	$(TCC)
@@ -111,11 +113,11 @@ handler: ../glfw/lib/libglfw3.a
 	./snipe
 
 display: ../glfw/lib/libglfw3.a
-	$(TCC) handler.c event.c font.c theme.c $(UTILS) $(GL) $(FT)
+	$(TCC) handler.c event.c font.c theme.c $(UTILS) $(FT) $(GL)
 	./snipe
 
 # The modules which form the model.
-MODEL = document.c text.c history.c cursor.c line.c scan.c
+MODEL = document.c text.c history.c cursor.c indent.c scan.c line.c lines.c
 .PHONY: $(MODEL)
 
 lines:
@@ -150,16 +152,22 @@ document:
 	$(TCC) scan.c text.c history.c cursor.c line.c theme.c $(UTILS)
 	./snipe
 
-# The modules which form the controller.
-.PHONY: map snipe
+# The modules which form the controller: snipe is a test version of the whole
+# editor, psnipe is a production version to go in the directory above, zip
+# makes a binary zip file for release.
+.PHONY: map snipe psnipe zip
 
 map:
-	$(TCC) $(MODEL) $(VIEW) $(UTILS) $(LIBS)
+	$(TCC) $(MODEL) $(VIEW) $(UTILS) $(FT) $(GL)
 	./snipe
 
 snipe:
 	cp setting.h style.h event.h action.h Makefile ../help/
-	$(TCC) map.c $(MODEL) $(VIEW) $(UTILS) $(LIBS)
+	$(TCC) map.c $(MODEL) $(VIEW) $(UTILS) $(FT) $(GL)
+
+psnipe:
+	cp setting.h style.h event.h action.h Makefile ../help/
+	$(PCC) map.c $(MODEL) $(VIEW) $(UTILS) $(FT) $(GL)
 
 zip:
 	mv $(EXEC) ..
