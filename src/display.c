@@ -90,7 +90,7 @@ static void initWindow(display *d) {
 }
 
 void setTitle(display *d, char const *path) {
-    char title[strlen(path) + 6];
+    char title[strlen(path) + 7];
     int i = strlen(path) - 1;
     if (i > 0 && path[i-1] == '/') i--;
     while (i > 0 && path[i-1] != '/') i--;
