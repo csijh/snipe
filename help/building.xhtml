@@ -17,13 +17,13 @@
 </head>
 <body>
 
-<h1>Building from source</h1>
+<h1>Building <mark>Snipe</mark> from source</h1>
 
-<p>Binary releases are provided for each of three main platform families. They
-should work for most users. It is the simplest approach, avoiding the
-creation of platform-specific installers or the inclusion of the
-editor in a wide range of software repositories. For other platforms, or
-unusual variations, Snipe has to be compiled from source.</p>
+<p>Binary releases are provided for each of the three main platform families.
+They should work for most users. Binary distribution is the simplest approach,
+avoiding the creation of multiple platform-specific installers or the inclusion
+of the editor in a wide range of software repositories. For other platforms, or
+unusual variations, <mark>Snipe</mark> has to be compiled from source.</p>
 
 <p>If the binary release for your platform doesn't work for you, this is
 almost certainly because there is something awkward about your computer which
@@ -36,11 +36,11 @@ binary release, so that is worth checking first. Otherwise try the
 instructions for the closest platform family. If necessary, check the
 background information at the end of this page.</p>
 
-<h2>General</h2>
+<h2>All platforms</h2>
 
-<p>This applies to all platforms. Download the Snipe source code using the
-source zip file in the latest release. Work in the <code>src</code>
-directory.</p>
+<p>Download the Snipe source code using the source zip file in the latest
+release. Change to the <code>src</code> directory and read the
+<code>Makefile</code>.</p>
 
 <p>Any module can be compiled and tested individually, e.g. the
 <code>file</code> module can be tested with <code>make file</code>. This will
@@ -67,16 +67,18 @@ to be built from the sources provided. This is a complex build, first using
 <code>cmake</code> to configure <code>glfw</code> for your computer, then
 <code>make</code> to compile the result. Finally the compiler arranges to
 dynamically link the resulting program with a collection of system libraries
-(to do with window, mouse and keyboard handling). Although there is a typical
-list of libraries in the Makefile, the list does differ between computers, and
-this is the most likely problem area.</p>
+(to do with keyboard, mouse and window handling).</p>
 
 <p>The command <code>make display</code> causes the OpenGL library to be
 linked, as well as <code>glfw</code>. As long as OpenGL is available on
 your computer, this is likely to work. If not, it is possible that further
 system libraries are needed.</p>
 
-<h2>Linux or other Unix-based systems</h2>
+<p>Although there is a typical list of system libraries to link with in the
+Makefile (in the <code>SYS</code> variable), the list does differ between
+computers, and this is the most likely problem area.</p>
+
+<h2>Linux</h2>
 
 <p>First make sure <code>git</code>, <code>make</code> and <code>cmake</code>
 are installed, or install them with commands such as <code>sudo apt install
@@ -84,47 +86,74 @@ git</code> or equivalent.</p>
 
 <p>Check that the command
 <code>uname -s</code> produces something containing <code>Linux</code> or
-change
-<code>Makefile</code> so that it recognizes whatever is produced. Change
+change the
+Makefile so that it recognizes whatever is produced. Change
 <code>gcc</code> in the <code>Makefile</code> to <code>clang</code> if it
 helps (e.g. if your <code>gcc</code> is old and difficult to upgrade, so
 that installing <code>clang</code> is a better option).</p>
 
 <p>One way to find the necessary libraries (in fact the technique used to
 create the original list) is to install <code>glfw3</code> temporarily
-with a command such as <code>sudo apt install libglfw3-dev libglfw3</code>
+with a command such as <code>sudo apt install glfw3</code> (or
+<code>libglfw3</code> or <code>libglfw3-dev</code>).
 and then use <code>pkg-config --static --libs glfw3</code> to list the
-libraries needed for dynamic linking when <code>glfw</code> is compiled
-statically into a program, as with Snipe. The libraries can be copied into the
-Makefile. If that works, they can be deleted one by one to see which ones
-are actually necessary.</p>
+libraries needed by the static version of <code>glfw</code>. The list is
+unlikely to be completely correct, but may contain clues. Libraries can be
+copied into the Makefile and, if that works, they can be deleted one by one to
+see which ones are actually necessary.</p>
 
-<h2>Macs</h2>
+<h2>MacOS</h2>
 
-<p>The first step is to install <code>homebrew</code> from its web site. This
+<p>The first step is to find the terminal app, in applications/utilities.
+Then install <code>homebrew</code> from its web site. This
 has three good effects. Installing it causes the command line tools associated
-with XCode to be installed (without the IDE which is not recommended for
-cross-platform programmers). It provides the command <code>brew</code> which
+with XCode to be installed (but not the IDE, which is not recommended for
+cross-platform programmers anyway). It provides the command <code>brew</code>
+which
 acts as a package manager to install further software. And it provides
 the command <code>brew doctor</code> which checks consistency of installed
-software, and suggests fixes if it finds problems. Install <code>cmake</code>
+software, and suggests fixes if it finds problems.</p>
+
+<p>Install <code>cmake</code>
 with <code>brew install cmake</code>. The commands <code>git</code> and
 <code>make</code> should be already installed. The <code>gcc</code> command
-is probably a synonym for the Mac version of <code>clang</code>.</p>
-
-<p>Download the Snipe source using the source zip file in the latest release.
-Work in the <code>src</code> directory. Check that the command
+is probably a synonym for the Mac version of <code>clang</code>. Check that the
+command
 <code>uname -s</code> produces something containing <code>Darwin</code> or
-change
-<code>Makefile</code> so that it recognizes whatever is produced.</p>
+change the
+Makefile so that it recognizes whatever is produced.</p>
 
-<h2>Introduction</h2>
+<p>If missing libraries or frameworks are preventing compilation, then
+install <code>glfw3</code> temporarily with <code>brew install glfw3</code>
+then type <code>pkg-config --static --libs glfw3</code> to find a list
+of libraries and frameworks needed by the static version of <code>glfw</code>
+that may help to track down the problem.</p>
 
-<p>Some general
-information about building OpenGL/GLFW programs for the three main platforms can
-be gleaned from sites like <a
-href="http://web.eecs.umich.edu/~sugih/courses/eecs487/glfw-howto/">this
-how-to</a>.</p>
+<h2>Windows</h2>
+
+<p>The Windows C compiler MSVC (included with Visual Studio) is
+unsuitable because it focusses on C++ and only supports the "embedded
+processor" part of the C90 standard, and not C99 or C11. Cygwin is unsuitable,
+because it depends on a large extra DLL, and
+the X11-based graphics is very clunky and unreliable.</p>
+
+<p>Instead, MSYS2 is recommended, which is built on <code>mingw-w64</code>,
+adding a shell window and the <code>pacman</code> package manager. Install
+MSYS2 from its web site. When setting up MSYS2, take care to
+install <code>mingw-w64-x86_64-gcc</code> rather than the default version of
+<code>gcc</code>, to support native compiling and avoid the need for a
+Cygwin-like DLL. Similarly, install <code>mingw64/mingw-w64-x86_64-cmake</code>
+rather than the default <code>cmake</code>, and so on for any tools you
+need.</p>
+
+<p>The list of system libraries is short, and unlikely to cause difficulties.
+If there is a problem, it is difficult to give advice on tracking it
+down. As with the other platforms, it may help to install
+<code>pkg-config</code> and <code>glfw3</code> using <code>pacman</code>, and
+see whether the list of libraries produced by <code>pkg-config --static --libs
+glfw3</code> helps.</p>
+
+<h2>Background</h2>
 
 <p>The main implementation goals are for <mark>Snipe</mark> to:</p>
 
@@ -149,16 +178,27 @@ applications. In the end, low level C libraries have been chosen:</p>
 </ul>
 
 <p>OpenGL is reliably available across most platforms, without users having to
-install it. The only current problems with it appear to involve old versions of
-Windows or obscure features, neither of which are very relevant to
-<mark>Snipe</mark>. It is old, which is good for supporting old computers.
-Using Vulkan (replacement open standard, not currently widely available without
-installing a driver) or Metal (for Macs only, given that OpenGL may be dropped)
-will probably become appropriate at some point.</p>
+install it. The most likely problems are with very old or very new computers.
+Perhaps the biggest
+threat is the move to make OpenGL deprecated on new Macs. Eventually OpenGL
+won't be supported directly any more. The open source upgrade to OpenGL is
+Vulkan, but it is not generally available yet, so that users would have to
+find and install a Vulkan driver. It is, however, starting to be supported by
+GLFW and there is an open source tool to run it on newer Macs. Alternatively,
+Metal (Macs only) or something like MoltenGL (not free) could be used.</p>
+
+<p>Some general
+information about building OpenGL/GLFW programs for the three main platforms can
+be gleaned from sites like <a
+href="http://web.eecs.umich.edu/~sugih/courses/eecs487/glfw-howto/">this
+how-to</a>.</p>
+
+<h3>Portability</h3>
 
 <p>To produce reasonably portable binaries for each of the three main platform
 families, Freetype and GLFW are statically linked. The sources of Freetype and
-GLFW are included with the project. Freetype is cut down to a minimum,
+GLFW are included with the <mark>Snipe</mark> project. Freetype is cut down to
+a minimum,
 supporting only <code>.ttf</code> font files, so that it becomes small and has
 no further dependencies. OpenGL (which is effectively a device driver and
 therefore not portable, even within the same platform family), and the standard
@@ -170,40 +210,45 @@ this choice of low level libraries, are C or C++. C has been chosen as, used
 with care, it is simpler. There are no real practical advantages of C++, given
 that no specific C++ libraries are needed.</p>
 
-<p>It is desirable to have similar build environments on all three main platform
-families. A command line build environment works well on Linux and MacOS, but
-takes more care to set up on Windows.</p>
+<p>To meet the C11 standard uniformly across platforms, especially Windows,
+the <code>long</code> type is avoided, and very careful use is made of C
+library functions. Also <code>setbuf(stdout,NULL)</code> is included in every
+<code>main</code>, in case <code>stdout</code> is not recognized as interactive
+and so gets treated as buffered
+(which happens on MSYS2). A few Posix functions beyond the C11 standard are
+required to handle directories properly, but fortunately all the recommended
+platform environments provide what is needed.</p>
 
-<h2>Building on Windows</h2>
+<h3>Design and development</h3>
 
-<p>The Windows C compiler is avoided, to make sure the same compiler, meeting
-the C11 standard, is used on all platforms. On the other hand, Cygwin is
-unsuitable, because of the need to create a native binary with convenient
-graphics testing and without a large extra DLL. Instead, MSYS2 is used, which is
-built on <code>mingw-w64</code>, adding a shell window and the
-<code>pacman</code> package manager. When setting up MSYS2, care is taken to
-install <code>mingw-w64-x86_64-gcc</code> rather than the default version of
-<code>gcc</code> to support native compiling and avoid the need for a
-Cygwin-like DLL. Similarly, <code>mingw64/mingw-w64-x86_64-cmake</code> is
-installed rather than the default <code>cmake</code>, and so on. To meet the C11
-standard uniformly across platforms, the <code>long</code> type is avoided, and
-very careful use is made of C library functions. Also
-<code>setbuf(stdout,NULL)</code> is included in every <code>main</code>, to
-counter the indirect handling of <code>stdout</code> on MSYS2, which causes
-buffering. A few Posix functions beyond the C11 standard are required to handle
-directories properly, but fortunately the MSYS2 environment provides what is
-needed.</p>
+<p><mark>Snipe</mark> is implemented using small and well-encapsulated modules,
+with low dependencies and no dependency cycles, each including its own unit
+testing. The main dependency issue is how the logic of a program (the model) and
+the graphics (the view) are related. The style chosen for <mark>Snipe</mark> is
+to divide all the modules into four main groups:</p>
 
+<img src="MVC.png" />
 
+<p>The controller asks for events from the view, sends them as actions to the
+model, then asks the model for data to send to the view to update it. This is a
+variant of the Model-View-Controller design pattern, with lower dependencies
+than usual. Usually, the model and view are described as depending on each
+other, but dependency cycles like that make development unreasonably difficult.
+Alternatively, the model is said to depend on the view, but that makes
+everything depend on graphics, so that unit testing is unreasonably difficult.
+And sometimes the view is said to depend on the model, especially in high level
+graphics libraries, but that often leads to an over-complex view where it is
+difficult to unplug one graphics library and plug in a different one.</p>
 
-<h2>Portability</h2>
+<p>The detailed list of modules and their dependencies is recorded in only one
+definitive place, the <a href="Makefile">Makefile</a>. The modules are listed
+there in dependency order, with each depending only on the modules above so
+that, in any development step, the modules can be upgraded and tested one by one
+in the order listed.</p>
 
-
-<p>On Windows, the binary created uses calls to system libraries which have been
-standard for some time, and there are no known difficulties.</p>
-
-<p>MacOS has yet to be tackled, but the situation is expected to be similar to
-Linux.</p>
+<p>On each platform, the binary produced should work across a reasonable range
+of computers. If simple techniques are found to increase the range, they can
+be added.</p>
 
 <!--
 <p>To create a single Linux binary which covers a reasonable range of Linux
@@ -217,32 +262,8 @@ problem functions are declared as older versions, making the binary compatible
 with more platforms. This requires the <code>asm</code> feature of
 <code>gcc</code> but avoids the need for a special build environment.</p>
 -->
-<h2>Dependencies</h2>
 
-<p><mark>Snipe</mark> is implemented using small and well-encapsulated modules,
-with low dependencies and no dependency cycles, each including its own unit
-testing. The main dependency issue is how the logic of a program (the model) and
-the graphics (the view) are related. The style chosen for <mark>Snipe</mark> is
-to divide all the modules into four main groups:</p>
-
-<img src="MVC.png" />
-
-<p>The controller asks for events from the view, sends them as actions to the
-model, then asks the model for data to send to the view to update it. This is a
-variant of the Model-View-Controller design pattern, with lower dependencies
-than usual. This avoids any cyclic dependency, especially between the view and
-the model, which would make development unreasonably difficult. It avoids having
-a lot of modules dependent on graphics, which would make testing unreasonably
-difficult. And it avoids having the view depend on anything much other than
-graphics library facilities, which helps to keep it simple and independent.</p>
-
-<p>The detailed list of modules and their dependencies is recorded in only one
-definitive place, the <a href="Makefile">Makefile</a>. The modules are listed
-there in dependency order, with each depending only on the modules above so
-that, in any development step, the modules can be upgraded and tested one by one
-in the order listed.</p>
-
-<h2>Style of C</h2>
+<h3>Style of C</h3>
 
 <p>To make modules independent, and their dependencies clear, each module has
 its own header file which defines its API. None of the module headers mention
