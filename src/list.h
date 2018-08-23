@@ -1,8 +1,10 @@
 // The Snipe editor is free and open source, see licence.txt.
 
-// A list is a generic variable length array. Specific list types are defined
-// as synonyms, replacing newList() and A() by type-specific versions. A few
-// list types are defined here, and more can be defined as required.
+// A list is a generic variable length array. Generic functions are provided,
+// and some specific list types are defined as synonyms, with their own
+// type-specific functions. Further specific types can be defined as required.
+// A minor form of dynamic type checking is provided to counteract the lack
+// of compile time type security.
 struct list;
 typedef struct list list;
 
@@ -29,6 +31,8 @@ list *newList(char type, int itemSize);
 // Free up a list and its array. To freeze a list, extract the array and call
 // free(xs) instead.
 void freeList(list *xs);
+
+// Find a pointer to the i'th element of a list.
 
 // Provide direct access to the array. The array is only valid until the next
 // resize. This function can be wrapped for each list type to allow indexing,
