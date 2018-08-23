@@ -134,7 +134,7 @@ chars *getStyle(document *d, int row) {
     int runIndent = 0;
     if (row > 0) runIndent = I(indents)[row-1];
     int indent = findIndent(&runIndent, n, C(d->line), C(d->lineStyles));
-    printf("%d %d\n", row, indent);
+    (void)indent;
     return d->lineStyles;
 }
 
