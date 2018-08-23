@@ -22,6 +22,7 @@ void freeText(text *t);
 ints *getLines(text *t);
 cursors *getCursors(text *t);
 chars *getStyles(text *t);
+ints *getIndents(text *t);
 
 // Return the number of bytes.
 int lengthText(text *t);

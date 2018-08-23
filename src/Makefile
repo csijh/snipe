@@ -149,7 +149,7 @@ text:
 	./snipe
 
 document:
-	$(TCC) scan.c text.c history.c cursor.c line.c theme.c $(UTILS)
+	$(TCC) scan.c indent.c text.c history.c cursor.c line.c theme.c $(UTILS)
 	./snipe
 
 # The modules which form the controller: snipe is a test version of the whole

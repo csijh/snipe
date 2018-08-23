@@ -43,6 +43,7 @@ void freeText(text *t) {
     if (t == NULL) return;
     free(t->data);
     freeList(t->lines);
+    freeList(t->indents);
     freeList(t->styles);
     freeCursors(t->cs);
     free(t);
@@ -246,6 +247,7 @@ static text *emptyText() {
     *t = (text) { .lo = 1, .hi = size, .end = size, .data = data };
     t->lines = newInts();
     t->styles = newChars();
+    t->indents = newInts();
     t->cs = newCursors(t->lines, t->styles);
     insertLines(t, 0, data);
     return t;
@@ -261,6 +263,7 @@ text *readText(char const *path) {
     text *t = malloc(sizeof(text));
     *t = (text) { .lo = size, .hi = size + 1, .end = size + 1, .data = data };
     t->lines = newInts();
+    t->indents = newInts();
     t->styles = newChars();
     t->cs = newCursors(t->lines, t->styles);
     insertLines(t, 0, data);

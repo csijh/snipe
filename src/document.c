@@ -2,6 +2,7 @@
 #include "document.h"
 #include "action.h"
 #include "scan.h"
+#include "indent.h"
 #include "line.h"
 #include "history.h"
 #include "string.h"
@@ -121,11 +122,19 @@ chars *getStyle(document *d, int row) {
         assert(length(styles) >= p);
         resize(styles, p + n);
         memcpy(&C(styles)[p], C(d->lineStyles), n);
+        int runIndent = 0;
+        if (r > 0) runIndent = I(indents)[r-1];
+        findIndent(&runIndent, n, C(d->line), C(d->lineStyles));
+        I(indents)[r] = runIndent;
     }
     int n = getWidth(d, row);
     int p = startLine(lines, row);
     resize(d->lineStyles, n);
     memcpy(C(d->lineStyles), &C(styles)[p], n);
+    int runIndent = 0;
+    if (row > 0) runIndent = I(indents)[row-1];
+    int indent = findIndent(&runIndent, n, C(d->line), C(d->lineStyles));
+    printf("%d %d\n", row, indent);
     return d->lineStyles;
 }
 
