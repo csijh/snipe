@@ -110,7 +110,9 @@ chars *getLine(document *d, int row) {
 chars *getStyle(document *d, int row) {
     ints *lines = getLines(d->content);
     chars *styles = getStyles(d->content);
+    ints *indents = getIndents(d->content);
     int unstyled = findRow(lines, length(styles));
+    resize(indents, row + 1);
     for (int r = unstyled; r <= row; r++) {
         int p = startLine(lines, r);
         int n = getWidth(d, r);

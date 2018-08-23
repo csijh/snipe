@@ -17,6 +17,7 @@ struct text {
     char *data;
     int lo, hi, end;
     ints *lines;
+    ints *indents;
     chars *styles;
     cursors *cs;
 };
@@ -32,6 +33,7 @@ text *newText() {
     char *data = malloc(n);
     *t = (text) { .lo = 0, .hi = n, .end = n, .data = data };
     t->lines = newInts();
+    t->indents = newInts();
     t->styles = newChars();
     t->cs = newCursors(t->lines, t->styles);
     return t;
@@ -48,6 +50,10 @@ void freeText(text *t) {
 
 ints *getLines(text *t) {
     return t->lines;
+}
+
+ints *getIndents(text *t) {
+    return t->indents;
 }
 
 chars *getStyles(text *t) {
