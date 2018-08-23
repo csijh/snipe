@@ -19,7 +19,7 @@ endif
 # Same for the MacOS platform
 ifdef MacOS
 	MM = mmmm
-	SYS = -lglfw -framework Cocoa -framework IOKit -framework CoreFoundation \
+	SYS = -framework Cocoa -framework IOKit -framework CoreFoundation \
 	-framework CoreVideo -framework OpenGL
 	DEBUG = -fsanitize=address -fsanitize=undefined
 	EXEC = snipe
