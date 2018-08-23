@@ -10,7 +10,7 @@ Windows := $(findstring NT, $(shell uname -s))
 # advanced debugging options where available, and the name of the executable,
 # for the Linux platform.
 ifdef Linux
-	SYS = -lglfw -lGL -lm -ldl -lXrandr -lXinerama -lXcursor -lpthread \
+	SYS = -lGL -lm -ldl -lXrandr -lXinerama -lXcursor -lpthread \
 	-lXxf86vm -lX11
 	DEBUG = -fsanitize=address -fsanitize=undefined
 	EXEC = snipe
