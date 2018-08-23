@@ -79,24 +79,27 @@ void setLineEnd(lines *ls, int row, int p) {
 
 void setLineEndState(lines *ls, int row, int s) {
     ls[row].endState = s;
+    assert(validLines(ls) >= row - 1);
+    setValid(ls, row + 1);
 }
 
 void setLineEndIndent(lines *ls, int row, int i) {
     ls[row].endIndent = i;
 }
 
-/*
-
-// Set the info at the end of line (and the start of the next line).
-void setLineEnd(lines *ls, int row, int p);
-void setLineEndState(lines *ls, int row, int p);
-void setLineEndIndent(lines *ls, int row, int p);
-*/
-
 #ifdef test_lines
 
 int main() {
     setbuf(stdout, NULL);
+    lines *ls = newLines();
+    assert(validLines(ls) == 0);
+    addLines(&ls, 0, 5);
+    assert(validLines(ls) == 0);
+    for (int i=0; i<5; i++) setLineEndState(ls, i, i);
+    assert(lineState(ls, 4) == 3);
+    assert(validLines(ls) == 5);
+    addLines(&ls, 5, 200);
+    assert(validLines(ls) == 5);
     printf("Lines module OK\n");
 }
 
