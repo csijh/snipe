@@ -106,10 +106,10 @@ int maxRow(cursors *cs) {
 static inline bool selecting(cursor *c) { return c->from != c->at; }
 
 // Collapse the selection forwards.
-static inline void collapseF(cursor *c) { c->from = c->at; }
+//static inline void collapseF(cursor *c) { c->from = c->at; }
 
 // Collapse the selection backwards.
-static inline void collapseB(cursor *c) { c->at = c->from; }
+//static inline void collapseB(cursor *c) { c->at = c->from; }
 
 // Collapse the selection leftwards.
 static inline void collapseL(cursor *c) {
