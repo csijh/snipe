@@ -83,7 +83,6 @@ static void resizeText(text *t, int n) {
 
 // Move the gap to the given position.
 static void moveGap(text *t, int p) {
-    if (p > lengthText(t)) *((char *)NULL) = '!';
     assert(p <= lengthText(t));
     if (p < t->lo) {
         int len = (t->lo - p);
