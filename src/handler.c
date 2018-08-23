@@ -36,6 +36,9 @@ struct handler {
     double blinkRate, saveRate;
     double blinkTime, saveTime;
     bool frameTime, focused;
+    dispatcher *dispatch;
+    map *m;
+    char t[5];
 };
 
 // Prepare to add an event to the queue, returning a pointer to the next slot.
@@ -82,9 +85,8 @@ void clip(handler *h, char const *s) {
 // completion of a platform input method for an ideographic language.
 static void charCB(GLFWwindow *w, unsigned int unicode) {
     handler *h = glfwGetWindowUserPointer(w);
-    eventData *ed = push(h);
-    ed->tag = TEXT;
-    putUTF8(unicode, ed->c);
+    putUTF8(unicode, h->t);
+    h->dispatch(h->m, TEXT, 0, 0, h->t);
 }
 
 // Convert a GLFW key to a character, or return -1, in a control key situation.
@@ -118,8 +120,7 @@ int getChar(int key) {
 static bool controlText(handler *h, int key) {
     char ch = getChar(key);
     if (ch < 0) return false;
-    eventData *ed = push(h);
-    ed->tag = addEventFlag(C_, ch);
+    h->dispatch(h->m, addEventFlag(C_, ch), 0, 0, NULL);
     return true;
 }
 
@@ -185,8 +186,7 @@ static void keyCB(GLFWwindow *w, int key, int code, int action, int mods) {
     if (e < 0) return;
     if (shift) e = addEventFlag(S_, e);
     if (ctrl) e = addEventFlag(C_, e);
-    eventData *ed = push(h);
-    ed->tag = e;
+    h->dispatch(h->m, e, 0, 0, NULL);
 }
 
 // ---- Mouse ------------------------------------------------------------------
@@ -202,17 +202,16 @@ static void mouseCB(GLFWwindow *w, int button, int action, int mods) {
     event e = (action == GLFW_PRESS) ? CLICK : DRAG;
     if (shift) e = addEventFlag(S_, e);
     if (ctrl) e = addEventFlag(C_, e);
-    eventData *ed = push(h);
-    ed->tag = e;
     double dx, dy;
     glfwGetCursorPos(w, &dx, &dy);
-    ed->p.x = (int) dx;
-    ed->p.y = (int) dy;
+    int x = (int) dx;
+    int y = (int) dy;
+    h->dispatch(h->m, e, x, y, NULL);
 }
 
 // Callback for scroll wheel or touchpad scroll gesture events. Modifier info is
 // not directly available, so ask for it.
-static void scrollCB(GLFWwindow *w, double x, double y) {
+static void scrollCB(GLFWwindow *w, double dx, double dy) {
     handler *h = glfwGetWindowUserPointer(w);
     bool shift =
         glfwGetKey(w, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
@@ -227,10 +226,9 @@ static void scrollCB(GLFWwindow *w, double x, double y) {
     else e = LINE_DOWN;
     if (shift) e = addEventFlag(S_, e);
     if (ctrl) e = addEventFlag(C_, e);
-    eventData *ed = push(h);
-    ed->tag = e;
-    ed->p.x = (int) x;
-    ed->p.y = (int) y;
+    int x = (int) dx;
+    int y = (int) dy;
+    h->dispatch(h->m, e, x, y, NULL);
 }
 
 // ---- Window -----------------------------------------------------------------
@@ -238,8 +236,7 @@ static void scrollCB(GLFWwindow *w, double x, double y) {
 // Callback for pressing the close-window button.
 static void closeCB(GLFWwindow *w) {
     handler *h = glfwGetWindowUserPointer(w);
-    eventData *ed = push(h);
-    ed->tag = QUIT;
+    h->dispatch(h->m, QUIT, 0, 0, NULL);
 }
 
 // Callback for resize.
@@ -259,7 +256,7 @@ static void focusCB(GLFWwindow *w, int focused) {
 }
 
 // Create handler and set up all the desired callbacks.
-handler *newHandler(void *w) {
+handler *newHandler(void *w, dispatcher *f, map *m) {
     handler *h = malloc(sizeof(handler));
     h->w = w;
     h->head = h->tail = 0;
@@ -269,13 +266,14 @@ handler *newHandler(void *w) {
     h->saveTime = h->saveRate;
     h->frameTime = false;
     h->focused = true;
+    h->dispatch = f;
+    h->m = m;
     glfwSetWindowUserPointer(h->w, h);
     glfwSetKeyCallback(h->w, keyCB);
     glfwSetCharCallback(h->w, charCB);
     glfwSetMouseButtonCallback(h->w, mouseCB);
     glfwSetScrollCallback(h->w, scrollCB);
     glfwSetWindowCloseCallback(h->w, closeCB);
-//    glfwSetWindowRefreshCallback(h->w, redrawCB);
     glfwSetWindowSizeCallback(h->w, resizeCB);
     glfwSetWindowFocusCallback(h->w, focusCB);
     return h;

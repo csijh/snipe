@@ -36,14 +36,10 @@ static void freeSnipe(snipe *s) {
 }
 
 // TODO: scrolling:
-// - keep a scrolling target, top row to be displayed, in the document,
-// - transfer the row height of the window to the document.
 // - the scroll position takes account of cursors below the last line.
 // - the scroll position tries to keep the main cursor in view.
 // - PageUp/PageDown change the cursor position and scroll position
 // - mouse or keyboard-scroll just change the scroll position.
-// - the display scrolls smoothly towards the target position
-// - the display scrolls faster if the target is further
 
 // Redraw the window after a change of any kind. Transfer the scroll target,
 // text, and style to the display.
