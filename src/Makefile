@@ -37,6 +37,7 @@ FT = -I../freetype/include -L../freetype/objs/ -lfreetype
 GL = -I../glfw/include -L../glfw/lib -lglfw3 $(SYS)
 
 # Compiler commands for production compiling, and for test compiling.
+# The gcc compiler ca be replaced by clang, if desired.
 PCC = gcc -std=c11 -o $(EXEC) -O2 -DNDEBUG $@.c
 TCC = gcc -std=c11 -o $(EXEC) -Wall -pedantic -g $(DEBUG) -Dtest_$@ $@.c
 
