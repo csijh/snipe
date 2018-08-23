@@ -487,7 +487,7 @@ int main(int n, char *args[n]) {
     setbuf(stdout, NULL);
     findResources(args[0]);
     testReadLine();
-    TRACE = true;
+    TRACE = false;
     if (TRACE) trace();
     else test();
     printf("Scan module OK\n");
