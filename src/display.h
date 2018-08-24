@@ -22,6 +22,9 @@ display *newDisplay(char const *path);
 // Free up the display object and its contents.
 void freeDisplay(display *d);
 
+// Set up a dispatcher for immediate event handling.
+void setDispatcher(display *d, dispatcher *f, map *m);
+
 // Set the window title according to the current file path.
 void setTitle(display *d, char const *path);
 

@@ -171,6 +171,10 @@ void freeDisplay(display *d) {
     free(d);
 }
 
+void setDispatcher(display *d, dispatcher *f, map *m) {
+    setCallback(d->h, f, m);
+}
+
 void bigger(display *d) {
     if (d->fontSize <= 35) d->fontSize++;
     setSize(d);

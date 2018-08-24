@@ -16,5 +16,8 @@ map *newMap(document *doc, display *dis, bool testing);
 // Free up the map.
 void freeMap(map *m);
 
+// Redraw the display from the document data.
+void redraw(map *m);
+
 // Offer an action both to the document and to the display.
 bool dispatch(map *m, event e, int r, int c, char const *t);

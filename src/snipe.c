@@ -25,6 +25,7 @@ static snipe *newSnipe(char const *path, bool testing) {
     s->dis = newDisplay(path);
     s->doc = newDocument(path);
     s->m = newMap(s->doc, s->dis, testing);
+    setDispatcher(s->dis, dispatch, s->m);
     return s;
 }
 
@@ -45,36 +46,18 @@ static void freeSnipe(snipe *s) {
 // - the display scrolls smoothly towards the target position
 // - the display scrolls faster if the target is further
 
-// Redraw the window after a change of any kind. Transfer the scroll target,
-// text, and style to the display.
-static void redraw(snipe *s) {
-    int topRow = getScrollTarget(s->doc);
-    setScrollTarget(s->dis, topRow);
-    int height = getHeight(s->doc);
-    for (int r = firstRow(s->dis); r <= lastRow(s->dis); r++) {
-        if (r > height) break;
-        int n = getWidth(s->doc, r);
-        chars *line = getLine(s->doc, r);
-        chars *st = getStyle(s->doc, r);
-        addCursorFlags(s->doc, r, n, st);
-        drawLine(s->dis, r, length(line), C(line), C(st));
-    }
-    showFrame(s->dis);
-}
-
 // The main loop is a pure event loop, because all timer ticks are included in
 // the event stream. In particular, when scrolling, animation ticks make the
 // loop act like an animation loop.
 static void run(snipe *s) {
     bool quitting = false;
-    redraw(s);
+    redraw(s->m);
     while (! quitting) {
         int r, c;
         char const *t;
         event e = getEvent(s->dis, &r, &c, &t);
 //        if (e == QUIT) quitting = true;
         quitting = dispatch(s->m, e, r, c, t);
-        redraw(s);
     }
 }
 

@@ -12,7 +12,10 @@
 // Event handling is implemented using GLFW. GLFW callbacks are converted into
 // events using an explicit custom event queue (as in GLFW/GLEQ). Timer events,
 // including animation frame events during scrolling, are included so that the
-// main program loop becomes a pure event loop.
+// main program loop becomes a pure event loop. During a long user gesture
+// such as resizng the window or trackpad scrolling, the program freezes other
+// than for the callbacks. So these callbacks are allowed to process the event
+// inside the callback.
 
 // The size of the event queue.
 enum { SIZE = 1000 };
@@ -36,6 +39,8 @@ struct handler {
     double blinkRate, saveRate;
     double blinkTime, saveTime;
     bool frameTime, focused;
+    dispatcher *dispatch;
+    map *m;
 };
 
 // Prepare to add an event to the queue, returning a pointer to the next slot.
@@ -245,8 +250,9 @@ static void closeCB(GLFWwindow *w) {
 // Callback for resize.
 static void resizeCB(GLFWwindow *w, int width, int height) {
     handler *h = glfwGetWindowUserPointer(w);
-    eventData *ed = push(h);
-    ed->tag = RESIZE;
+    h->dispatch(h->m, RESIZE, 0, 0, NULL);
+//    eventData *ed = push(h);
+//    ed->tag = RESIZE;
 }
 
 // Generate one last blink event before they are switched off, to make sure the
@@ -275,14 +281,20 @@ handler *newHandler(void *w) {
     glfwSetMouseButtonCallback(h->w, mouseCB);
     glfwSetScrollCallback(h->w, scrollCB);
     glfwSetWindowCloseCallback(h->w, closeCB);
-//    glfwSetWindowRefreshCallback(h->w, redrawCB);
-    glfwSetWindowSizeCallback(h->w, resizeCB);
+//    glfwSetWindowSizeCallback(h->w, resizeCB);
     glfwSetWindowFocusCallback(h->w, focusCB);
     return h;
 }
 
 void freeHandler(handler *h) {
     free(h);
+}
+
+void setCallback(handler *h, dispatcher *f, map *m) {
+    h->dispatch = f;
+    h->m = m;
+    glfwSetWindowSizeCallback(h->w, resizeCB);
+
 }
 
 void setBlinkRate(handler *h, double br) {
@@ -325,7 +337,10 @@ event getRawEvent(handler *h, int *x, int *y, char const **t) {
             if (h->blinkTime < time - h->blinkRate) h->blinkTime = time;
             h->blinkTime += h->blinkRate; return BLINK;
         }
-        if (time > h->saveTime) { h->saveTime += h->saveRate; return SAVE; }
+        if (time > h->saveTime) {
+            h->saveTime += h->saveRate;
+            return SAVE;
+        }
         double min = h->saveTime;
         if (h->focused && h->blinkRate > 0 && h->blinkTime < h->saveTime) {
             min = h->blinkTime;

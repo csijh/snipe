@@ -73,6 +73,23 @@ void freeMap(map *m) {
     free(m);
 }
 
+// Redraw the window after a change of any kind. Transfer the scroll target,
+// text, and style to the display.
+void redraw(map *m) {
+    int topRow = getScrollTarget(m->doc);
+    setScrollTarget(m->dis, topRow);
+    int height = getHeight(m->doc);
+    for (int r = firstRow(m->dis); r <= lastRow(m->dis); r++) {
+        if (r > height) break;
+        int n = getWidth(m->doc, r);
+        chars *line = getLine(m->doc, r);
+        chars *st = getStyle(m->doc, r);
+        addCursorFlags(m->doc, r, n, st);
+        drawLine(m->dis, r, length(line), C(line), C(st));
+    }
+    showFrame(m->dis);
+}
+
 // Offer an action to the document, then the display, return whether quitting.
 bool dispatch(map *m, event e, int r, int c, char const *t) {
     action a;
@@ -90,6 +107,7 @@ bool dispatch(map *m, event e, int r, int c, char const *t) {
     char const *copy = actOnDocument(m->doc, a);
     actOnDisplay(m->dis, a, copy);
     if (a == Open || a == Load) setTitle(m->dis, getPath(m->doc));
+    redraw(m);
     return a == Quit;
 }
 
