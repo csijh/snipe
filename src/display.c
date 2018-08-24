@@ -99,6 +99,25 @@ void setTitle(display *d, char const *path) {
     glfwSetWindowTitle(d->gw, title);
 }
 
+// Get OpenGL ready for drawing, based on the display metrics. Set up an
+// orthogonal projection, with y reversed so 2D graphics (right,down) pixel
+// coordinates can be used.
+static void setupGL(display *d) {
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexImage2D(
+        GL_TEXTURE_2D, 0, GL_RGBA, pageWidth(d->p), pageHeight(d->p), 0,
+        GL_RGBA, GL_UNSIGNED_BYTE, pageImage(d->p)
+    );
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glOrtho(0, d->width, d->height, 0, -1, 1);
+    glViewport(0, 0, d->width, d->height);
+    glfwSetWindowSize(d->gw, d->width, d->height);
+    glfwShowWindow(d->gw);
+    checkGLError();
+}
+
 // Set or change the size of the window as the result of a user window resize or
 // a change of font size. Calculate the display metrics. Load the font image
 // into a texture. Set up an orthogonal projection, with y reversed so 2D
@@ -115,19 +134,7 @@ static void setSize(display *d) {
     d->scrollTarget = targetRow * d->charHeight;
     d->scroll = d->scrollTarget;
     glBindTexture(GL_TEXTURE_2D, d->fontTextureId);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexImage2D(
-        GL_TEXTURE_2D, 0, GL_RGBA, pageWidth(d->p), pageHeight(d->p), 0,
-        GL_RGBA, GL_UNSIGNED_BYTE, pageImage(d->p)
-    );
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    glOrtho(0, d->width, d->height, 0, -1, 1);
-    glViewport(0, 0, d->width, d->height);
-    glfwSetWindowSize(d->gw, d->width, d->height);
-    glfwShowWindow(d->gw);
-    checkGLError();
+    setupGL(d);
 }
 
 static void paintBackground(display *d) {
@@ -266,11 +273,13 @@ static void checkResize(display *d) {
     glfwGetWindowSize(d->gw, &width, &height);
     int cols = (width - 2 * d->pad) / d->charWidth;
     int rows = (height - d->pad) / d->charHeight;
+    d->width = width;
+    d->height = height;
     if (cols != d->cols || rows != d->rows) {
         d->cols = cols;
         d->rows = rows;
-        setSize(d);
     }
+    setupGL(d);
     d->showSize = 5;
     drawSize(d);
 }
