@@ -13,17 +13,9 @@ typedef struct handler handler;
 // Declare the event type, avoiding the inclusion of the event header.
 typedef int event;
 
-// Forward reference to the type of map objects, to avoid circular dependencies.
-struct map;
-typedef struct map map;
-
-// Define the type of the dispatch function (the event callback).
-typedef void dispatcher(map *m, event e, int r, int c, char *t);
-
-// Make a new handler. The first argument is the GLFW window, passed as a void
-// pointer to prevent the GLFW/OpenGL APIs being exposed. The other two
-// arguments are the event dispatch function and the map object to pass to it.
-handler *newHandler(void *w, dispatcher *f, map *m);
+// Make a new handler, based on the given GLFW window, passed as a void pointer
+// to prevent the GLFW/OpenGL APIs being exposed.
+handler *newHandler(void *w);
 
 // Free up the handler and its data.
 void freeHandler(handler *h);

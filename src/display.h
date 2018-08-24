@@ -16,8 +16,8 @@ typedef struct display display;
 // Declare the action type, avoiding the inclusion of the action header.
 typedef int action;
 
-// Create a display, passing the event handling callback information.
-display *newDisplay(char const *path, dispatcher *f, map *m);
+// Create a display, with user preference settings.
+display *newDisplay(char const *path);
 
 // Free up the display object and its contents.
 void freeDisplay(display *d);

@@ -90,7 +90,7 @@ static void initWindow(display *d) {
 }
 
 void setTitle(display *d, char const *path) {
-    char title[strlen(path) + strlen("Snipe ") + 1];
+    char title[strlen(path) + 7];
     int i = strlen(path) - 1;
     if (i > 0 && path[i-1] == '/') i--;
     while (i > 0 && path[i-1] != '/') i--;
@@ -138,9 +138,8 @@ static void paintBackground(display *d) {
 }
 
 // Create and initialize the editor display.
-display *newDisplay(char const *path, dispatcher *f, map *m) {
+display *newDisplay(char const *path) {
     display *d = malloc(sizeof(*d));
-    if (m == NULL) m = (map *) d; // For testing
     char *fontFile =  getSetting(Font);
     d->fontSize = atoi(getSetting(FontSize));
     d->f = newFont(fontFile);
@@ -154,7 +153,7 @@ display *newDisplay(char const *path, dispatcher *f, map *m) {
     d->showSize = 0;
     initWindow(d);
     setTitle(d, path);
-    d->h = newHandler(d->gw, f, m);
+    d->h = newHandler(d->gw);
     setBlinkRate(d->h, atof(getSetting(BlinkRate)));
     setSize(d);
     paintBackground(d);
@@ -353,30 +352,27 @@ static void testRedraw(display *d) {
 //    freeList(styles);
 }
 
-// Provide a temporary dispatch function for testing. The 'map' object is
-// really the display.
-static void testDispatch(map *m, event e, int r, int c, char *t) {
-    display *d = (display *) m;
-    if (e != BLINK) { printEvent(e, r, c, t); printf("\n"); }
-    if (e == BLINK) blinkCaret(d);
-    else if (e == addEventFlag(C_, TEXT)) {
-        if (t[0] == '+' || t[0] == '=') bigger(d);
-        else if (t[0] == '-') smaller(d);
-    }
-    else if (e == addEventFlag(C_, ENTER)) cycleTheme(d);
-    else if (e == QUIT) quit(d);
-    else if (e == RESIZE) checkResize(d);
-    testRedraw(d);
-}
-
 // Interactive testing.
 int main(int n, char const *args[n]) {
     setbuf(stdout, NULL);
     findResources(args[0]);
-    display *d = newDisplay("test", testDispatch, NULL);
-    (void) d;
-    printf("Check visually and test event printouts interactively\n");
-    freeDisplay(d);
+    display *d = newDisplay("");
+    printf("Check visually and test events interactively\n");
+    while (1) {
+        int r, c;
+        char const *t;
+        event et = getEvent(d, &r, &c, &t);
+        if (et != BLINK) { printEvent(et, r, c, t); printf("\n"); }
+        if (et == BLINK) blinkCaret(d);
+        else if (et == addEventFlag(C_, TEXT)) {
+            if (t[0] == '+' || t[0] == '=') bigger(d);
+            else if (t[0] == '-') smaller(d);
+        }
+        else if (et == addEventFlag(C_, ENTER)) cycleTheme(d);
+        else if (et == QUIT) quit(d);
+        else if (et == RESIZE) checkResize(d);
+        testRedraw(d);
+    }
     printf("Display module OK\n");
     return 0;
 }
