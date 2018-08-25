@@ -25,7 +25,8 @@
 // representing the entire document. Pad is the number of pixels round the edge
 // of the window. Scroll is the pixel scroll position, from the overall top of
 // the text, and scrollTarget is the pixel position to aim for when smooth
-// scrolling. Event handling is delegated to a handler object.
+// scrolling. Magnify is 1 except on Mac retina screens, where it is 2 (i.e. 2x2 real
+// pixels for each virtual screen pixel. Event handling is delegated to a handler object.
 struct display {
     handler *h;
     font *f;
@@ -33,7 +34,7 @@ struct display {
     theme *t;
     GLFWwindow *gw;
     GLuint fontTextureId;
-    int rows, cols, charWidth, charHeight, advance, pad, width, height;
+    int rows, cols, charWidth, charHeight, advance, pad, width, height, magnify;
     int scroll, scrollTarget;
     bool showCaret;
     int showSize;
@@ -52,7 +53,7 @@ static void checkGLError() {
     GLenum code = glGetError();
     if (code == GL_NO_ERROR) return;
     while (code != GL_NO_ERROR) {
-        fprintf(stderr, "GL Error: %d\n", code);
+        fprintf(stderr, "GL Error: %x\n", code);
         code = glGetError();
     }
     glfwTerminate();
@@ -75,6 +76,9 @@ static void initWindow(display *d) {
     glfwInit();
     glfwWindowHint(GLFW_VISIBLE, GL_FALSE);
     d->gw = glfwCreateWindow(100, 100, "Snipe", NULL, NULL);
+    int width, height;
+    glfwGetFramebufferSize(d->gw, &width, &height);
+    d->magnify = width / 100;
     glfwMakeContextCurrent(d->gw);
     glfwSwapInterval(1);
     glMatrixMode(GL_MODELVIEW);
@@ -103,17 +107,11 @@ void setTitle(display *d, char const *path) {
 // orthogonal projection, with y reversed so 2D graphics (right,down) pixel
 // coordinates can be used.
 static void setupGL(display *d) {
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexImage2D(
-        GL_TEXTURE_2D, 0, GL_RGBA, pageWidth(d->p), pageHeight(d->p), 0,
-        GL_RGBA, GL_UNSIGNED_BYTE, pageImage(d->p)
-    );
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
     glOrtho(0, d->width, d->height, 0, -1, 1);
     glViewport(0, 0, d->width, d->height);
-    glfwSetWindowSize(d->gw, d->width, d->height);
+    glfwSetWindowSize(d->gw, d->width/d->magnify, d->height/d->magnify);
     glfwShowWindow(d->gw);
     checkGLError();
 }
@@ -134,6 +132,12 @@ static void setSize(display *d) {
     d->scrollTarget = targetRow * d->charHeight;
     d->scroll = d->scrollTarget;
     glBindTexture(GL_TEXTURE_2D, d->fontTextureId);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexImage2D(
+        GL_TEXTURE_2D, 0, GL_RGBA, pageWidth(d->p), pageHeight(d->p), 0,
+        GL_RGBA, GL_UNSIGNED_BYTE, pageImage(d->p)
+    );
     setupGL(d);
 }
 
@@ -147,8 +151,10 @@ static void paintBackground(display *d) {
 // Create and initialize the editor display.
 display *newDisplay(char const *path) {
     display *d = malloc(sizeof(*d));
+    initWindow(d);
+    setTitle(d, path);
     char *fontFile =  getSetting(Font);
-    d->fontSize = atoi(getSetting(FontSize));
+    d->fontSize = atoi(getSetting(FontSize)) * d->magnify;
     d->f = newFont(fontFile);
     d->t = newTheme();
     d->rows = atoi(getSetting(Rows));
@@ -158,8 +164,6 @@ display *newDisplay(char const *path) {
     d->scrollTarget = 0;
     d->showCaret = false;
     d->showSize = 0;
-    initWindow(d);
-    setTitle(d, path);
     d->h = newHandler(d->gw);
     setBlinkRate(d->h, atof(getSetting(BlinkRate)));
     setSize(d);
@@ -183,12 +187,12 @@ void setDispatcher(display *d, dispatcher *f, map *m) {
 }
 
 void bigger(display *d) {
-    if (d->fontSize <= 35) d->fontSize++;
+    if (d->fontSize <= 35 * d->magnify) d->fontSize += d->magnify;
     setSize(d);
 }
 
 void smaller(display *d) {
-    if (d->fontSize >= 5) d->fontSize--;
+    if (d->fontSize >= 5 * d->magnify) d->fontSize -= d->magnify;
     setSize(d);
 }
 
@@ -268,9 +272,11 @@ static void blinkCaret(display *d) {
     else d->showCaret = ! d->showCaret;
 }
 
+// Use glfwGetFramebufferSize to get pixels, not glfwGetWindowSize, which gives screen
+// coordinates, different by a factor two on retina screens.
 static void checkResize(display *d) {
     int width, height;
-    glfwGetWindowSize(d->gw, &width, &height);
+    glfwGetFramebufferSize(d->gw, &width, &height);
     int cols = (width - 2 * d->pad) / d->charWidth;
     int rows = (height - d->pad) / d->charHeight;
     d->width = width;
