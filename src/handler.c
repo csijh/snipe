@@ -13,7 +13,7 @@
 // events using an explicit custom event queue (as in GLFW/GLEQ). Timer events,
 // including animation frame events during scrolling, are included so that the
 // main program loop becomes a pure event loop. During a long user gesture
-// such as resizng the window or trackpad scrolling, the program freezes other
+// such as resizing the window or trackpad scrolling, the program freezes other
 // than for the callbacks. So these callbacks are allowed to process the event
 // inside the callback.
 
@@ -232,10 +232,11 @@ static void scrollCB(GLFWwindow *w, double x, double y) {
     else e = LINE_DOWN;
     if (shift) e = addEventFlag(S_, e);
     if (ctrl) e = addEventFlag(C_, e);
-    eventData *ed = push(h);
-    ed->tag = e;
-    ed->p.x = (int) x;
-    ed->p.y = (int) y;
+    h->dispatch(h->m, e, (int) x, (int) y, NULL);
+//    eventData *ed = push(h);
+//    ed->tag = e;
+//    ed->p.x = (int) x;
+//    ed->p.y = (int) y;
 }
 
 // ---- Window -----------------------------------------------------------------
@@ -247,7 +248,8 @@ static void closeCB(GLFWwindow *w) {
     ed->tag = QUIT;
 }
 
-// Callback for resize.
+// Callback for resize. The main thread is often frozen bar callbacks during resize,
+// so arrange for an immediate redraw within the callback.
 static void resizeCB(GLFWwindow *w, int width, int height) {
     handler *h = glfwGetWindowUserPointer(w);
     h->dispatch(h->m, RESIZE, 0, 0, NULL);
