@@ -218,6 +218,7 @@ static void mouseCB(GLFWwindow *w, int button, int action, int mods) {
 // Callback for scroll wheel or touchpad scroll gesture events. Modifier info is
 // not directly available, so ask for it.
 static void scrollCB(GLFWwindow *w, double x, double y) {
+printf("scr\n");
     handler *h = glfwGetWindowUserPointer(w);
     bool shift =
         glfwGetKey(w, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
