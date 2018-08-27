@@ -109,8 +109,12 @@ event:
 	$(TCC)
 	./snipe
 
+queue:
+	$(TCC) event.c
+	./snipe
+
 handler: ../glfw/lib/libglfw3.a
-	$(TCC) event.c theme.c $(UTILS) $(GL)
+	$(TCC) queue.c event.c theme.c $(UTILS) $(GL)
 	./snipe
 
 display: ../glfw/lib/libglfw3.a

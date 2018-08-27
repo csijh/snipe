@@ -22,8 +22,8 @@ static char *eventNames[COUNT_EVENTS] = {
     [KP_SUBTRACT]="KP_SUBTRACT", [KP_ADD]="KP_ADD", [KP_ENTER]="KP_ENTER",
     [KP_EQUAL]="KP_EQUAL", [MENU]="MENU", [CLICK]="CLICK", [DRAG]="DRAG",
     [LINE_UP]="LINE_UP", [LINE_DOWN]="LINE_DOWN", [TEXT]="TEXT",
-    [RESIZE]="RESIZE", [TICK]="TICK", [LOAD]="LOAD", [BLINK]="BLINK",
-    [SAVE]="SAVE", [QUIT]="QUIT"
+    [PASTE]="PASTE", [RESIZE]="RESIZE", [TICK]="TICK", [LOAD]="LOAD",
+    [BLINK]="BLINK", [SAVE]="SAVE", [QUIT]="QUIT"
 };
 
 // Space for generated strings.

@@ -1,54 +1,47 @@
 // The Snipe editor is free and open source, see licence.txt.
+#define _POSIX_C_SOURCE 200809L
 #include "handler.h"
+#include "queue.h"
 #include "event.h"
 #include "file.h"
 #include "string.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <time.h>
 #include <assert.h>
 #include <GLFW/glfw3.h>
 
-// Event handling is implemented using GLFW. GLFW callbacks are converted into
-// events using an explicit custom event queue (as in GLFW/GLEQ). Timer events,
-// including animation frame events during scrolling, are included so that the
-// main program loop becomes a pure event loop. During a long user gesture
-// such as resizing the window or trackpad scrolling, the program freezes other
-// than for the callbacks. So these callbacks are allowed to process the event
-// inside the callback.
+// Event handling is implemented using GLFW. GLFW callbacks put events on the
+// queue (as in GLFW/GLEQ).
 
-// The size of the event queue.
-enum { SIZE = 1000 };
-
-// Add a code for events which are to be discarded, and a code for a paste.
+// Add a code for events which are to be discarded.
 event IGNORE = COUNT_EVENTS;
-event PASTE = COUNT_EVENTS + 1;
-
-// An event structure holds a tag and two coordinates or a string or character.
-struct position { int x, y; };
-struct eventData {
-    event tag;
-    union { struct position p; char const *s; char c[5]; };
-};
-typedef struct eventData eventData;
 
 struct handler {
     GLFWwindow *w;
-    eventData queue[SIZE];
-    int head, tail;
     double blinkRate, saveRate;
     double blinkTime, saveTime;
-    bool frameTime, focused;
-    dispatcher *dispatch;
-    map *m;
+    bool focused, ended;
+    queue *q;
 };
 
-// Prepare to add an event to the queue, returning a pointer to the next slot.
-static eventData *push(handler *h) {
-    eventData *e = &h->queue[h->head];
-    h->head = (h->head + 1) % SIZE;
-    assert(h->head != h->tail);
-    return e;
+handler *newHandler(void *w) {
+    handler *h = malloc(sizeof(handler));
+    h->w = w;
+    h->blinkRate = 0.5;
+    h->saveRate = 60.0;
+    h->blinkTime = h->blinkRate;
+    h->saveTime = h->saveRate;
+    h->focused = true;
+    h->ended = false;
+    h->q = newQueue();
+    return h;
+}
+
+void freeHandler(handler *h) {
+    freeQueue(h->q);
+    free(h);
 }
 
 bool focused(handler *h) {
@@ -56,20 +49,19 @@ bool focused(handler *h) {
 }
 
 // Generate a frame tick event, e.g. when smooth scrolling.
-void frameTick(handler *h) {
-    h->frameTime = true;
-}
+//void frameTick(handler *h) {
+//    h->frameTime = true;
+//}
 
 // Generate a paste event. Since events are handled synchronously, it should be
 // OK to hang on to GLFW's pointer until the event is processed.
-void pasteEvent(handler *h) {
-    eventData *ed = push(h);
-    ed->tag = PASTE;
-    ed->s = glfwGetClipboardString(h->w);
-    if (ed->s == NULL) ed->s = "";
-}
+//void pasteEvent(handler *h) {
+//    eventData *ed = push(h);
+//    ed->tag = PASTE;
+//    ed->s = glfwGetClipboardString(h->w);
+//    if (ed->s == NULL) ed->s = "";
+//}
 
-// Copy text to the clipboard.
 void clip(handler *h, char const *s) {
     glfwSetClipboardString(h->w, s);
 }
@@ -86,10 +78,10 @@ void clip(handler *h, char const *s) {
 // the layout-dependent effect of the shift key. This could also be the
 // completion of a platform input method for an ideographic language.
 static void charCB(GLFWwindow *w, unsigned int unicode) {
+    char text[5];
+    putUTF8(unicode, text);
     handler *h = glfwGetWindowUserPointer(w);
-    eventData *ed = push(h);
-    ed->tag = TEXT;
-    putUTF8(unicode, ed->c);
+    enqueue(h->q, TEXT, 0, 0, text);
 }
 
 // Convert a GLFW key to a character, or return -1, in a control key situation.
@@ -123,8 +115,7 @@ int getChar(int key) {
 static bool controlText(handler *h, int key) {
     char ch = getChar(key);
     if (ch < 0) return false;
-    eventData *ed = push(h);
-    ed->tag = addEventFlag(C_, ch);
+    enqueue(h->q, addEventFlag(C_, ch), 0, 0, NULL);
     return true;
 }
 
@@ -190,8 +181,7 @@ static void keyCB(GLFWwindow *w, int key, int code, int action, int mods) {
     if (e < 0) return;
     if (shift) e = addEventFlag(S_, e);
     if (ctrl) e = addEventFlag(C_, e);
-    eventData *ed = push(h);
-    ed->tag = e;
+    enqueue(h->q, e, 0, 0, NULL);
 }
 
 // ---- Mouse ------------------------------------------------------------------
@@ -207,18 +197,14 @@ static void mouseCB(GLFWwindow *w, int button, int action, int mods) {
     event e = (action == GLFW_PRESS) ? CLICK : DRAG;
     if (shift) e = addEventFlag(S_, e);
     if (ctrl) e = addEventFlag(C_, e);
-    eventData *ed = push(h);
-    ed->tag = e;
     double dx, dy;
     glfwGetCursorPos(w, &dx, &dy);
-    ed->p.x = (int) dx;
-    ed->p.y = (int) dy;
+    enqueue(h->q, e, (int) dx, (int) dy, NULL);
 }
 
 // Callback for scroll wheel or touchpad scroll gesture events. Modifier info is
 // not directly available, so ask for it.
 static void scrollCB(GLFWwindow *w, double x, double y) {
-printf("scr\n");
     handler *h = glfwGetWindowUserPointer(w);
     bool shift =
         glfwGetKey(w, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
@@ -233,11 +219,7 @@ printf("scr\n");
     else e = LINE_DOWN;
     if (shift) e = addEventFlag(S_, e);
     if (ctrl) e = addEventFlag(C_, e);
-    h->dispatch(h->m, e, (int) x, (int) y, NULL);
-//    eventData *ed = push(h);
-//    ed->tag = e;
-//    ed->p.x = (int) x;
-//    ed->p.y = (int) y;
+    enqueue(h->q, e, (int) x, (int) y, NULL);
 }
 
 // ---- Window -----------------------------------------------------------------
@@ -245,65 +227,39 @@ printf("scr\n");
 // Callback for pressing the close-window button.
 static void closeCB(GLFWwindow *w) {
     handler *h = glfwGetWindowUserPointer(w);
-    eventData *ed = push(h);
-    ed->tag = QUIT;
+    enqueue(h->q, QUIT, 0, 0, NULL);
+    h->ended = true;
 }
 
-// Callback for resize. The main thread is often frozen bar callbacks during resize,
-// so arrange for an immediate redraw within the callback.
+// Callback for resize.
 static void resizeCB(GLFWwindow *w, int width, int height) {
     handler *h = glfwGetWindowUserPointer(w);
-    h->dispatch(h->m, RESIZE, 0, 0, NULL);
-//    eventData *ed = push(h);
-//    ed->tag = RESIZE;
+    enqueue(h->q, RESIZE, 0, 0, NULL);
 }
 
-// Generate one last blink event before they are switched off, to make sure the
-// display makes the cursor invisible.
 static void focusCB(GLFWwindow *w, int focused) {
     handler *h = glfwGetWindowUserPointer(w);
     h->focused = focused;
-    eventData *ed = push(h);
-    ed->tag = BLINK;
 }
 
-// Create handler and set up all the desired callbacks.
-handler *newHandler(void *w) {
-    handler *h = malloc(sizeof(handler));
-    h->w = w;
-    h->head = h->tail = 0;
-    h->blinkRate = 0.5;
-    h->saveRate = 60.0;
-    h->blinkTime = h->blinkRate;
-    h->saveTime = h->saveRate;
-    h->frameTime = false;
-    h->focused = true;
+// Set up all the desired callbacks, then process events in a loop.
+void handle(handler *h) {
     glfwSetWindowUserPointer(h->w, h);
     glfwSetKeyCallback(h->w, keyCB);
     glfwSetCharCallback(h->w, charCB);
     glfwSetMouseButtonCallback(h->w, mouseCB);
     glfwSetScrollCallback(h->w, scrollCB);
     glfwSetWindowCloseCallback(h->w, closeCB);
-//    glfwSetWindowSizeCallback(h->w, resizeCB);
     glfwSetWindowFocusCallback(h->w, focusCB);
-    return h;
-}
-
-void freeHandler(handler *h) {
-    free(h);
-}
-
-void setCallback(handler *h, dispatcher *f, map *m) {
-    h->dispatch = f;
-    h->m = m;
     glfwSetWindowSizeCallback(h->w, resizeCB);
-
+    while (! h->ended) glfwWaitEventsTimeout(1.0);
 }
 
 void setBlinkRate(handler *h, double br) {
     h->blinkRate = br;
 }
 
+/*
 // Get the next event, possibly with a pause. Note that glfwWaitEventsTimeout
 // returns early, even e.g. for mouse movements with no callback.
 event getRawEvent(handler *h, int *x, int *y, char const **t) {
@@ -351,12 +307,55 @@ event getRawEvent(handler *h, int *x, int *y, char const **t) {
         glfwWaitEventsTimeout(min - time);
     }
 }
+*/
 
 #ifdef test_handler
 
-// Testing and error handling are in the display module.
+#include <pthread.h>
+
+// Represents the runner thread.
+static void *testRun(void *vh) {
+    handler *h = (handler *) vh;
+    event e = BLINK;
+    int x, y;
+    char const *t;
+    while (e != QUIT) {
+        e = dequeue(h->q, &x, &y, &t);
+        printEvent(e, x, y, t); printf("\n");
+    }
+    return NULL;
+}
+
+// Represents the ticker thread.
+static void *testTick(void *vh) {
+    handler *h = (handler *) vh;
+    struct timespec delay;
+    while (!h->ended) {
+        delay.tv_sec = 0;
+        delay.tv_nsec = 500000000;
+        nanosleep(&delay, &delay);
+        enqueue(h->q, BLINK, 0, 0, NULL);
+    }
+    return NULL;
+}
+
+// Test 
 int main() {
-    printf("Test interactively via the display module.\n");
+    setbuf(stdout, NULL);
+    printf("Check key, mouse, window events.\n");
+    printf("Check blinks continue while moving/resizing/scrolling window.\n");
+    glfwInit();
+    GLFWwindow *gw = glfwCreateWindow(640, 480, "Test", NULL, NULL);
+    handler *h = newHandler(gw);
+    pthread_t runner, ticker;
+    pthread_create(&runner, NULL, &testRun, h);
+    pthread_create(&ticker, NULL, &testTick, h);
+    handle(h);
+    pthread_join(runner, NULL);
+    pthread_join(ticker, NULL);
+    freeHandler(h);
+    glfwDestroyWindow(gw);
+    glfwTerminate();
     printf("Handler module OK\n");
     return 0;
 }
