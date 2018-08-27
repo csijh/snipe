@@ -63,11 +63,11 @@ has no dependencies, this is quite likely to work. If it doesn't,
 <code>freetype</code>'s own make system will have to be investigated.</p>
 
 <p>The command <code>make handler</code> causes the <code>glfw</code> library
-to be built from the sources provided. This is a complex build, first using
-<code>cmake</code> to configure <code>glfw</code> for your computer, then
-<code>make</code> to compile the result. Finally the compiler arranges to
-dynamically link the resulting program with a collection of system libraries
-(to do with keyboard, mouse and window handling).</p>
+to be built from the sources provided. This first uses <code>cmake</code> to
+configure <code>glfw</code> for your computer, then <code>make</code> to
+compile the result. Finally the compiler arranges to dynamically link the
+resulting program with a collection of system libraries (to do with keyboard,
+mouse and window handling).</p>
 
 <p>The command <code>make display</code> causes the OpenGL library to be
 linked, as well as <code>glfw</code>. As long as OpenGL is available on
@@ -76,7 +76,17 @@ system libraries are needed.</p>
 
 <p>Although there is a typical list of system libraries to link with in the
 Makefile (in the <code>SYS</code> variable), the list does differ between
-computers, and this is the most likely problem area.</p>
+computers, and this is the most likely problem area. A suggested way to
+investigate this is to install <code>glfw3</code> temporarily, then
+use the command <code>pkg-config --static --libs glfw3</code> to find out
+what libraries are required for the statically linked version of
+<code>glfw</code>. Libraries can be copied into the Makefile and, if
+that works, they can be deleted one by one to see which ones are actually
+necessary. Beware that the list is unlikely to be exactly correct, so
+don't just copy it blindly. Beware that <code>glfw3</code> should be
+uninstalled after the experiment, otherwise the compiler may try to link with
+the installed version instead of the version supplied with the
+<mark>Snipe</mark> sources.</p>
 
 <h2>Linux</h2>
 
@@ -92,15 +102,10 @@ Makefile so that it recognizes whatever is produced. Change
 helps (e.g. if your <code>gcc</code> is old and difficult to upgrade, so
 that installing <code>clang</code> is a better option).</p>
 
-<p>One way to find the necessary libraries (in fact the technique used to
-create the original list) is to install <code>glfw3</code> temporarily
-with a command such as <code>sudo apt install glfw3</code> (or
-<code>libglfw3</code> or <code>libglfw3-dev</code>).
-and then use <code>pkg-config --static --libs glfw3</code> to list the
-libraries needed by the static version of <code>glfw</code>. The list is
-unlikely to be completely correct, but may contain clues. Libraries can be
-copied into the Makefile and, if that works, they can be deleted one by one to
-see which ones are actually necessary.</p>
+<p>To investigate the system libraries needed, install <code>glfw3</code>
+temporarily with a command such as <code>sudo apt install glfw3</code> (or
+<code>libglfw3</code> or <code>libglfw3-dev</code>) and then type
+<code>pkg-config --static --libs glfw3</code>.</p>
 
 <h2>MacOS</h2>
 
@@ -109,33 +114,28 @@ Then install <code>homebrew</code> from its web site. This
 has three good effects. Installing it causes the command line tools associated
 with XCode to be installed (but not the IDE, which is not recommended for
 cross-platform programmers anyway). It provides the command <code>brew</code>
-which
-acts as a package manager to install further software. And it provides
+which acts as a package manager to install further software. And it provides
 the command <code>brew doctor</code> which checks consistency of installed
 software, and suggests fixes if it finds problems.</p>
 
-<p>Install <code>cmake</code>
-with <code>brew install cmake</code>. The commands <code>git</code> and
-<code>make</code> should be already installed. The <code>gcc</code> command
-is probably a synonym for the Mac version of <code>clang</code>. Check that the
-command
+<p>Install <code>cmake</code> with <code>brew install cmake</code>. The
+commands <code>git</code> and <code>make</code> should be already installed.
+The <code>gcc</code> command is probably a synonym for the Mac version of
+<code>clang</code> (try <code>gcc -v</code>). Check that the command
 <code>uname -s</code> produces something containing <code>Darwin</code> or
-change the
-Makefile so that it recognizes whatever is produced.</p>
+change the Makefile so that it recognizes whatever is produced.</p>
 
 <p>If missing libraries or frameworks are preventing compilation, then
 install <code>glfw3</code> temporarily with <code>brew install glfw3</code>
-then type <code>pkg-config --static --libs glfw3</code> to find a list
-of libraries and frameworks needed by the static version of <code>glfw</code>
-that may help to track down the problem.</p>
+then type <code>pkg-config --static --libs glfw3</code> then uninstall.</p>
 
 <h2>Windows</h2>
 
-<p>The Windows C compiler MSVC (included with Visual Studio) is
-unsuitable because it focusses on C++ and only supports the "embedded
-processor" part of the C90 standard, and not C99 or C11. Cygwin is unsuitable,
-because it depends on a large extra DLL, and
-the X11-based graphics is very clunky and unreliable.</p>
+<p>The Windows C compiler MSVC (included with Visual Studio) is unsuitable
+for cross-platform use, because it focusses on C++ and doesn't support C11,
+or C99, or the "hosted" part of C90 (i.e. the libraries). Cygwin is unsuitable,
+because it depends on a large extra DLL, and the X11-based graphics is very
+clunky and unreliable.</p>
 
 <p>Instead, MSYS2 is recommended, which is built on <code>mingw-w64</code>,
 adding a shell window and the <code>pacman</code> package manager. Install
@@ -148,10 +148,9 @@ need.</p>
 
 <p>The list of system libraries is short, and unlikely to cause difficulties.
 If there is a problem, it is difficult to give advice on tracking it
-down. As with the other platforms, it may help to install
-<code>pkg-config</code> and <code>glfw3</code> using <code>pacman</code>, and
-see whether the list of libraries produced by <code>pkg-config --static --libs
-glfw3</code> helps.</p>
+down. It may help to install <code>pkg-config</code> and <code>glfw3</code>
+using <code>pacman</code>, and see whether the list of libraries produced by
+<code>pkg-config --static --libs glfw3</code> helps.</p>
 
 <h2>Background</h2>
 
@@ -187,9 +186,8 @@ find and install a Vulkan driver. It is, however, starting to be supported by
 GLFW and there is an open source tool to run it on newer Macs. Alternatively,
 Metal (Macs only) or something like MoltenGL (not free) could be used.</p>
 
-<p>Some general
-information about building OpenGL/GLFW programs for the three main platforms can
-be gleaned from sites like <a
+<p>Some general information about building OpenGL/GLFW programs for the three
+main platforms can be gleaned from sites like <a
 href="http://web.eecs.umich.edu/~sugih/courses/eecs487/glfw-howto/">this
 how-to</a>.</p>
 
@@ -218,6 +216,67 @@ and so gets treated as buffered
 (which happens on MSYS2). A few Posix functions beyond the C11 standard are
 required to handle directories properly, but fortunately all the recommended
 platform environments provide what is needed.</p>
+
+<h3>Threads</h3>
+
+<p>On many operating systems, during long user gestures such as dragging a
+window by its title bar, or resizing a window, or (most irritatingly) scrolling
+with a trackpad, a program appears to freeze. This is because the program is
+executing a long-lasting loop within the operating system.</p>
+
+<p>During the loop, although the program itself is not 'running', there
+are progress callbacks from the system representing changes in position or
+size or scroll amount. One way to prevent freezing is to redraw the current
+state of the screen during each callback. This works, as a fudge, if a single
+redraw is all that is required. However, the redrawing work must happen entirely
+within the callback. If an animation is triggered by the callback, it won't
+happen until the gesture ends. You might think that a cross-platform event
+library like GLFW would insulate the programmer from such things, but it
+doesn't.</p>
+
+<p>In <mark>Snipe</mark>, it is desirable to use animation to achieve smooth
+scrolling when the user scrolls with a mouse wheel. It is difficult, and not
+desirable, to distinguish mouse wheel scrolling from trackpad scrolling. So,
+some other technique is needed to allow animations to continue during
+trackpad scrolling, and at the same time solve any issues with other long
+user gestures.</p>
+
+<p>The only general way to solve this problem is with threads.
+<mark>Snipe</mark> uses POSIX threads rather than the threads defined as
+standard within C11, because the latter are not easily available on Windows.</p>
+
+<p>There needs to be a <em>handler</em> thread to manage system events, and a
+<em>runner</em> thread to run the main body of the program. The runner thread
+can keep animations going while the handler thread is locked up in an operating
+system loop. The operating system only communicates with a program's
+<em>main</em> thread, the one that is initially executing in the
+<code>main</code> function, so that needs to be used as the handler thread,
+while a separate thread is started up to act as the runner thread.</p>
+
+<p>The two threads communicate via an event queue. The handler pushes events
+on, and the runner thread pulls them off. The queue needs to use a lock (mutex)
+to make it thread-safe, and a condition variable to wake up the runner thread
+when it is waiting for the next event.</p>
+
+<p>Once multiple threads exist in the program, it simplifies the design a
+little to add a third <em>ticker</em> thread for regular timer events. This
+pushes events onto the queue every half-second for cursor blinking and every
+minute for auto-saving. (Otherwise, the code for handing regular tick events
+would have to live in the function which waits and then pulls the next event
+from the queue.)</p>
+
+<p>Animation events, once per frame, can't be generated by the handler thread
+(because they would get delayed), and they can't easily be generated by the
+ticker thread (because the OpenGL <code>swapBuffer</code> function 
+has the animation delay built into it. So the runner thread pushes animation
+frame events onto the queue.</p>
+
+<p>After all this, the runner thread has a very simple design. It is a pure
+event loop which processes each event in turn. Animation can be turned on to
+generate frame events, or turned off so that the runner spends most of its time
+idle. Incidentally, it should be possible to design a simple cross-platform
+graphics library of the SDL variety along similar lines to hide all this
+complexity from the programmer.</p>
 
 <h3>Design and development</h3>
 
