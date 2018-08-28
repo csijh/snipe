@@ -114,14 +114,15 @@ static void setupGL(display *d) {
 // orthogonal projection, with y reversed so 2D graphics (right,down) pixel
 // coordinates can be used. Set the display size and make sure it is visible.
 static void setSize(display *d) {
-    int targetRow = d->scrollTarget / d->charHeight;
+    int targetRow;
+    if (d->scrollTarget != 0) targetRow = d->scrollTarget / d->charHeight;
     d->p = getPage(d->f, d->fontSize, 0);
     d->charWidth = pageWidth(d->p) / 256;
     d->charHeight = pageHeight(d->p);
     d->width = d->pad + d->cols * d->charWidth + d->pad;
     d->height = d->rows * d->charHeight + d->pad;
     d->showCaret = true;
-    d->scrollTarget = targetRow * d->charHeight;
+    if (d->scrollTarget != 0) d->scrollTarget = targetRow * d->charHeight;
     d->scroll = d->scrollTarget;
     glBindTexture(GL_TEXTURE_2D, d->fontTextureId);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -370,10 +371,9 @@ static void *run(void *vd) {
         e = getEvent(d, &r, &c, &t);
         if (e != BLINK) { printEvent(e, r, c, t); printf("\n"); }
         if (e == BLINK) blinkCaret(d);
-        else if (e == addEventFlag(C_, TEXT)) {
-            if (t[0] == '+' || t[0] == '=') bigger(d);
-            else if (t[0] == '-') smaller(d);
-        }
+        else if (e == addEventFlag(C_, '+')) bigger(d);
+        else if (e == addEventFlag(C_, '=')) bigger(d);
+        else if (e == addEventFlag(C_, '-')) smaller(d);
         else if (e == addEventFlag(C_, ENTER)) cycleTheme(d);
         else if (e == RESIZE) checkResize(d);
         testRedraw(d);
