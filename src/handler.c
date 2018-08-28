@@ -22,7 +22,7 @@ struct handler {
     GLFWwindow *w;
     double blinkRate, saveRate;
     double blinkTime, saveTime;
-    bool focused, ended;
+    bool focused, alive;
     queue *q;
 };
 
@@ -34,7 +34,7 @@ handler *newHandler(void *w) {
     h->blinkTime = h->blinkRate;
     h->saveTime = h->saveRate;
     h->focused = true;
-    h->ended = false;
+    h->alive = true;
     h->q = newQueue();
     return h;
 }
@@ -48,19 +48,17 @@ bool focused(handler *h) {
     return h->focused;
 }
 
-// Generate a frame tick event, e.g. when smooth scrolling.
-//void frameTick(handler *h) {
-//    h->frameTime = true;
-//}
+// Generate a frame event from the runner thread, e.g. when smooth scrolling.
+void frameEvent(handler *h) {
+    enqueue(h->q, TICK, 0, 0, NULL);
+}
 
-// Generate a paste event. Since events are handled synchronously, it should be
-// OK to hang on to GLFW's pointer until the event is processed.
-//void pasteEvent(handler *h) {
-//    eventData *ed = push(h);
-//    ed->tag = PASTE;
-//    ed->s = glfwGetClipboardString(h->w);
-//    if (ed->s == NULL) ed->s = "";
-//}
+// Generate a paste event from the runner thread.
+void pasteEvent(handler *h) {
+    char const *s = glfwGetClipboardString(h->w);
+    if (s == NULL) s = "";
+    enqueue(h->q, PASTE, 0, 0, s);
+}
 
 void clip(handler *h, char const *s) {
     glfwSetClipboardString(h->w, s);
@@ -228,7 +226,7 @@ static void scrollCB(GLFWwindow *w, double x, double y) {
 static void closeCB(GLFWwindow *w) {
     handler *h = glfwGetWindowUserPointer(w);
     enqueue(h->q, QUIT, 0, 0, NULL);
-    h->ended = true;
+    h->alive = false;
 }
 
 // Callback for resize.
@@ -252,94 +250,64 @@ void handle(handler *h) {
     glfwSetWindowCloseCallback(h->w, closeCB);
     glfwSetWindowFocusCallback(h->w, focusCB);
     glfwSetWindowSizeCallback(h->w, resizeCB);
-    while (! h->ended) glfwWaitEventsTimeout(1.0);
+    while (h->alive) glfwWaitEventsTimeout(1.0);
+}
+
+// Delay for a given number of seconds.
+static void delay(double s) {
+    struct timespec t;
+    t.tv_sec = (int) s;
+    s = s - (int) s;
+    t.tv_nsec = (int) (s * 1000000000.0);
+    nanosleep(&t, &t);
+}
+
+// Generate tick events in a loop.
+void *tick(void *vh) {
+    handler *h = (handler *) vh;
+    while (h->alive) {
+        double time = glfwGetTime();
+        if (h->blinkRate > 0 && time > h->blinkTime) {
+            enqueue(h->q, BLINK, 0, 0, NULL);
+            h->blinkTime += h->blinkRate;
+        }
+        if (time > h->saveTime) {
+            enqueue(h->q, SAVE, 0, 0, NULL);
+            h->saveTime += h->saveRate;
+        }
+        double min = h->saveTime;
+        if (h->blinkRate > 0 && h->blinkTime < h->saveTime) min = h->blinkTime;
+        delay(min - time);
+    }
+    return NULL;
 }
 
 void setBlinkRate(handler *h, double br) {
     h->blinkRate = br;
 }
 
-/*
-// Get the next event, possibly with a pause. Note that glfwWaitEventsTimeout
-// returns early, even e.g. for mouse movements with no callback.
 event getRawEvent(handler *h, int *x, int *y, char const **t) {
-    while (true) {
-        glfwPollEvents();
-        if (h->head != h->tail) {
-            eventData *e = &h->queue[h->tail];
-            h->tail = (h->tail + 1) % SIZE;
-            event base = clearEventFlags(e->tag);
-            if (base == TEXT) {
-                *x = *y = 0;
-                *t = e->c;
-            }
-            else if (base == PASTE) {
-                e->tag = TEXT;
-                *x = *y = 0;
-                *t = e->s;
-            }
-            else if (base == CLICK || base == DRAG) {
-                *x = e->p.x;
-                *y = e->p.y;
-                *t = "";
-                e->c[0] = '\0';
-            }
-            else {
-                *x = *y = 0;
-                *t = "";
-            }
-            return e->tag;
-        }
-        double time = glfwGetTime();
-        if (h->frameTime) { h->frameTime = false; return TICK; }
-        if (h->focused && h->blinkRate > 0 && time > h->blinkTime) {
-            if (h->blinkTime < time - h->blinkRate) h->blinkTime = time;
-            h->blinkTime += h->blinkRate; return BLINK;
-        }
-        if (time > h->saveTime) {
-            h->saveTime += h->saveRate;
-            return SAVE;
-        }
-        double min = h->saveTime;
-        if (h->focused && h->blinkRate > 0 && h->blinkTime < h->saveTime) {
-            min = h->blinkTime;
-        }
-        glfwWaitEventsTimeout(min - time);
-    }
+    return dequeue(h->q, x, y, t);
 }
-*/
 
 #ifdef test_handler
 
 #include <pthread.h>
 
 // Represents the runner thread.
-static void *testRun(void *vh) {
+static void *run(void *vh) {
     handler *h = (handler *) vh;
     event e = BLINK;
     int x, y;
     char const *t;
     while (e != QUIT) {
-        e = dequeue(h->q, &x, &y, &t);
+        e = getRawEvent(h, &x, &y, &t);
         printEvent(e, x, y, t); printf("\n");
     }
     return NULL;
 }
 
-// Represents the ticker thread.
-static void *testTick(void *vh) {
-    handler *h = (handler *) vh;
-    struct timespec delay;
-    while (!h->ended) {
-        delay.tv_sec = 0;
-        delay.tv_nsec = 500000000;
-        nanosleep(&delay, &delay);
-        enqueue(h->q, BLINK, 0, 0, NULL);
-    }
-    return NULL;
-}
-
-// Test 
+// Test
 int main() {
     setbuf(stdout, NULL);
     printf("Check key, mouse, window events.\n");
@@ -348,8 +316,8 @@ int main() {
     GLFWwindow *gw = glfwCreateWindow(640, 480, "Test", NULL, NULL);
     handler *h = newHandler(gw);
     pthread_t runner, ticker;
-    pthread_create(&runner, NULL, &testRun, h);
-    pthread_create(&ticker, NULL, &testTick, h);
+    pthread_create(&runner, NULL, &run, h);
+    pthread_create(&ticker, NULL, &tick, h);
     handle(h);
     pthread_join(runner, NULL);
     pthread_join(ticker, NULL);

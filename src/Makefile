@@ -118,7 +118,7 @@ handler: ../glfw/lib/libglfw3.a
 	./snipe
 
 display: ../glfw/lib/libglfw3.a
-	$(TCC) handler.c event.c font.c theme.c $(UTILS) $(FT) $(GL)
+	$(TCC) handler.c queue.c event.c font.c theme.c $(UTILS) $(FT) $(GL)
 	./snipe
 
 # The modules which form the model.
