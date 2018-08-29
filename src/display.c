@@ -352,7 +352,10 @@ void charPosition(display *d, int x, int y, int *row, int *col) {
 event getEvent(display *d, int *pr, int *pc, char const **pt) {
     int x, y;
     event e = getRawEvent(d->h, &x, &y, pt);
-    if (e == CLICK || e == DRAG) charPosition(d, x, y, pr, pc);
+    if (e == CLICK || e == DRAG) {
+        printf("to call charPos\n");
+        charPosition(d, x, y, pr, pc);
+    }
     return e;
 }
 

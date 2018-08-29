@@ -336,8 +336,8 @@ void *tick(void *vh) {
     return NULL;
 }
 
-event getRawEvent(handler *h, int *x, int *y, char const **t) {
-    event e = dequeue(h->q, x, y, t);
+event getRawEvent(handler *h, int *px, int *py, char const **pt) {
+    event e = dequeue(h->q, px, py, pt);
     return e;
 }
 
