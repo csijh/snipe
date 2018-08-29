@@ -35,6 +35,7 @@ struct queue {
     pthread_cond_t pullable;
     int bufferSize;
     char *buffer;
+    int frames;
 };
 
 // Check that a result from a pthread function is zero.
@@ -51,6 +52,7 @@ queue *newQueue() {
     q->array = malloc(q->size * sizeof(data));
     q->bufferSize = 256;
     q->buffer = malloc(q->bufferSize);
+    q->frames = 0;
     assert(q->bufferSize >= TEXT_SIZE);
     Z(pthread_cond_init(&q->pushable, NULL));
     Z(pthread_cond_init(&q->pullable, NULL));
@@ -88,6 +90,11 @@ static inline data *push(queue *q) {
     return d;
 }
 
+// Bypass the queue itself, and just count the number of outstanding frames.
+void enqueueFrame(queue *q) {
+    q->frames++;
+}
+
 // Push an event, waiting if necessary. If adding to an empty queue, wake up any
 // threads waiting to pull. For PASTE, make a copy of the string, just in case.
 void enqueue(queue *q, event e, int x, int y, char const *t) {
@@ -109,6 +116,10 @@ void enqueue(queue *q, event e, int x, int y, char const *t) {
 // Pull an event, waiting if necessary. If getting from a full queue, wake up
 // threads waiting to push. Buffer text to keep it valid until the next request.
 event dequeue(queue *q, int *px, int *py, char const **pt) {
+    if (q->frames > 0) {
+        q->frames--;
+        return FRAME;
+    }
     pthread_mutex_lock(&q->lock);
     while (empty(q)) pthread_cond_wait(&q->pullable, &q->lock);
     bool tell = full(q);

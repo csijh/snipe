@@ -209,7 +209,8 @@ void freeDisplay(display *d) {
 }
 
 static void frameEvent(display *d) {
-    enqueue(d->q, FRAME, 0, 0, NULL);
+    enqueueFrame(d->q);
+//    enqueue(d->q, FRAME, 0, 0, NULL);
 }
 
 static void bigger(display *d) {
