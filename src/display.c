@@ -340,6 +340,8 @@ static void smoothScroll(display *d) {
 
 // Round to nearest column.
 void charPosition(display *d, int x, int y, int *row, int *col) {
+    x = x * d->magnify;
+    y = y * d->magnify;
     *row = (y + d->scroll) / d->charHeight;
     *col = (x - d->pad + d->charWidth / 2) / d->charWidth;
 }
