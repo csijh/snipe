@@ -240,7 +240,7 @@ static void scrollCB(GLFWwindow *w, double x, double y) {
     event e;
     if (y > 0) e = LINE_UP;
     else e = LINE_DOWN;
-    if (e == LINE_DOWN) printf("LD\n");
+//    if (e == LINE_DOWN) printf("LD\n");
     if (shift) e = addEventFlag(S_, e);
     if (ctrl) e = addEventFlag(C_, e);
     enqueue(h->q, e, (int) x, (int) y, NULL);
@@ -304,7 +304,7 @@ void *tick(void *vh) {
     while (h->alive) {
         double time = glfwGetTime();
         if (h->blinkRate > 0 && time > h->blinkTime) {
-            enqueue(h->q, BLINK, 0, 0, NULL);
+           // enqueue(h->q, BLINK, 0, 0, NULL);
             h->blinkTime += h->blinkRate;
         }
         if (time > h->saveTime) {
@@ -320,7 +320,7 @@ void *tick(void *vh) {
 
 event getRawEvent(handler *h, int *x, int *y, char const **t) {
     event e = dequeue(h->q, x, y, t);
-    if (e == LINE_DOWN) printf("GLD\n");
+if (e != FRAME) printf("7\n");
     return e;
 }
 

@@ -54,13 +54,15 @@ static void *run(void *vs) {
     snipe *s = (snipe *) vs;
     bool quitting = false;
     redraw(s->m);
+    event e = FRAME;
     while (! quitting) {
         int r, c;
         char const *t;
-        event e = getEvent(s->dis, &r, &c, &t);
-if (e == LINE_DOWN) printf("G\n");
+if (e != FRAME) printf("11\n");
+        e = getEvent(s->dis, &r, &c, &t);
+if (e != FRAME) printf("9\n");
         quitting = dispatch(s->m, e, r, c, t);
-if (e == LINE_DOWN) printf("D\n");
+if (e != FRAME) printf("10\n");
     }
     return NULL;
 }

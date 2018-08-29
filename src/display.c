@@ -351,6 +351,7 @@ void charPosition(display *d, int x, int y, int *row, int *col) {
 event getEvent(display *d, int *r, int *c, char const **t) {
     int x, y;
     event e = getRawEvent(d->h, &x, &y, t);
+if (e != FRAME) printf("8\n");
     charPosition(d, x, y, r, c);
     return e;
 }

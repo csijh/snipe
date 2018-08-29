@@ -120,8 +120,11 @@ event dequeue(queue *q, int *px, int *py, char const **pt) {
         q->frames--;
         return FRAME;
     }
+printf("1 n=%d\n", q->head - q->tail);
     pthread_mutex_lock(&q->lock);
+printf("2 e=%d\n", empty(q));
     while (empty(q)) pthread_cond_wait(&q->pullable, &q->lock);
+printf("3\n");
     bool tell = full(q);
     data *d = pull(q);
     event e = d->e;
@@ -138,8 +141,11 @@ event dequeue(queue *q, int *px, int *py, char const **pt) {
         free(d->s);
     }
     *pt = q->buffer;
+printf("4\n");
     if (tell) pthread_cond_broadcast(&q->pushable);
+printf("5\n");
     pthread_mutex_unlock(&q->lock);
+printf("6\n");
     return e;
 }
 
