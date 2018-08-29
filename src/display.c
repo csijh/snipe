@@ -340,22 +340,16 @@ static void smoothScroll(display *d) {
 
 // Scale up and round to nearest column.
 void charPosition(display *d, int x, int y, int *row, int *col) {
-    printf("x %d y %d\n", x, y);
     x = x * d->magnify;
     y = y * d->magnify;
-    printf("mx %d my %d\n", x, y);
     *row = (y + d->scroll) / d->charHeight;
     *col = (x - d->pad + d->charWidth / 2) / d->charWidth;
-    printf("r %d c %d\n", *row, *col);
 }
 
 event getEvent(display *d, int *pr, int *pc, char const **pt) {
     int x, y;
     event e = getRawEvent(d->h, &x, &y, pt);
-    if (e == CLICK || e == DRAG) {
-        printf("to call charPos\n");
-        charPosition(d, x, y, pr, pc);
-    }
+    if (e == CLICK || e == DRAG) charPosition(d, x, y, pr, pc);
     return e;
 }
 
