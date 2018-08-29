@@ -25,7 +25,6 @@ static snipe *newSnipe(char const *path, bool testing) {
     s->dis = newDisplay(path);
     s->doc = newDocument(path);
     s->m = newMap(s->doc, s->dis, testing);
-    setDispatcher(s->dis, dispatch, s->m);
     return s;
 }
 
@@ -46,19 +45,24 @@ static void freeSnipe(snipe *s) {
 // - the display scrolls smoothly towards the target position
 // - the display scrolls faster if the target is further
 
-// The main loop is a pure event loop, because all timer ticks are included in
-// the event stream. In particular, when scrolling, animation ticks make the
-// loop act like an animation loop.
-static void run(snipe *s) {
+// The runner thread executes this function. It takes and returns (void *) to
+// match the pthreads convention. It is a pure event loop, because
+// all timer ticks are included in the event stream. In particular, when
+// scrolling, animation ticks make the loop act like an animation loop,
+// otherwise it spends most of the time idle like a conventional event loop.
+static void *run(void *vs) {
+    snipe *s = (snipe *) vs;
     bool quitting = false;
     redraw(s->m);
     while (! quitting) {
         int r, c;
         char const *t;
         event e = getEvent(s->dis, &r, &c, &t);
-//        if (e == QUIT) quitting = true;
+if (e == LINE_DOWN) printf("G\n");
         quitting = dispatch(s->m, e, r, c, t);
+if (e == LINE_DOWN) printf("D\n");
     }
+    return NULL;
 }
 
 int main(int n, char const *args[]) {
@@ -73,7 +77,7 @@ int main(int n, char const *args[]) {
     }
     bool testing = strcmp(getSetting(Testing), "on") == 0;
     snipe *s = newSnipe(path, testing);
-    run(s);
+    startGraphics(s->dis, &run, s);
     free(path);
     freeSnipe(s);
     freeResources();

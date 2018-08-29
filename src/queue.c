@@ -23,7 +23,7 @@ struct data {
 };
 typedef struct data data;
 
-// A queue is a flexible circular array with a lock to share it between threads.
+// A queue is a circular array with a lock to share it between threads.
 // Two condition variables are used to make threads wait to push or pull.
 // There is a string buffer to retain the text data for the most recent
 // event until the next event is requested.

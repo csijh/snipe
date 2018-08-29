@@ -28,7 +28,7 @@ C_ENTER     CycleTheme      change syntax colours
 LINE_UP     LineUp          scroll with a mouse wheel or touchpad gesture
 LINE_DOWN   LineDown        ditto
 BLINK       Blink           cursor blink timer event
-TICK        Tick            animation event for smooth scrolling
+FRAME       Frame           animation event for smooth scrolling
 SAVE        Save            autosave timer event
 TEXT        Insert          typing ordinary text
 RESIZE      Resize          resize window
@@ -48,7 +48,7 @@ List  C_Q         Quit
 List  CLICK       Point
 List  RESIZE      Resize
 List  BLINK       Blink
-List  TICK        Tick
+List  FRAME       Frame
 
 // These actions are not yet implemented.
 // C_BACKSPACE CutLeftWord

@@ -1,13 +1,13 @@
 // The Snipe editor is free and open source, see licence.txt.
 #define _POSIX_C_SOURCE 200809L
 #include "handler.h"
-#include "queue.h"
 #include "event.h"
 #include "file.h"
 #include "string.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <pthread.h>
 #include <time.h>
 #include <assert.h>
 #include <GLFW/glfw3.h>
@@ -18,39 +18,63 @@
 // Add a code for events which are to be discarded.
 event IGNORE = COUNT_EVENTS;
 
+// The handler structure is used for requests from the runner thread for
+// work to be done on the handler thread, so it needs a lock.
 struct handler {
+    pthread_mutex_t lock;
     GLFWwindow *w;
     double blinkRate, saveRate;
     double blinkTime, saveTime;
     bool focused, alive;
     queue *q;
+    int width, height;
 };
 
-handler *newHandler(void *w) {
+// Check that a result from a pthread function is zero.
+static inline void Z(int r) {
+    if (r == 0) return;
+    printf("pthread function failed\n");
+    exit(1);
+}
+
+handler *newHandler(void *w, queue *q, double blinkRate) {
     handler *h = malloc(sizeof(handler));
+    Z(pthread_mutex_init(&h->lock, NULL));
     h->w = w;
-    h->blinkRate = 0.5;
+    h->blinkRate = blinkRate;
     h->saveRate = 60.0;
     h->blinkTime = h->blinkRate;
     h->saveTime = h->saveRate;
     h->focused = true;
     h->alive = true;
-    h->q = newQueue();
+    h->width = h->height = 0;
+    h->q = q;
     return h;
 }
 
 void freeHandler(handler *h) {
-    freeQueue(h->q);
     free(h);
 }
 
 bool focused(handler *h) {
-    return h->focused;
+//    pthread_mutex_lock(&h->lock);
+    bool focused = h->focused;
+//    pthread_mutex_unlock(&h->lock);
+    return focused;
+}
+
+// Make a request for the handler thread to resize the window.
+void resizeWindow(handler *h, int width, int height) {
+    pthread_mutex_lock(&h->lock);
+    h->width = width;
+    h->height = height;
+    pthread_mutex_unlock(&h->lock);
+    glfwPostEmptyEvent();
 }
 
 // Generate a frame event from the runner thread, e.g. when smooth scrolling.
 void frameEvent(handler *h) {
-    enqueue(h->q, TICK, 0, 0, NULL);
+    enqueue(h->q, FRAME, 0, 0, NULL);
 }
 
 // Generate a paste event from the runner thread.
@@ -113,6 +137,7 @@ int getChar(int key) {
 static bool controlText(handler *h, int key) {
     char ch = getChar(key);
     if (ch < 0) return false;
+    if (ch == '+') printf("push C_+\n");
     enqueue(h->q, addEventFlag(C_, ch), 0, 0, NULL);
     return true;
 }
@@ -215,6 +240,7 @@ static void scrollCB(GLFWwindow *w, double x, double y) {
     event e;
     if (y > 0) e = LINE_UP;
     else e = LINE_DOWN;
+    if (e == LINE_DOWN) printf("LD\n");
     if (shift) e = addEventFlag(S_, e);
     if (ctrl) e = addEventFlag(C_, e);
     enqueue(h->q, e, (int) x, (int) y, NULL);
@@ -237,7 +263,9 @@ static void resizeCB(GLFWwindow *w, int width, int height) {
 
 static void focusCB(GLFWwindow *w, int focused) {
     handler *h = glfwGetWindowUserPointer(w);
+//    pthread_mutex_lock(&h->lock);
     h->focused = focused;
+//    pthread_mutex_unlock(&h->lock);
 }
 
 // Set up all the desired callbacks, then process events in a loop.
@@ -250,7 +278,15 @@ void handle(handler *h) {
     glfwSetWindowCloseCallback(h->w, closeCB);
     glfwSetWindowFocusCallback(h->w, focusCB);
     glfwSetWindowSizeCallback(h->w, resizeCB);
-    while (h->alive) glfwWaitEventsTimeout(1.0);
+    while (h->alive) {
+        glfwWaitEventsTimeout(1.0);
+        pthread_mutex_lock(&h->lock);
+        if (h->width > 0) {
+            glfwSetWindowSize(h->w, h->width, h->height);
+            h->width = h->height = 0;
+        }
+        pthread_mutex_unlock(&h->lock);
+    }
 }
 
 // Delay for a given number of seconds.
@@ -282,12 +318,10 @@ void *tick(void *vh) {
     return NULL;
 }
 
-void setBlinkRate(handler *h, double br) {
-    h->blinkRate = br;
-}
-
 event getRawEvent(handler *h, int *x, int *y, char const **t) {
-    return dequeue(h->q, x, y, t);
+    event e = dequeue(h->q, x, y, t);
+    if (e == LINE_DOWN) printf("GLD\n");
+    return e;
 }
 
 #ifdef test_handler

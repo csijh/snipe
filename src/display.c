@@ -4,7 +4,9 @@
 // TODO: font pages.
 // TODO: Draw BAD with specific bg/fg colours. Draw highlight as a bg colour.
 
+#define _POSIX_C_SOURCE 200809L
 #include "display.h"
+#include "queue.h"
 #include "event.h"
 #include "action.h"
 #include "style.h"
@@ -16,6 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <pthread.h>
 #include <GLFW/glfw3.h>
 
 // A display object represents the main window, with layout measurements. The
@@ -28,6 +31,7 @@
 // to a handler object.
 struct display {
     handler *h;
+    queue *q;
     font *f;
     int fontSize;
     theme *t;
@@ -38,6 +42,8 @@ struct display {
     bool showCaret;
     int showSize;
     page *p;
+    runFunction *run;
+    void *runArg;
 };
 
 // Report a GLFW error.
@@ -57,6 +63,26 @@ static void checkGLError() {
     }
     glfwTerminate();
     exit(1);
+}
+
+// Arrange to call the run function, handing over the OpenGL context.
+static void *runRun(void *vd) {
+    display *d = (display *) vd;
+    glfwMakeContextCurrent(d->gw);
+    d->run(d->runArg);
+    glfwMakeContextCurrent(NULL);
+    return NULL;
+}
+
+void startGraphics(display *d, runFunction *run, void *arg) {
+    d->run = run;
+    d->runArg = arg;
+    pthread_t runner, ticker;
+    pthread_create(&runner, NULL, &runRun, d);
+    pthread_create(&ticker, NULL, &tick, d->h);
+    handle(d->h);
+    pthread_join(runner, NULL);
+    pthread_join(ticker, NULL);
 }
 
 // Create an invisible new window of arbitrary size, and use it to initialize
@@ -104,15 +130,14 @@ static void setupGL(display *d) {
     glLoadIdentity();
     glOrtho(0, d->width, d->height, 0, -1, 1);
     glViewport(0, 0, d->width, d->height);
-    glfwSetWindowSize(d->gw, d->width/d->magnify, d->height/d->magnify);
-    glfwShowWindow(d->gw);
+    resizeWindow(d->h, d->width/d->magnify, d->height/d->magnify);
     checkGLError();
 }
 
 // Set or change the size of the window as the result of a change of font size.
 // Calculate the display metrics. Load the font image into a texture. Set up an
 // orthogonal projection, with y reversed so 2D graphics (right,down) pixel
-// coordinates can be used. Set the display size and make sure it is visible.
+// coordinates can be used. Set the display size.
 static void setSize(display *d) {
     int targetRow;
     if (d->scrollTarget != 0) targetRow = d->scrollTarget / d->charHeight;
@@ -141,7 +166,8 @@ static void paintBackground(display *d) {
     checkGLError();
 }
 
-// Create and initialize the display. Release the OpenGL context (window).
+// Create and initialize the display. Release the OpenGL context so the runner
+// thread can use it.
 display *newDisplay(char const *path) {
     display *d = malloc(sizeof(*d));
     initWindow(d);
@@ -157,26 +183,33 @@ display *newDisplay(char const *path) {
     d->scrollTarget = 0;
     d->showCaret = false;
     d->showSize = 0;
-    d->h = newHandler(d->gw);
-    setBlinkRate(d->h, atof(getSetting(BlinkRate)));
+    d->q = newQueue();
+    double blinkRate = atof(getSetting(BlinkRate));
+    d->h = newHandler(d->gw, d->q, blinkRate);
     setSize(d);
     paintBackground(d);
     glfwSwapBuffers(d->gw);
     paintBackground(d);
+    glfwShowWindow(d->gw);
     glfwMakeContextCurrent(NULL);
     return d;
 }
 
-// Call from main (handler) thread. Assume runner has released context.
+// Call from main (handler) thread. Assume runner has released OpenGL context.
 void freeDisplay(display *d) {
     glfwMakeContextCurrent(d->gw);
-    glDeleteTextures(1, &d->fontTextureId);
     glfwDestroyWindow(d->gw);
+    glDeleteTextures(1, &d->fontTextureId);
     glfwTerminate();
     freeFont(d->f);
     freeTheme(d->t);
     freeHandler(d->h);
+    freeQueue(d->q);
     free(d);
+}
+
+static void frameEvent(display *d) {
+    enqueue(d->q, FRAME, 0, 0, NULL);
 }
 
 static void bigger(display *d) {
@@ -196,7 +229,7 @@ static void cycleTheme(display *d) {
 
 void setScrollTarget(display *d, int row) {
     d->scrollTarget = row * d->charHeight;
-    if (d->scroll != d->scrollTarget) frameEvent(d->h);
+    if (d->scroll != d->scrollTarget) frameEvent(d);
 }
 
 // Paint a given rectangle.
@@ -266,11 +299,11 @@ static void blinkCaret(display *d) {
     else d->showCaret = ! d->showCaret;
 }
 
-// Use glfwGetFramebufferSize to get pixels, not glfwGetWindowSize, which gives
-// screen coordinates, different by a factor two on retina screens.
 static void checkResize(display *d) {
     int width, height;
-    glfwGetFramebufferSize(d->gw, &width, &height);
+    glfwGetWindowSize(d->gw, &width, &height);
+    width = width * d->magnify;
+    height = height * d->magnify;
     int cols = (width - 2 * d->pad) / d->charWidth;
     int rows = (height - d->pad) / d->charHeight;
     d->width = width;
@@ -305,7 +338,7 @@ static void smoothScroll(display *d) {
     int diff = d->scrollTarget - d->scroll;
     diff = (diff >= 0) ? (diff + 9)/10 : (diff - 9)/10;
     d->scroll += diff;
-    if (d->scroll != d->scrollTarget) frameEvent(d->h);
+    if (d->scroll != d->scrollTarget) frameEvent(d);
 }
 
 // Round to nearest column.
@@ -327,7 +360,7 @@ void actOnDisplay(display *d, action a, char const *s) {
         case Smaller: smaller(d); break;
         case CycleTheme: cycleTheme(d); break;
         case Blink: blinkCaret(d); break;
-        case Tick: smoothScroll(d); break;
+        case Frame: smoothScroll(d); break;
         case Open: case Load: d->scroll = 0; break;
         case Paste: pasteEvent(d->h); break;
         case Cut: case Copy: clip(d->h, s); break;
@@ -337,9 +370,6 @@ void actOnDisplay(display *d, action a, char const *s) {
 }
 
 #ifdef test_display
-
-#define _POSIX_C_SOURCE 200809L
-#include <pthread.h>
 
 // Redraw with text for testing.
 static void testRedraw(display *d) {
@@ -363,12 +393,12 @@ static void testRedraw(display *d) {
 // Represents the runner thread. Grab the OpenGL context.
 static void *run(void *vd) {
     display *d = (display *) vd;
-    glfwMakeContextCurrent(d->gw);
     event e = BLINK;
     int r, c;
     char const *t;
     while (e != QUIT) {
         e = getEvent(d, &r, &c, &t);
+        if (e == addEventFlag(C_,'+')) { printEvent(e, r, c, t); printf(" ok\n"); }
         if (e != BLINK) { printEvent(e, r, c, t); printf("\n"); }
         if (e == BLINK) blinkCaret(d);
         else if (e == addEventFlag(C_, '+')) bigger(d);
@@ -378,7 +408,6 @@ static void *run(void *vd) {
         else if (e == RESIZE) checkResize(d);
         testRedraw(d);
     }
-    glfwMakeContextCurrent(NULL);
     return NULL;
 }
 
@@ -389,12 +418,7 @@ int main(int n, char const *args[n]) {
     printf("Check looks OK, blink, window resize, font size, cycle theme\n");
     printf("Check range of events printed\n");
     display *d = newDisplay("");
-    pthread_t runner, ticker;
-    pthread_create(&runner, NULL, &run, d);
-    pthread_create(&ticker, NULL, &tick, d->h);
-    handle(d->h);
-    pthread_join(runner, NULL);
-    pthread_join(ticker, NULL);
+    startGraphics(d, &run, d);
     freeDisplay(d);
     freeResources();
     printf("Display module OK\n");

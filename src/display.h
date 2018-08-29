@@ -15,11 +15,18 @@ typedef struct display display;
 // Declare the action type, avoiding the inclusion of the action header.
 typedef int action;
 
+// The type of a run function to be executed on the runner thread.
+typedef void *runFunction(void *p);
+
 // Create a display, with user preference settings.
 display *newDisplay(char const *path);
 
 // Free up the display object and its contents.
 void freeDisplay(display *d);
+
+// Set up handler and ticker threads, and execute the provided run function on
+// a separate runner thread, passing the given pointer.
+void startGraphics(display *d, runFunction *run, void *p);
 
 // Set the window title according to the current file path.
 void setTitle(display *d, char const *path);

@@ -20,7 +20,7 @@ static char *settingNames[] = {
 };
 
 // Convert the name of a setting to a setting constant, or -1 to ignore.
-// Use platform macro variables defined by the Makefile.
+// Use platform macro variables to choose a help command.
 static setting convert(char *name) {
     for (setting s = 0; s <= Theme; s++) {
         if (strcmp(name, settingNames[s]) == 0) return s;

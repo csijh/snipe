@@ -94,7 +94,7 @@ action:
 	./snipe
 
 # The modules which form the view.
-VIEW = display.c handler.c font.c event.c theme.c
+VIEW = display.c handler.c font.c queue.c event.c theme.c
 .PHONY: $(VIEW)
 
 theme:
@@ -173,8 +173,9 @@ snipe:
 psnipe:
 	cp setting.h style.h event.h action.h Makefile ../help/
 	$(PCC) map.c $(MODEL) $(VIEW) $(UTILS) $(FT) $(GL)
+	cp $(EXEC) ..
 
+# Make a binary distribution after making psnipe.
 zip:
-	mv $(EXEC) ..
 	cd ../.. && zip -r snipe.zip snipe/files snipe/help snipe/languages \
 	snipe/settings.txt snipe/$(EXEC)

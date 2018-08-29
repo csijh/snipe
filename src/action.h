@@ -9,7 +9,7 @@ enum action {
     MarkEndLine, CutLeftChar, CutRightChar, CutLeftWord, CutRightWord,
     CutUpLine, CutDownLine, CutStartLine, CutEndLine, Point, Select, AddPoint,
     AddSelect, Newline, Insert, Cut, Copy, Paste, Undo, Redo, Load, Save, Open,
-    Bigger, Smaller, CycleTheme, PageUp, PageDown, Resize, Blink, Tick, LineUp,
+    Bigger, Smaller, CycleTheme, PageUp, PageDown, Resize, Blink, Frame, LineUp,
     LineDown, Help, Quit, Ignore, COUNT_ACTIONS = Ignore + 1
 };
 typedef int action;

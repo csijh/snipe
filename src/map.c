@@ -92,11 +92,10 @@ void redraw(map *m) {
 
 // Offer an action to the document, then the display, return whether quitting.
 bool dispatch(map *m, event e, int r, int c, char const *t) {
-printf("dis\n");
     action a;
     if (isDirectory(m->doc)) a = m->listArray[e];
     else a = m->array[e];
-    if (m->testing && e != BLINK && e != SAVE && e != RESIZE && e != TICK) {
+    if (m->testing && e != BLINK && e != SAVE && e != RESIZE && e != FRAME) {
         printEvent(e, r, c, t);
         printf("  ->  ");
         printAction(a);
