@@ -40,9 +40,11 @@ chars *getStyle(document *d, int row);
 // Apply selection and caret information to the style bytes for a line.
 void addCursorFlags(document *d, int row, int n, chars *styles);
 
-// Set row/col/text data for the next event. The text is only valid until the
-// following event.
-void setData(document *d, int r, int c, char const *t);
+// Set row/col data for the next event.
+void setRowColData(document *d, int r, int c);
+
+// Set text data for the next event; t is only valid until the following event.
+void setTextData(document *d, char const *t);
 
 // Carry out an action on the document. Return cut/copy text.
 char const *actOnDocument(document *d, action a);

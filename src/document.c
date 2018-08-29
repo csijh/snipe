@@ -193,6 +193,7 @@ static void doHelp(document *d) {
     char *pc = strchr(line, '%');
     strcpy(pc, path);
     system(line);
+    free(path);
 }
 
 // Load the filename selected in a directory listing.
@@ -220,13 +221,16 @@ static void doOpen(document *d) {
     free(path);
 }
 
-void setData(document *d, int row, int col, char const *t) {
+void setRowColData(document *d, int row, int col) {
     ints *lines = getLines(d->content);
     if (row > getHeight(d)) row = getHeight(d);
     int start = startLine(lines, row);
     int len = lengthLine(lines, row);
     if (col >= len) col = len - 1;
     d->pos = start + col;
+}
+
+void setTextData(document *d, char const *t) {
     d->text = t;
 }
 

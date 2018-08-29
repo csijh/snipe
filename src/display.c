@@ -69,6 +69,7 @@ static void checkGLError() {
 static void *runRun(void *vd) {
     display *d = (display *) vd;
     glfwMakeContextCurrent(d->gw);
+    enqueue(d->q, FRAME, 0, 0, NULL);
     d->run(d->runArg);
     glfwMakeContextCurrent(NULL);
     return NULL;
@@ -208,11 +209,6 @@ void freeDisplay(display *d) {
     free(d);
 }
 
-static void frameEvent(display *d) {
-    enqueueFrame(d->q);
-//    enqueue(d->q, FRAME, 0, 0, NULL);
-}
-
 static void bigger(display *d) {
     if (d->fontSize <= 35 * d->magnify) d->fontSize += d->magnify;
     setSize(d);
@@ -230,7 +226,7 @@ static void cycleTheme(display *d) {
 
 void setScrollTarget(display *d, int row) {
     d->scrollTarget = row * d->charHeight;
-    if (d->scroll != d->scrollTarget) frameEvent(d);
+    if (d->scroll != d->scrollTarget) enqueue(d->q, FRAME, 0, 0, NULL);
 }
 
 // Paint a given rectangle.
@@ -339,7 +335,7 @@ static void smoothScroll(display *d) {
     int diff = d->scrollTarget - d->scroll;
     diff = (diff >= 0) ? (diff + 9)/10 : (diff - 9)/10;
     d->scroll += diff;
-    if (d->scroll != d->scrollTarget) frameEvent(d);
+    if (d->scroll != d->scrollTarget) enqueue(d->q, FRAME, 0, 0, NULL);
 }
 
 // Round to nearest column.
@@ -351,7 +347,6 @@ void charPosition(display *d, int x, int y, int *row, int *col) {
 event getEvent(display *d, int *r, int *c, char const **t) {
     int x, y;
     event e = getRawEvent(d->h, &x, &y, t);
-if (e != FRAME) printf("8\n");
     charPosition(d, x, y, r, c);
     return e;
 }
@@ -365,7 +360,8 @@ void actOnDisplay(display *d, action a, char const *s) {
         case Frame: smoothScroll(d); break;
         case Open: case Load: d->scroll = 0; break;
         case Paste: pasteEvent(d->h); break;
-        case Cut: case Copy: clip(d->h, s); break;
+        case Cut: case Copy:
+        clip(d->h, s); break;
         case Resize: checkResize(d); break;
         default: break;
     }
@@ -400,7 +396,6 @@ static void *run(void *vd) {
     char const *t;
     while (e != QUIT) {
         e = getEvent(d, &r, &c, &t);
-        if (e == addEventFlag(C_,'+')) { printEvent(e, r, c, t); printf(" ok\n"); }
         if (e != BLINK) { printEvent(e, r, c, t); printf("\n"); }
         if (e == BLINK) blinkCaret(d);
         else if (e == addEventFlag(C_, '+')) bigger(d);

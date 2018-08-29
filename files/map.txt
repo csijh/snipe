@@ -1,9 +1,9 @@
 // Default key/mouse/window/timer mappings from events to actions. For event X,
 // if S_X or C_X is missing, it defaults to X, and SC_X defaults to C_X. Entries
-// for timer events should be changed only with care. Entries for TEXT, CLICK,
-// DRAG should not normally be changed, because they involve extra text or
-// position information. Entries for List... actions apply to directory listings
-// rather than text files.
+// for timer events should be changed only with care. Entries for TEXT, PASTE,
+// CLICK, DRAG should not normally be changed, because they involve extra text
+// or position information. Entries for List... actions apply to directory
+// listings rather than text files.
 
 BACKSPACE   CutLeftChar
 ENTER       Newline
@@ -31,6 +31,7 @@ BLINK       Blink           cursor blink timer event
 FRAME       Frame           animation event for smooth scrolling
 SAVE        Save            autosave timer event
 TEXT        Insert          typing ordinary text
+PASTE       Insert          pasting text
 RESIZE      Resize          resize window
 CLICK       Point           mouse button down to change cursor
 DRAG        Select          mouse button up (possibly without movement)

@@ -26,7 +26,9 @@ typedef struct data data;
 // A queue is a circular array with a lock to share it between threads.
 // Two condition variables are used to make threads wait to push or pull.
 // There is a string buffer to retain the text data for the most recent
-// event until the next event is requested.
+// event until the next event is requested. Animation frame events are
+// not pushed on the array, but just counted, and returned when the array
+// is otherwise empty.
 struct queue {
     int size, head, tail;
     data *array;
@@ -51,7 +53,7 @@ queue *newQueue() {
     q->head = q->tail = 0;
     q->array = malloc(q->size * sizeof(data));
     q->bufferSize = 256;
-    q->buffer = malloc(q->bufferSize);
+    q->buffer = NULL;
     q->frames = 0;
     assert(q->bufferSize >= TEXT_SIZE);
     Z(pthread_cond_init(&q->pushable, NULL));
@@ -90,62 +92,61 @@ static inline data *push(queue *q) {
     return d;
 }
 
-// Bypass the queue itself, and just count the number of outstanding frames.
-void enqueueFrame(queue *q) {
-    q->frames++;
-}
-
 // Push an event, waiting if necessary. If adding to an empty queue, wake up any
-// threads waiting to pull. For PASTE, make a copy of the string, just in case.
+// threads waiting to pull. For a FRAME event, count it rather than queueing it.
 void enqueue(queue *q, event e, int x, int y, char const *t) {
     pthread_mutex_lock(&q->lock);
+    if (e == FRAME) {
+        q->frames++;
+        pthread_mutex_unlock(&q->lock);
+        return;
+    }
     while (full(q)) pthread_cond_wait(&q->pushable, &q->lock);
     bool tell = empty(q);
     data *d = push(q);
     d->e = e;
     if (e == CLICK || e == DRAG) { d->p.x = x; d->p.y = y; }
     else if (e == TEXT) strcpy(d->t, t);
-    else if (e == PASTE) {
-        d->s = malloc(strlen(t) + 1);
-        strcpy(d->s, t);
-    }
+    else if (e == PASTE) d->s = (char *) t;
     if (tell) pthread_cond_broadcast(&q->pullable);
     pthread_mutex_unlock(&q->lock);
 }
 
-// Pull an event, waiting if necessary. If getting from a full queue, wake up
-// threads waiting to push. Buffer text to keep it valid until the next request.
+// Pull an event, waiting if necessary. If pulling from a full queue, wake up
+// threads waiting to push. Allow non-FRAME events to overtake FRAME events, by
+// returning a FRAME event only if the queue is otherwise empty. For TEXT, it is
+// OK to return a pointer to the eventData structure, because further enqueued
+// events can't overwrite the current data before the next event is requested.
+
+// Buffer text to
+// keep it valid until the next request.
 event dequeue(queue *q, int *px, int *py, char const **pt) {
-    if (q->frames > 0) {
+    pthread_mutex_lock(&q->lock);
+    if (empty(q) && q->frames > 0) {
         q->frames--;
+        pthread_mutex_unlock(&q->lock);
         return FRAME;
     }
-printf("1 n=%d\n", q->head - q->tail);
-    pthread_mutex_lock(&q->lock);
-printf("2 e=%d\n", empty(q));
     while (empty(q)) pthread_cond_wait(&q->pullable, &q->lock);
-printf("3\n");
     bool tell = full(q);
     data *d = pull(q);
     event e = d->e;
     if (e == CLICK || e == DRAG) { *px = d->p.x; *py = d->p.y; }
-    else if (e == TEXT) strcpy(q->buffer, d->t);
+    else if (e == TEXT) *pt = d->t;
     else if (e == PASTE) {
-        int n = strlen(d->s) + 1;
-        if (q->bufferSize < n) {
-            q->bufferSize = n;
-            free(q->buffer);
-            q->buffer = malloc(n);
-        }
-        strcpy(q->buffer, d->s);
-        free(d->s);
+        q->buffer = d->s;
+//        int n = strlen(d->s) + 1;
+//        if (q->bufferSize < n) {
+//            q->bufferSize = n;
+//            free(q->buffer);
+//            q->buffer = malloc(n);
+//        }
+//        strcpy(q->buffer, d->s);
+//        free(d->s);
+        *pt = q->buffer;
     }
-    *pt = q->buffer;
-printf("4\n");
     if (tell) pthread_cond_broadcast(&q->pushable);
-printf("5\n");
     pthread_mutex_unlock(&q->lock);
-printf("6\n");
     return e;
 }
 

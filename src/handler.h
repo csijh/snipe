@@ -30,8 +30,9 @@ handler *newHandler(void *w, queue *q, double blinkRate);
 // Free up the handler and its data. Called on the main thread.
 void freeHandler(handler *h);
 
-// Handle system events, including window resizing. Called on the main thread
-// to form the handler thread. Return on QUIT.
+// Handle system events, including window resizing. Called on the main thread to
+// form the handler thread. Wake up the handler by calling glfwPostEmptyEvent.
+// Return on QUIT.
 void handle(handler *h);
 
 // Ask the handler thread to resize the window. Called from the runner thread.
@@ -49,9 +50,6 @@ bool focused(handler *h);
 // Get the next event, possibly with a pause. Fill in the px, py, pt variables.
 // Called from the runner thread.
 event getRawEvent(handler *h, int *px, int *py, char const **pt);
-
-// Generate a frame event. Call when drawing a frame with vsync.
-//void frameEvent(handler *h);
 
 // Generate a paste event. Called from the runner thread when C_V is pressed.
 void pasteEvent(handler *h);

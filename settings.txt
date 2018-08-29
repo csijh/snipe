@@ -21,7 +21,9 @@ Map files/map.txt
 
 // Command to open help page in browser for each platform, with % replaced
 // by url. See https://www.dwheeler.com/essays/open-files-urls.html
-HelpLinux   xdg-open %
+// On Linux, xdg-open often doesn't work, so it is simpler to run the desired
+// browser directly
+HelpLinux   firefox %
 HelpMacOS   open %
 HelpWindows start %
 

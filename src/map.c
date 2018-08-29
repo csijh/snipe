@@ -101,8 +101,11 @@ bool dispatch(map *m, event e, int r, int c, char const *t) {
         printAction(a);
     }
     event base = clearEventFlags(e);
-    if (base == TEXT || base == CLICK || base == DRAG) {
-        setData(m->doc, r, c, t);
+    if (base == CLICK || base == DRAG) {
+        setRowColData(m->doc, r, c);
+    }
+    else if (base == TEXT || base == PASTE) {
+        setTextData(m->doc, t);
     }
     char const *copy = actOnDocument(m->doc, a);
     actOnDisplay(m->dis, a, copy);

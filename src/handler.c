@@ -28,6 +28,8 @@ struct handler {
     bool focused, alive;
     queue *q;
     int width, height;
+    bool pasting;
+    char *clipping;
 };
 
 // Check that a result from a pthread function is zero.
@@ -48,6 +50,8 @@ handler *newHandler(void *w, queue *q, double blinkRate) {
     h->focused = true;
     h->alive = true;
     h->width = h->height = 0;
+    h->pasting = false;
+    h->clipping = NULL;
     h->q = q;
     return h;
 }
@@ -72,20 +76,22 @@ void resizeWindow(handler *h, int width, int height) {
     glfwPostEmptyEvent();
 }
 
-// Generate a frame event from the runner thread, e.g. when smooth scrolling.
-void frameEvent(handler *h) {
-    enqueue(h->q, FRAME, 0, 0, NULL);
-}
-
-// Generate a paste event from the runner thread.
+// Make a request for the handler to generate a paste event.
 void pasteEvent(handler *h) {
-    char const *s = glfwGetClipboardString(h->w);
-    if (s == NULL) s = "";
-    enqueue(h->q, PASTE, 0, 0, s);
+    pthread_mutex_lock(&h->lock);
+    h->pasting = true;
+    pthread_mutex_unlock(&h->lock);
+    glfwPostEmptyEvent();
 }
 
+// Make a request for the handler to cut/copy to the clipboard.
 void clip(handler *h, char const *s) {
-    glfwSetClipboardString(h->w, s);
+    char *temp = malloc(sizeof(s) + 1);
+    strcpy(temp, s);
+    pthread_mutex_lock(&h->lock);
+    h->clipping = temp;
+    pthread_mutex_unlock(&h->lock);
+    glfwPostEmptyEvent();
 }
 
 // ----- Keyboard --------------------------------------------------------------
@@ -137,7 +143,6 @@ int getChar(int key) {
 static bool controlText(handler *h, int key) {
     char ch = getChar(key);
     if (ch < 0) return false;
-    if (ch == '+') printf("push C_+\n");
     enqueue(h->q, addEventFlag(C_, ch), 0, 0, NULL);
     return true;
 }
@@ -240,7 +245,6 @@ static void scrollCB(GLFWwindow *w, double x, double y) {
     event e;
     if (y > 0) e = LINE_UP;
     else e = LINE_DOWN;
-//    if (e == LINE_DOWN) printf("LD\n");
     if (shift) e = addEventFlag(S_, e);
     if (ctrl) e = addEventFlag(C_, e);
     enqueue(h->q, e, (int) x, (int) y, NULL);
@@ -268,7 +272,8 @@ static void focusCB(GLFWwindow *w, int focused) {
 //    pthread_mutex_unlock(&h->lock);
 }
 
-// Set up all the desired callbacks, then process events in a loop.
+// Set up all the desired callbacks, then process events in a loop. The wait
+// call can be interrupted by calling glfwPostEmptyEvent.
 void handle(handler *h) {
     glfwSetWindowUserPointer(h->w, h);
     glfwSetKeyCallback(h->w, keyCB);
@@ -279,11 +284,24 @@ void handle(handler *h) {
     glfwSetWindowFocusCallback(h->w, focusCB);
     glfwSetWindowSizeCallback(h->w, resizeCB);
     while (h->alive) {
-        glfwWaitEventsTimeout(1.0);
+        glfwWaitEvents();
         pthread_mutex_lock(&h->lock);
         if (h->width > 0) {
             glfwSetWindowSize(h->w, h->width, h->height);
             h->width = h->height = 0;
+        }
+        if (h->pasting) {
+            char const *s = glfwGetClipboardString(h->w);
+            if (s == NULL) s = "";
+            char *temp = malloc(strlen(s) + 1);
+            strcpy(temp, s);
+            enqueue(h->q, PASTE, 0, 0, temp);
+            h->pasting = false;
+        }
+        if (h->clipping != NULL) {
+            glfwSetClipboardString(h->w, h->clipping);
+            free(h->clipping);
+            h->clipping = NULL;
         }
         pthread_mutex_unlock(&h->lock);
     }
@@ -304,7 +322,7 @@ void *tick(void *vh) {
     while (h->alive) {
         double time = glfwGetTime();
         if (h->blinkRate > 0 && time > h->blinkTime) {
-           // enqueue(h->q, BLINK, 0, 0, NULL);
+            enqueue(h->q, BLINK, 0, 0, NULL);
             h->blinkTime += h->blinkRate;
         }
         if (time > h->saveTime) {
@@ -320,7 +338,6 @@ void *tick(void *vh) {
 
 event getRawEvent(handler *h, int *x, int *y, char const **t) {
     event e = dequeue(h->q, x, y, t);
-if (e != FRAME) printf("7\n");
     return e;
 }
 
