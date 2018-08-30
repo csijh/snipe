@@ -326,7 +326,7 @@ the line:</p>
 
 <p>On many operating systems, during long user gestures such as dragging a
 window by its title bar, or resizing a window, or (most irritatingly) scrolling
-with a trackpad on a laptop, a program appears to freeze. This is because the
+with a touchpad on a laptop, a program appears to freeze. This is because the
 program is executing a long-lasting loop within the operating system.</p>
 
 <p>During the loop, although the program itself is not executing normal program
@@ -343,9 +343,9 @@ would insulate the programmer from such things, but it doesn't.</p>
 
 <p>In <mark>Snipe</mark>, it is desirable to use animation to achieve smooth
 scrolling when the user scrolls with a mouse wheel. It is difficult, and not
-desirable, to distinguish mouse wheel scrolling from trackpad scrolling. So,
+desirable, to distinguish mouse wheel scrolling from touchpad scrolling. So,
 some other technique is needed to allow animations to continue during
-trackpad scrolling, and at the same time solve any issues with other long
+touchpad scrolling, and at the same time solve any issues with other long
 user gestures.</p>
 
 <p>The only general way to solve this problem is with threads.
