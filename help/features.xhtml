@@ -19,11 +19,10 @@ mark {
 
 <h1>Features</h1>
 
-<p>In general, the aims are to make the 'best' choice possible, and to automate as
-much as possible. The general settings can be seen in the file
-<a href="../settings.txt">settings.txt</a>. The keyboard and mouse mappings
-can be seen in the file
-<a href="../files/map.txt">files/map.txt</a>.</p>
+<p>The actions corresponding to keyboard and mouse gestures can be gleaned
+from the file <a href="../files/map.txt">files/map.txt</a>, which can be
+customised. There are also some general settings in the file
+<a href="../settings.txt">settings.txt</a>.</p>
 
 <h2>Bracket matching</h2>
 
@@ -32,9 +31,9 @@ matched, and mismatched brackets are syntax-coloured as errors. Care is taken
 over the way in which brackets are matched, because it affects
 auto-indenting.</p>
 
-<p>Only brackets which are marked by the scanner as signs are matched. Others
-are assumed to be inside comments or strings. Brackets which are unmatched
-are not marked as errors. They are assumed to affect indenting.</p>
+<p>Only syntactically meaningful brackets are matched. Others are assumed to be
+inside comments or strings. Brackets which are unmatched rather than mismatched
+are not marked as errors. Instead, they affect indenting.</p>
 
 <p>Where there is a mismatched pair of brackets <code>(]</code> say, only one is
 marked as an error where reasonably possible, e.g. if the pair appears in the
@@ -54,16 +53,16 @@ and hopefully painless loss of control over indenting, the user need never think
 about or adjust indenting ever again. The amount of indent on a line is
 determined by simple rules, as explained below, and maintained during all
 editing operations. <!-- The cursor can't be placed inside the indent - it
-moves back and forth past the indent as if it wasn't there.-->  Attempts made
-to change the indent fail, because it is immediately corrected.</p>
+moves back and forth past the indent as if it wasn't there.-->  An attempt made
+to change the indent fails, because it is immediately corrected.</p>
 
 <p>It is challenging to come up with rules which are simple to understand and
 implement, which are immediately apparent to the eye, which work across a wide
 range of languages, which work even when a program is not in a syntactically
 correct state, which cope with continuations of single statements onto multiple
 lines as well as blocks of statements, which support all the common indenting
-styles, and which the majority of programmers can accept comfortably without
-irritation.</p>
+styles, and which the majority of programmers can learn to accept comfortably
+without irritation.</p>
 
 <p>The rules chosen are adapted from Python, and should work across all
 curly-bracket-based languages, and possibly many more. The rules work on a
@@ -75,29 +74,39 @@ not inside comments or strings) count.</p>
 <dfn>outdenter</dfn> is similarly an unmatched close bracket. Each indenter
 causes the indent to be increased, starting on the following line. An outdenter
 causes the indent to be decreased, starting on the following line, or on the
-same line if the outdenter is at the start.</p>
+same line if there is an outdenter at the start.</p>
 
-<p>Comment lines and multi-line strings follow these indenting rules, as well as
-ordinary code. The indent of a blank line is temporarily zero.</p>
+<p>Comment lines currently follow these indenting rules, as well as
+ordinary code. The indent of a blank line is temporarily zero. The feature
+currently supports the two most popular
+<a href="https://en.wikipedia.org/wiki/Indentation_style">indenting styles</a>,
+K&amp;R and Allman, and to a lsser extent, some other styles such as Horstmann
+and Pico.</p>
 
-<p>This feature is experimental, and currently a bit rough. The handling of
+<p>This feature is experimental, and currently a bit rough. The cursor needs to
+be kept out of the indent area, and a newline and following indent need to be
+treated like a single character.
+The handling of
 blank lines and trailing spaces on the ends of lines needs to be improved.
 The feature needs to be enabled and controlled from language definition files so
-that, for example, more indent styles (other than K&amp;R and Allman) can be
-supported, labels and cases in switches can be handled specially, and
-keywords can be marked as indenters or outdenters so that more languages
-can be supported.</p>
+that, for example, more indent styles can be supported, labels and cases in
+switches can be handled specially, and keywords can be marked as indenters or
+outdenters so that more languages can be supported. It isn't clear whether the
+continual movement in and out of the code below the line being edited will
+seem natural after a while, or whether it needs improvement, perhaps by not
+repairing indents below a line until the cursor moves off it.</p>
 
 <h2>Help</h2>
 
 <p>Typing CTRL+H makes a help page appears in the browser. The command to do
 that varies by platform. Unfortunately, this tends not to be very reliable,
-so it can be customized in the settings file.</p>
+so it may need to be customized in the settings file.</p>
 
 <h2>File menu</h2>
 
 <p>Typing CTRL+O makes a file menu appears. Choose a line with the arrow keys
-and press ENTER to load a file.</p>
+or mouse, and press ENTER to load a file. Later, double clicking and syntax
+highlighting will be added.</p>
 
 <h2>Line endings</h2>
 
