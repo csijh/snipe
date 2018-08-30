@@ -38,8 +38,8 @@ GL = -I../glfw/include -L../glfw/lib -lglfw3 $(SYS)
 
 # Compiler commands for production compiling, and for test compiling.
 # The gcc compiler ca be replaced by clang, if desired.
-PCC = gcc -std=c11 -o $(EXEC) -O2 -DNDEBUG $@.c
-TCC = gcc -std=c11 -o $(EXEC) -Wall -pedantic -g $(DEBUG) -Dtest_$@ $@.c
+PCC = gcc -std=c11 -o $(EXEC) -O2 -DNDEBUG
+TCC = gcc -std=c11 -o $(EXEC) -Wall -pedantic -g $(DEBUG) -Dtest_$@
 
 # Build a cut down version of freetype (with no dependencies) from source.
 ../freetype/objs/libfreetype.a:
@@ -66,31 +66,31 @@ UTILS = action.c style.c setting.c string.c list.c array.c file.c
 .PHONY: $(UTILS)
 
 file:
-	$(TCC)
+	$(TCC) file.c
 	./snipe
 
 array:
-	$(TCC)
+	$(TCC) array.c
 	./snipe
 
 list:
-	$(TCC)
-	./snipe
-
-string:
 	$(TCC) list.c
 	./snipe
 
+string:
+	$(TCC) string.c list.c
+	./snipe
+
 setting:
-	$(TCC) string.c list.c file.c $(SYS)
+	$(TCC) setting.c string.c list.c file.c $(SYS)
 	./snipe
 
 style:
-	$(TCC) string.c list.c file.c
+	$(TCC) style.c string.c list.c file.c
 	./snipe
 
 action:
-	$(TCC) string.c list.c file.c
+	$(TCC) action.c string.c list.c file.c
 	./snipe
 
 # The modules which form the view.
@@ -98,27 +98,27 @@ VIEW = display.c handler.c font.c queue.c event.c theme.c
 .PHONY: $(VIEW)
 
 theme:
-	$(TCC) style.c setting.c string.c list.c file.c
+	$(TCC) theme.c style.c setting.c string.c list.c file.c
 	./snipe
 
 font: ../freetype/objs/libfreetype.a
-	$(TCC) file.c $(FT)
+	$(TCC) font.c file.c $(FT)
 	./snipe
 
 event:
-	$(TCC)
-	./snipe
-
-queue:
 	$(TCC) event.c
 	./snipe
 
+queue:
+	$(TCC) queue.c event.c
+	./snipe
+
 handler: ../glfw/lib/libglfw3.a
-	$(TCC) queue.c event.c theme.c $(UTILS) $(GL)
+	$(TCC) handler.c queue.c event.c theme.c $(UTILS) $(GL)
 	./snipe
 
 display: ../glfw/lib/libglfw3.a
-	$(TCC) handler.c queue.c event.c font.c theme.c $(UTILS) $(FT) $(GL)
+	$(TCC) $(VIEW) $(UTILS) $(FT) $(GL)
 	./snipe
 
 # The modules which form the model.
@@ -126,35 +126,35 @@ MODEL = document.c text.c history.c cursor.c indent.c scan.c line.c lines.c
 .PHONY: $(MODEL)
 
 lines:
-	$(TCC) array.c
+	$(TCC) lines.c array.c
 	./snipe
 
 line:
-	$(TCC) list.c
+	$(TCC) line.c list.c
 	./snipe
 
 scan:
-	$(TCC) $(UTILS)
+	$(TCC) scan.c $(UTILS)
 	./snipe
 
 indent:
-	$(TCC) style.c
+	$(TCC) indent.c style.c
 	./snipe
 
 cursor:
-	$(TCC) style.c line.c list.c
+	$(TCC) cursor.c style.c line.c list.c
 	./snipe
 
 history:
-	$(TCC) list.c
+	$(TCC) history.c list.c
 	./snipe
 
 text:
-	$(TCC) cursor.c style.c line.c string.c list.c file.c
+	$(TCC) text.c cursor.c style.c line.c string.c list.c file.c
 	./snipe
 
 document:
-	$(TCC) scan.c indent.c text.c history.c cursor.c line.c theme.c $(UTILS)
+	$(TCC) $(MODEL) $(UTILS)
 	./snipe
 
 # The modules which form the controller: snipe is a test version of the whole
@@ -163,16 +163,16 @@ document:
 .PHONY: map snipe psnipe zip
 
 map:
-	$(TCC) $(MODEL) $(VIEW) $(UTILS) $(FT) $(GL)
+	$(TCC) map.c $(MODEL) $(VIEW) $(UTILS) $(FT) $(GL)
 	./snipe
 
 snipe:
 	cp setting.h style.h event.h action.h Makefile ../help/
-	$(TCC) map.c $(MODEL) $(VIEW) $(UTILS) $(FT) $(GL)
+	$(TCC) snipe.c map.c $(MODEL) $(VIEW) $(UTILS) $(FT) $(GL)
 
 psnipe:
 	cp setting.h style.h event.h action.h Makefile ../help/
-	$(PCC) map.c $(MODEL) $(VIEW) $(UTILS) $(FT) $(GL)
+	$(PCC) snipe.c map.c $(MODEL) $(VIEW) $(UTILS) $(FT) $(GL)
 	cp $(EXEC) ..
 
 # Make a binary distribution after making psnipe.

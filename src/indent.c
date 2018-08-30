@@ -107,7 +107,9 @@ int findIndent(int *runningIndent, int n, char const line[n], char styles[n]) {
     indent -= outdenters * TAB;
     if (indent < 0) indent = 0;
     result = indent;
-    if (currentIndent == n) result = 0;
+    if (currentIndent == n || (currentIndent == n-1 && line[n-1] == '\n')) {
+        result = 0;
+    }
     else {
         char c = line[currentIndent];
         if (c != '}' && c != ']' && c != ')') result += outdenters * TAB;
@@ -158,7 +160,7 @@ static void testIndent() {
     assert(checkIndent(0, "f() {", 0, 4));
     assert(checkIndent(4, "}", 0, 0));
     assert(checkIndent(4, "} else {", 0, 4));
-    assert(checkIndent(4, "", 0, 4));
+    assert(checkIndent(4, "\n", 0, 4));
     assert(getIndent(6, "    x\n") == 4);
 }
 

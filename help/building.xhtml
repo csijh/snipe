@@ -342,21 +342,15 @@ user gesture. You might think that a cross-platform event library like GLFW
 would insulate the programmer from such things, but it doesn't.</p>
 
 <p>In <mark>Snipe</mark>, it is desirable to use animation to achieve smooth
-scrolling when the user scrolls with a mouse wheel. It is difficult, and not
-desirable, to distinguish mouse wheel scrolling from touchpad scrolling. So,
-some other technique is needed to allow animations to continue during
-touchpad scrolling, and at the same time solve any issues with other long
-user gestures.</p>
-
-<p>The only general way to solve this problem is with threads.
-<mark>Snipe</mark> uses POSIX threads rather than the threads defined as
-standard within C11, because the latter are not yet easily available on
-Windows.</p>
+scrolling, and there are other problems with long user gestures. The only
+general way to solve these problems is with threads. <mark>Snipe</mark> uses
+POSIX threads rather than the threads defined as standard within C11, because
+the latter are not yet easily available on Windows.</p>
 
 <p>There needs to be a <em>handler</em> thread to manage system events, and a
 <em>runner</em> thread to run the main body of the program. The runner thread
 can keep animations going while the handler thread is locked up in an operating
-system loop. It simplifies the design of timer events a little, to add a third
+system loop. It simplifies the design of timer events a little to add a third
 <em>ticker</em> thread for regular timer events. This generates events every
 half-second for cursor blinking and every minute for auto-saving.</p>
 

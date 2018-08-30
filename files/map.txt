@@ -11,8 +11,8 @@ LEFT        MoveLeftChar
 RIGHT       MoveRightChar
 UP          MoveUpLine
 DOWN        MoveDownLine
-PAGE_UP     PageUp
-PAGE_DOWN   PageDown
+PAGE_UP     PageUp          Fn_Up on Macs
+PAGE_DOWN   PageDown        Fn_Down on Macs
 C_O         Open
 C_X         Cut
 C_C         Copy
@@ -55,9 +55,9 @@ List  FRAME       Frame
 
 // These actions are not yet implemented.
 // C_BACKSPACE CutLeftWord
-// HOME        MoveStartLine
+// HOME        MoveStartLine      Fn_Left on Macs
 // S_HOME      MarkStartLine
-// END         MoveEndLine
+// END         MoveEndLine        Fn_Right on Macs
 // S_END       MarkEndLine
 // S_LEFT      MarkLeftChar
 // C_LEFT      MoveLeftWord
