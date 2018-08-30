@@ -561,13 +561,13 @@ different editor.</p>
 <p>Keeping indenting consistent is boring and repetitive.  It is an issue where
 most editors provide incomplete support.  For example, it is common for an
 editor to indent the next line correctly and automatically when a newline is
-typed.  But when going back and editing existing code, indents usually have to
-be fixed up manually.  There are 'clever' fixes, such as selecting a group of
-lines and changing their indents all in one go.  But  it seems less than ideal
+typed. But when going back and editing existing code, indents usually have to
+be fixed up manually. There are 'clever' fixes, such as selecting a group of
+lines and changing their indents all in one go. But it seems less than ideal
 to fix a poor feature by adding more features.</p>
 
 <p>So, the question arises of whether the 'correct' behaviour can be precisely
-specified.  This is a somewhat language-specific question, so let's restrict it
+specified. This is a somewhat language-specific question, so let's restrict it
 for now to the C family of languages, such as C, C++, C#, Java, JavaScript,
 though the discussion probably applies with little change to other languages.</p>
 
@@ -575,43 +575,19 @@ though the discussion probably applies with little change to other languages.</p
 based on personal preference, with many different choices.  Nevertheless, a
 correct behaviour <em>can</em> be tightly specified, <em>if</em> the programmer
 is willing to accept some restrictions on the choice of layout style. Suppose,
-for example, the following rule is implemented:</p>
+the following rule (borrowed from Python) is implemented:</p>
 
-<p class="principle">Whenever a line ends with an open bracket <code>{ [
-(</code>, then the following lines are indented.  When a line
-starts with a close bracket <code>) ] }</code> then following lines are
-outdented.</p>
+<p class="principle">An unmatched open bracket <code>{ [
+(</code>, causes the indent to be increased.  An unmatched
+close bracket <code>) ] }</code> causes the indent to be decreased.</p>
 
-<p>Obviously, the rule has to be adapted a little to deal with exceptions such
-as multi-line comments, blank lines, and so on.  Despite its simplicity, the
-rule supports the two most popular indent styles K&amp;R and Allman.  With small
-variations on the placements of the brackets themselves, the rule could be
-easily extended to cover Gnu, Whitesmiths and Horstmann styles.  Styles such as
-the Pico style are more difficult:</p>
-
-<pre>while (n > 1)
-{   if (n%2 == 0) n - n/2;
-    else n = 3*n + 1; }
-</pre>
-
-<p>The problem with this style is that the recognition of the close bracket as
-ending the block is not a simple lexical rule.  For example, suppose the code is
-changed to:</p>
-
-<pre>while (n > 1)
-{   if (n%2 == 0) n - n/2;
-    else if (n%2 == 1) { n = 3*n + 1; }
-</pre>
-
-<p>Now the final close bracket does not end the block, because it matches an
-open bracket earlier in the same line.  The rule would now have to include
-syntactic issues, or at least bracket matching.  There is something appealing
-about the simplicity of the original rule, both for implementation and for
-immediate recognition by the human eye, so it isn't clear whether it would be
-sensible to extend the rule to cover this style.</p>
+<p>Despite its simplicity, with suitable attention to detail, the
+rule supports the two most popular indent styles K&amp;R and Allman. With small
+variations, the rule can be easily extended to cover Gnu, Whitesmiths,
+Horstmann, Pico and most others.</p>
 
 <p>There may be other language features which a programmer would have to give up
-in order to make fully automatic indenting possible.  For example, in C99, there
+in order to make fully automatic indenting possible.  For example, in C, there
 is a feature where any line ending in a backslash is continued on the next line.
 It is unlikely that a programmer would want to use this feature, except perhaps
 to continue a long string constant, e.g.</p>
@@ -620,7 +596,7 @@ to continue a long string constant, e.g.</p>
 long long ago";
 </pre>
 
-<p>However, C99 also joins two successive string constants, so the same effect
+<p>However, C also joins two successive string constants, so the same effect
 can be achieved without spoiling the indenting:</p>
 
 <pre>    char *s = "Once upon a time, "
@@ -628,40 +604,34 @@ can be achieved without spoiling the indenting:</p>
 </pre>
 
 <p>With indentation comes the issue of how to handle continuation lines for long
-statements.  A good simple rule for continuations is:</p>
+statements. The beauty of the simple bracket matching rule is that it handles
+continuation lines seamlessly, without the usual confusion, using round and
+curly brackets, e.g.</p>
 
-<p class="principle">A line is continued on the following line if it ends with
-an infix symbol.  It is also continued if it ends with an open round or square
-bracket, up to a line beginning with a close bracket.</p>
+<pre>int n = (long_variable_name_1 +
+    long_variable_name_2);
 
-<p>This allows for two styles of continuation.  One breaks the line after a
-suitable symbol:</p>
+list xs = [
+   one, two,
+   three
+];
 
-<pre>int n =
-  long_variable_name_1 +
-  long_variable_name_2;
+void f(
+    long_type_1 long_argument_1,
+    long_type_2 long_argument_2
+) {
+    ....
+}
 </pre>
 
-<p>There has to be a separate convention about how much continuation lines are
-indented in this style, if at all.  Here, we are assuming it is half the usual
-amount.</p>
-
-<p>The other is a Python-like convention where round and curly brackets are
-used, with extra indentation according to the indentation rule above:</p>
-
-<pre>int n = (
-    long_variable_name_1 +
-    long_variable_name_2;
-);
-</pre>
-
-<p>Once the programmer accepts any necessary restrictions, the rules can become
-an absolute invariant, preserved on every keystroke by the editor.  There is no
+<p>Once the programmer accepts the conventions and their mild restrictions, the
+rules can become an absolute invariant, preserved on every keystroke by the
+editor.  There is no
 need to allow the programmer to touch the indents, or affect them in any way. A
 newline and the following indent can be treated effectively as a single
-character.  This does not require the program to be kept correct, just
-consistent.  Indents aside, the program can be in any correct or incorrect
-state.  In exchange for giving up a tiny bit of aesthetic layout freedom, the
+character. This does not require the program to be kept correct, just
+consistent. Indents aside, the program can be in any correct or incorrect
+state. In exchange for giving up a tiny bit of aesthetic layout freedom, the
 programmer is offered the opportunity not to have to think about, worry about,
 or waste time on, indents ever again. This may take a bit of getting used to,
 but should in the end be regarded as an extremely advantageous trade.</p>
@@ -715,7 +685,8 @@ less popular than it used to be because of the wasted screen space. On a
 personal note, I spent several years, in my <kbd>emacs</kbd> days, utterly
 convinced that 3 spaces is aesthetically the best tab width.  Then I was
 horrified to discover than many popular modern editors only allow a choice
-between 2 or 4 spaces.</p>
+between 2 or 4 spaces, presumably because there are occasional situations such
+as cases or labels where a half-indent may be desirable.</p>
 
 <p>Rather than have an option to set the tab width globally in the whole editor,
 it seems better for the editor to infer the tab width on each file from the

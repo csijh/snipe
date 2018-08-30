@@ -163,7 +163,8 @@ static void doPageUp(document *d) {
 
 static void doPageDown(document *d) {
     d->scrollTarget += d->pageRows;
-    if (d->scrollTarget > getHeight(d) - 10) d->scrollTarget = getHeight(d) - 10;
+    int maxRows = getHeight(d) - 10
+    if (d->scrollTarget > maxRows) d->scrollTarget = maxRows;
 }
 
 static void doLineUp(document *d) {
