@@ -147,8 +147,8 @@ static void repairLine(document *d, int r) {
     assert(length(styles) >= p);
     resize(styles, p + n);
     memcpy(&C(styles)[p], C(d->lineStyles), n);
+    resize(indents, r+1);
     if (strcmp(d->language, "c") == 0 || strcmp(d->language, "h") == 0) {
-        resize(indents, r+1);
         int runningIndent = 0;
         if (r > 0) runningIndent = I(indents)[r-1];
         int wanted = findIndent(&runningIndent, n, C(d->line),

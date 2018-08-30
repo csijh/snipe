@@ -237,6 +237,7 @@ static void scrollCB(GLFWwindow *w, double x, double y) {
     event e;
     if (y > 0) e = LINE_UP;
     else e = LINE_DOWN;
+    if (e == LINE_DOWN) printf("D %f\n", y);
     if (shift) e = addEventFlag(S_, e);
     if (ctrl) e = addEventFlag(C_, e);
     enqueue(h->q, e, (int) x, (int) y, NULL);

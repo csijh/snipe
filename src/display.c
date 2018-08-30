@@ -28,7 +28,7 @@
 // the text, and scrollTarget is the pixel position to aim for when smooth
 // scrolling. Magnify is 1 except on Mac retina screens, where it is 2 (i.e.
 // 2x2 real pixels for each virtual screen pixel. Event handling is delegated
-// to a handler object.
+// to a handler object (and thread).
 struct display {
     handler *h;
     queue *q;
@@ -229,11 +229,6 @@ static void cycleTheme(display *d) {
     paintBackground(d);
 }
 
-void setScrollTarget(display *d, int row) {
-    d->scrollTarget = row * d->charHeight;
-    if (d->scroll != d->scrollTarget) enqueue(d->q, FRAME, 0, 0, NULL);
-}
-
 // Paint a given rectangle.
 static void paintRect(colour *c, float x1, float y1, float x2, float y2) {
     glColor3f(red(c)/255.0, green(c)/255.0, blue(c)/255.0);
@@ -341,6 +336,13 @@ static void smoothScroll(display *d) {
     diff = (diff >= 0) ? (diff + 9)/10 : (diff - 9)/10;
     d->scroll += diff;
     if (d->scroll != d->scrollTarget) enqueue(d->q, FRAME, 0, 0, NULL);
+}
+
+// Set a new target and do the first step of animation.
+void setScrollTarget(display *d, int row) {
+    d->scrollTarget = row * d->charHeight;
+    if (d->scroll != d->scrollTarget) enqueue(d->q, FRAME, 0, 0, NULL);
+    smoothScroll(d);
 }
 
 // Scale up and round to nearest column.
