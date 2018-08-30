@@ -362,8 +362,7 @@ void actOnDisplay(display *d, action a, char const *s) {
         case Frame: smoothScroll(d); break;
         case Open: case Load: d->scroll = 0; break;
         case Paste: pasteEvent(d->h); break;
-        case Cut: case Copy:
-        clip(d->h, s); break;
+        case Cut: case Copy: clip(d->h, s); break;
         case Resize: checkResize(d); break;
         default: break;
     }

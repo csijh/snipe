@@ -58,12 +58,8 @@ static void *run(void *vs) {
     while (! quitting) {
         int r, c;
         char const *t;
-//if (e != FRAME) printf("11\n");
         e = getEvent(s->dis, &r, &c, &t);
-        if (e == PASTE) printf("PASTE %s\n", t);
-//if (e != FRAME) { printf("9 "); printEvent(e, r, c, t); printf("\n"); }
         quitting = dispatch(s->m, e, r, c, t);
-//if (e != FRAME) printf("10\n");
     }
     return NULL;
 }

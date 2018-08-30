@@ -86,7 +86,7 @@ void pasteEvent(handler *h) {
 
 // Make a request for the handler to cut/copy to the clipboard.
 void clip(handler *h, char const *s) {
-    char *temp = malloc(sizeof(s) + 1);
+    char *temp = malloc(strlen(s) + 1);
     strcpy(temp, s);
     pthread_mutex_lock(&h->lock);
     h->clipping = temp;
