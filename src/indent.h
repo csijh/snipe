@@ -14,9 +14,11 @@
 // is marked as an error. That means indenting doesn't change when editing
 // inner brackets.
 
-// Match brackets and calculate indent. The running indent from the previous
-// line is passed in and updated. The indent for the current line is returned.
-// The return value is not necessarily the same as the running indent, because
-// it may be temporarily zero for a blank line, or temporarily half an indent
-// less for a label.
+// Match brackets and calculate desired indent. The running indent from the
+// previous line is passed in and updated. The desired indent for the current
+// line is returned. It is not necessarily the same as the running indent,
+// because it may be temporarily different for a blank line or a label.
 int findIndent(int *runningIndent, int n, char const line[n], char styles[n]);
+
+// Find the actual indent for a line.
+int getIndent(int n, char const line[n]);

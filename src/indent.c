@@ -88,7 +88,7 @@ static void countOutIn(int *out, int *in, int n, char styles[n]) {
         else continue;
         styles[i] = addStyleFlag(clearStyleFlags(styles[i]), START);
     }
- }
+}
 
 // Match brackets then update the running indent according to the outdenters
 // and indenters. Make the indent zero for a blank line.
@@ -100,10 +100,16 @@ int findIndent(int *runningIndent, int n, char const line[n], char styles[n]) {
     indent -= outdenters * TAB;
     if (indent < 0) indent = 0;
     result = indent;
-    if (n == 0) result = 0;
+    if (n == 0 || line[0] == '\n') result = 0;
     indent += indenters * TAB;
     *runningIndent = indent;
     return result;
+}
+
+int getIndent(int n, char const line[n]) {
+    int count = 0;
+    for (int i = 0; line[i] == ' '; i++) count++;
+    return count;
 }
 
 #ifdef test_indent
@@ -147,6 +153,8 @@ static void testIndent() {
     assert(checkIndent(0, "f() {", 0, 4));
     assert(checkIndent(4, "}", 0, 0));
     assert(checkIndent(4, "} else {", 0, 4));
+    assert(checkIndent(4, "", 0, 4));
+    assert(getIndent(6, "    x\n") == 4);
 }
 
 int main(int n, char const *args[n]) {

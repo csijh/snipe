@@ -5,6 +5,7 @@
 #include "indent.h"
 #include "line.h"
 #include "history.h"
+#include "style.h"
 #include "string.h"
 #include "setting.h"
 #include "file.h"
@@ -104,8 +105,61 @@ int getScrollTarget(document *d) {
     return d->scrollTarget;
 }
 
+// Increase the indent on a given line.
+static void insertIndent(document *d, int row, int n) {
+    ints *lines = getLines(d->content);
+    chars *styles = getStyles(d->content);
+    int p = startLine(lines, row);
+    expand(styles, p, n);
+    C(styles)[p] = addStyleFlag(GAP, START);
+    for (int i = 1; i < n; i++) C(styles)[p + i] = GAP;
+    char spaces[n + 1];
+    for (int i = 0; i < n; i++) spaces[i] = ' ';
+    spaces[n] = '\0';
+    insertText(d->content, p, spaces);
+    // Undo the invalidation
+    resize(styles, endLine(lines, row));
+}
+
+// Reduce the indent on a given line.
+static void deleteIndent(document *d, int row, int n) {
+    ints *lines = getLines(d->content);
+    chars *styles = getStyles(d->content);
+    int p = startLine(lines, row);
+    delete(styles, p, n);
+    deleteText(d->content, p, n);
+    // undo the invalidation
+    resize(styles, endLine(lines, row));
+}
+
+// Get scanning, styles and indenting up to date, for the given line, before
+// giving it away.
+static void repairLine(document *d, int r) {
+    ints *lines = getLines(d->content);
+    chars *styles = getStyles(d->content);
+    ints *indents = getIndents(d->content);
+    int p = startLine(lines, r);
+    int n = getWidth(d, r);
+    getText(d->content, p, n, d->line);
+    scan(d->sc, r, d->line, d->lineStyles);
+    assert(length(styles) >= p);
+    resize(styles, p + n);
+    memcpy(&C(styles)[p], C(d->lineStyles), n);
+    resize(indents, r+1);
+    int runningIndent = 0;
+    if (r > 0) runningIndent = I(indents)[r-1];
+    int wanted = findIndent(&runningIndent, n, C(d->line), C(d->lineStyles));
+    I(indents)[r] = runningIndent;
+    int actual = getIndent(n, C(d->line));
+    if (wanted > actual) insertIndent(d, r, wanted - actual);
+    if (wanted < actual) deleteIndent(d, r, actual - wanted);
+}
+
 chars *getLine(document *d, int row) {
     ints *lines = getLines(d->content);
+    chars *styles = getStyles(d->content);
+    int unstyled = findRow(lines, length(styles));
+    for (int r = unstyled; r <= row; r++) repairLine(d, r);
     int p = startLine(lines, row);
     int n = lengthLine(lines, row);
     getText(d->content, p, n, d->line);
@@ -117,6 +171,8 @@ chars *getStyle(document *d, int row) {
     chars *styles = getStyles(d->content);
     ints *indents = getIndents(d->content);
     int unstyled = findRow(lines, length(styles));
+    for (int r = unstyled; r <= row; r++) repairLine(d, r);
+/*
     resize(indents, row + 1);
     for (int r = unstyled; r <= row; r++) {
         int p = startLine(lines, r);
@@ -131,6 +187,7 @@ chars *getStyle(document *d, int row) {
         findIndent(&runIndent, n, C(d->line), C(d->lineStyles));
         I(indents)[r] = runIndent;
     }
+*/
     int n = getWidth(d, row);
     int p = startLine(lines, row);
     resize(d->lineStyles, n);
@@ -163,7 +220,7 @@ static void doPageUp(document *d) {
 
 static void doPageDown(document *d) {
     d->scrollTarget += d->pageRows;
-    int maxRows = getHeight(d) - 10
+    int maxRows = getHeight(d) - 10;
     if (d->scrollTarget > maxRows) d->scrollTarget = maxRows;
 }
 
@@ -174,7 +231,8 @@ static void doLineUp(document *d) {
 
 static void doLineDown(document *d) {
     d->scrollTarget += 1;
-    if (d->scrollTarget > getHeight(d) - 10) d->scrollTarget = getHeight(d) - 10;
+    int maxRows = getHeight(d) - 10;
+    if (d->scrollTarget > maxRows) d->scrollTarget = maxRows;
 }
 
 // Delete any selection before inserting.
