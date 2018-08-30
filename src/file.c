@@ -1,7 +1,6 @@
 // The Snipe editor is free and open source, see licence.txt.
 
-// TODO: handle security by checking for being within HONE rather than being
-// writable.
+// TODO: handle security by checking for being within a HONE directory.
 
 // Find the path to the installation directory from args[0]. This appears to be
 // the only simple cross-platform technique which doesn't involve making an
@@ -151,6 +150,19 @@ char *fullPath(char const *file) {
     }
     for (int i = 0; i < strlen(path); i++) if (path[i] == '\\') path[i] = '/';
     return path;
+}
+
+char *extension(char const *path) {
+    int n = strlen(path);
+    if (n == 0) return "txt";
+    if (path[n-1] == '/') return "directory";
+    if (strcmp(&path[n-8], "Makefile") == 0) return "makefile";
+    if (strcmp(&path[n-8], "makefile") == 0) return "makefile";
+    char *ext = strrchr(path, '.');
+    if (ext == NULL) return "txt";
+    char *slash = strrchr(path, '/');
+    if (ext < slash) return "txt";
+    return ext + 1;
 }
 
 static void err(char *e, char const *p) { printf("Error, %s: %s\n", e, p); }
@@ -369,6 +381,15 @@ static void testAddPath() {
     free(s);
 }
 
+static void testExtension() {
+    assert(strcmp(extension("program.c"), "c") == 0);
+    assert(strcmp(extension("/path/program.c"), "c") == 0);
+    assert(strcmp(extension("/path.c/program"), "txt") == 0);
+    assert(strcmp(extension("/path/"), "directory") == 0);
+    assert(strcmp(extension("Makefile"), "makefile") == 0);
+    assert(strcmp(extension("/path/makefile"), "makefile") == 0);
+}
+
 static void testCompare() {
     assert(compare("", "") == 0);
     assert(compare("abcxaaaa", "abcyaaaa") < 0);
@@ -401,6 +422,7 @@ int main(int n, char *args[n]) {
     testAbsolute();
     testFindInstall();
     testAddPath();
+    testExtension();
     testCompare();
     testSort();
     testReadDirectory();

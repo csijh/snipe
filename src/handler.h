@@ -47,10 +47,6 @@ void *tick(void *vh);
 // TODO: replace with FOCUS and DEFOCUS events.
 bool focused(handler *h);
 
-// Get the next event, possibly with a pause. Fill in the px, py, pt variables.
-// Called from the runner thread.
-event getRawEvent(handler *h, int *px, int *py, char const **pt);
-
 // Generate a paste event. Called from the runner thread when C_V is pressed.
 void pasteEvent(handler *h);
 

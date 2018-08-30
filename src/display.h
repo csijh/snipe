@@ -24,6 +24,9 @@ display *newDisplay(char const *path);
 // Free up the display object and its contents.
 void freeDisplay(display *d);
 
+// Find the number of rows (for PAGEUP/DOWN).
+int pageHeight(display *d);
+
 // Set up handler and ticker threads, and execute the provided run function on
 // a separate runner thread, passing the given pointer.
 void startGraphics(display *d, runFunction *run, void *p);

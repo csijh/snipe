@@ -29,6 +29,11 @@ char *parentPath(char const *path);
 // The result string should be freed as soon as it is no longer needed.
 char *fullPath(char const *file);
 
+// Find the extension of a filename or file path, without the dot. The result
+// is not newly allocated. It is a substring of the argument, or "directory",
+// or "makefile". It is "txt" if not recognized.
+char *extension(char const *path);
+
 bool secure(const char *path);
 
 // Check that a file exists, and return its size or -1.

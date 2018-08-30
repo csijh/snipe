@@ -336,11 +336,6 @@ void *tick(void *vh) {
     return NULL;
 }
 
-event getRawEvent(handler *h, int *px, int *py, char const **pt) {
-    event e = dequeue(h->q, px, py, pt);
-    return e;
-}
-
 #ifdef test_handler
 
 #include <pthread.h>
@@ -352,7 +347,7 @@ static void *run(void *vh) {
     int x, y;
     char const *t;
     while (e != QUIT) {
-        e = getRawEvent(h, &x, &y, &t);
+        e = dequeue(h->q, &x, &y, &t);
         printEvent(e, x, y, t); printf("\n");
     }
     return NULL;
@@ -365,7 +360,8 @@ int main() {
     printf("Check blinks continue while moving/resizing/scrolling window.\n");
     glfwInit();
     GLFWwindow *gw = glfwCreateWindow(640, 480, "Test", NULL, NULL);
-    handler *h = newHandler(gw);
+    queue *q = newQueue();
+    handler *h = newHandler(gw, q, 0.5);
     pthread_t runner, ticker;
     pthread_create(&runner, NULL, &run, h);
     pthread_create(&ticker, NULL, &tick, h);

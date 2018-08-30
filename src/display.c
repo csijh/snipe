@@ -209,6 +209,10 @@ void freeDisplay(display *d) {
     free(d);
 }
 
+int pageHeight(display *d) {
+    return d->rows;
+}
+
 static void bigger(display *d) {
     if (d->fontSize <= 35 * d->magnify) d->fontSize += d->magnify;
     setSize(d);
@@ -348,7 +352,7 @@ void charPosition(display *d, int x, int y, int *row, int *col) {
 
 event getEvent(display *d, int *pr, int *pc, char const **pt) {
     int x, y;
-    event e = getRawEvent(d->h, &x, &y, pt);
+    event e = dequeue(d->q, &x, &y, pt);
     if (e == CLICK || e == DRAG) charPosition(d, x, y, pr, pc);
     return e;
 }
