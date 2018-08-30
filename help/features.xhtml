@@ -3,15 +3,15 @@
 <head>
 <meta charset="UTF-8"/>
 <style>
-    body { font-size: 120%; }
-    pre, .indent { margin-left: 40px; }
-    img { display: block; margin: 0 auto; }
-    mark {
-      font-family: cursive;
-      font-size: 95%;
-      color: #080;
-      background-color: white;
-    }
+body { font-size: 120%; }
+pre, .indent { margin-left: 40px; }
+img { display: block; margin: 0 auto; }
+mark {
+    font-family: cursive;
+    font-size: 95%;
+    color: #080;
+    background-color: white;
+}
 </style>
 <title>Snipe Features</title>
 </head>
@@ -25,10 +25,74 @@ much as possible. The general settings can be seen in the file
 can be seen in the file
 <a href="../files/map.txt">files/map.txt</a>.</p>
 
+<h2>Bracket matching</h2>
+
+<p>Round, square and curly brackets <code>()[]{}</code> on each line are
+matched, and mismatched brackets are syntax-coloured as errors. Care is taken
+over the way in which brackets are matched, because it affects
+auto-indenting.</p>
+
+<p>Only brackets which are marked by the scanner as signs are matched. Others
+are assumed to be inside comments or strings. Brackets which are unmatched
+are not marked as errors. They are assumed to affect indenting.</p>
+
+<p>Where there is a mismatched pair of brackets <code>(]</code> say, only one is
+marked as an error where reasonably possible, e.g. if the pair appears in the
+context  <code>(]...)</code> or <code>[...(]</code> only the middle bracket is
+marked as an error.</p>
+
+<h2>Auto-indenting</h2>
+
+<p>Most editors provide something that ought to be called semi-auto-indenting.
+It works well when typing new program text. But it typically works badly when
+changing existing text. The result is that, for most programmers, there is
+little or no net gain.</p>
+
+<p><mark>Snipe</mark> provides full auto-indenting (currently just for .c and
+.h files). The idea is that, in exchange for a small
+and hopefully painless loss of control over indenting, the user need never think
+about or adjust indenting ever again. The amount of indent on a line is
+determined by simple rules, as explained below, and maintained during all
+editing operations. <!-- The cursor can't be placed inside the indent - it
+moves back and forth past the indent as if it wasn't there.-->  Attempts made
+to change the indent fail, because it is immediately corrected.</p>
+
+<p>It is challenging to come up with rules which are simple to understand and
+implement, which are immediately apparent to the eye, which work across a wide
+range of languages, which work even when a program is not in a syntactically
+correct state, which cope with continuations of single statements onto multiple
+lines as well as blocks of statements, which support all the common indenting
+styles, and which the majority of programmers can accept comfortably without
+irritation.</p>
+
+<p>The rules chosen are adapted from Python, and should work across all
+curly-bracket-based languages, and possibly many more. The rules work on a
+line-by-line basis, based on unmatched bracket characters <code>()[]{}</code>
+whether round, square or curly. Only syntactically active brackets (i.e. ones
+not inside comments or strings) count.</p>
+
+<p>An <dfn>indenter</dfn> is an unmatched open bracket, and an
+<dfn>outdenter</dfn> is similarly an unmatched close bracket. Each indenter
+causes the indent to be increased, starting on the following line. An outdenter
+causes the indent to be decreased, starting on the following line, or on the
+same line if the outdenter is at the start.</p>
+
+<p>Comment lines and multi-line strings follow these indenting rules, as well as
+ordinary code. The indent of a blank line is temporarily zero.</p>
+
+<p>This feature is experimental, and currently a bit rough. The handling of
+blank lines and trailing spaces on the ends of lines needs to be improved.
+The feature needs to be enabled and controlled from language definition files so
+that, for example, more indent styles (other than K&amp;R and Allman) can be
+supported, labels and cases in switches can be handled specially, and
+keywords can be marked as indenters or outdenters so that more languages
+can be supported.</p>
+
 <h2>Help</h2>
 
 <p>Typing CTRL+H makes a help page appears in the browser. The command to do
-that varies by platform, and can be customized in the settings file.</p>
+that varies by platform. Unfortunately, this tends not to be very reliable,
+so it can be customized in the settings file.</p>
 
 <h2>File menu</h2>
 
@@ -53,8 +117,7 @@ user's mental model, and removes the need for frequent saving, which is entirely
 routine and therefore should be automated. Autosave becomes a necessary feature
 of <mark>Snipe</mark> rather than an option. <mark>Snipe</mark> doesn't create
 backups of files, on the basis that programmers use other tools such as
-<code>git</code> for that. Autosaving is done very frequently, including
-when compiling and running programs.</p>
+<code>git</code> for that. Autosaving is done frequently.</p>
 
 <h2>Final newline</h2>
 
@@ -78,8 +141,8 @@ count.</p>
 <h2>Trailing blank lines and spaces</h2>
 
 <p>A text file shouldn't have trailing blank lines, or trailing spaces on the
-end of a line. <mark>Snipe</mark> removes such extras when the cursor
-moves away from them.</p>
+end of a line. It is planned to make <mark>Snipe</mark> remove such extras when
+the cursor moves away from them.</p>
 
 <h2>File separators</h2>
 
