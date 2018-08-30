@@ -105,8 +105,8 @@ so it may need to be customized in the settings file.</p>
 <h2>File menu</h2>
 
 <p>Typing CTRL+O makes a file menu appears. Choose a line with the arrow keys
-or mouse, and press ENTER to load a file. Later, double clicking and syntax
-highlighting will be added.</p>
+or mouse, and press ENTER to load a file or change directory. Later, double
+clicking and syntax highlighting will be added.</p>
 
 <h2>Line endings</h2>
 
@@ -126,7 +126,10 @@ user's mental model, and removes the need for frequent saving, which is entirely
 routine and therefore should be automated. Autosave becomes a necessary feature
 of <mark>Snipe</mark> rather than an option. <mark>Snipe</mark> doesn't create
 backups of files, on the basis that programmers use other tools such as
-<code>git</code> for that. Autosaving is done frequently.</p>
+<code>git</code> for that. Autosaving is done frequently and, in particular,
+when the window loses the input focus. So, when moving from the editor to a
+terminal window to type commands, the file should be saved by the time a
+command is issued.</p>
 
 <h2>Final newline</h2>
 

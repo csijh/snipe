@@ -25,7 +25,7 @@ struct handler {
     GLFWwindow *w;
     double blinkRate, saveRate;
     double blinkTime, saveTime;
-    bool focused, alive;
+    bool alive;
     queue *q;
     int width, height;
     bool pasting;
@@ -47,7 +47,6 @@ handler *newHandler(void *w, queue *q, double blinkRate) {
     h->saveRate = 60.0;
     h->blinkTime = h->blinkRate;
     h->saveTime = h->saveRate;
-    h->focused = true;
     h->alive = true;
     h->width = h->height = 0;
     h->pasting = false;
@@ -58,13 +57,6 @@ handler *newHandler(void *w, queue *q, double blinkRate) {
 
 void freeHandler(handler *h) {
     free(h);
-}
-
-bool focused(handler *h) {
-//    pthread_mutex_lock(&h->lock);
-    bool focused = h->focused;
-//    pthread_mutex_unlock(&h->lock);
-    return focused;
 }
 
 // Make a request for the handler thread to resize the window.
@@ -235,13 +227,13 @@ static void mouseCB(GLFWwindow *w, int button, int action, int mods) {
 static void scrollCB(GLFWwindow *w, double x, double y) {
     handler *h = glfwGetWindowUserPointer(w);
     bool shift =
-        glfwGetKey(w, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
-        glfwGetKey(w, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
+    glfwGetKey(w, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
+    glfwGetKey(w, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
     bool ctrl =
-        glfwGetKey(w, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
-        glfwGetKey(w, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS ||
-        glfwGetKey(w, GLFW_KEY_LEFT_SUPER) == GLFW_PRESS ||
-        glfwGetKey(w, GLFW_KEY_RIGHT_SUPER) == GLFW_PRESS;
+    glfwGetKey(w, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
+    glfwGetKey(w, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS ||
+    glfwGetKey(w, GLFW_KEY_LEFT_SUPER) == GLFW_PRESS ||
+    glfwGetKey(w, GLFW_KEY_RIGHT_SUPER) == GLFW_PRESS;
     event e;
     if (y > 0) e = LINE_UP;
     else e = LINE_DOWN;
@@ -265,11 +257,11 @@ static void resizeCB(GLFWwindow *w, int width, int height) {
     enqueue(h->q, RESIZE, 0, 0, NULL);
 }
 
+// Callback for text focus.
 static void focusCB(GLFWwindow *w, int focused) {
     handler *h = glfwGetWindowUserPointer(w);
-//    pthread_mutex_lock(&h->lock);
-    h->focused = focused;
-//    pthread_mutex_unlock(&h->lock);
+    if (focused == GLFW_TRUE) enqueue(h->q, FOCUS, 0, 0, NULL);
+    else enqueue(h->q, DEFOCUS, 0, 0, NULL);
 }
 
 // Set up all the desired callbacks, then process events in a loop. The wait

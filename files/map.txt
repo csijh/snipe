@@ -33,6 +33,8 @@ SAVE        Save            autosave timer event
 TEXT        Insert          typing ordinary text
 PASTE       Insert          pasting text
 RESIZE      Resize          resize window
+FOCUS       Focus
+DEFOCUS     Defocus
 CLICK       Point           mouse button down to change cursor
 DRAG        Select          mouse button up (possibly without movement)
 
@@ -48,6 +50,8 @@ List  QUIT        Quit
 List  C_Q         Quit
 List  CLICK       Point
 List  RESIZE      Resize
+List  FOCUS       Focus
+List  DEFOCUS     Defocus
 List  BLINK       Blink
 List  FRAME       Frame
 

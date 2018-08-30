@@ -24,9 +24,9 @@ static char *actionNames[] = {
     [AddPoint]="AddPoint", [AddSelect]="AddSelect", [Insert]="Insert",
     [Cut]="Cut", [Copy]="Copy", [Paste]="Paste", [PageUp]="PageUp",
     [PageDown]="PageDown", [Undo]="Undo", [Redo]="Redo", [Resize]="Resize",
-    [Blink]="Blink", [Frame]="Frame", [LineUp]="LineUp", [LineDown]="LineDown",
-    [Load]="Load", [Save]="Save", [Open]="Open", [Help]="Help", [Quit]="Quit",
-    [Ignore]="Ignore"
+    [Focus]="Focus", [Defocus]="Defocus", [Blink]="Blink", [Frame]="Frame",
+    [LineUp]="LineUp", [LineDown]="LineDown", [Load]="Load", [Save]="Save",
+    [Open]="Open", [Help]="Help", [Quit]="Quit", [Ignore]="Ignore"
 };
 
 // Find an action from its name.

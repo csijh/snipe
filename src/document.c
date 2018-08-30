@@ -331,6 +331,7 @@ char const *actOnDocument(document *d, action a) {
         case Cut: gatherText(d->content, d->line); cutLeft(d); break;
         case Load: doLoad(d); break;
         case Save: save(d); break;
+        case Defocus: save(d); break;
         case Open: doOpen(d); break;
         case Quit: save(d); break;
         default: break;

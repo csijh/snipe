@@ -43,10 +43,6 @@ void resizeWindow(handler *h, int width, int height);
 // separate ticker thread. Return on QUIT.
 void *tick(void *vh);
 
-// Check whether the window has the input focus. Called from the runner thread.
-// TODO: replace with FOCUS and DEFOCUS events.
-bool focused(handler *h);
-
 // Generate a paste event. Called from the runner thread when C_V is pressed.
 void pasteEvent(handler *h);
 

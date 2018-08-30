@@ -39,7 +39,7 @@ struct display {
     GLuint fontTextureId;
     int rows, cols, charWidth, charHeight, advance, pad, width, height, magnify;
     int scroll, scrollTarget;
-    bool showCaret;
+    bool showCaret, focused;
     int showSize;
     page *p;
     runFunction *run;
@@ -183,6 +183,7 @@ display *newDisplay(char const *path) {
     d->scroll = 0;
     d->scrollTarget = 0;
     d->showCaret = false;
+    d->focused = true;
     d->showSize = 0;
     d->q = newQueue();
     double blinkRate = atof(getSetting(BlinkRate));
@@ -296,7 +297,7 @@ static void drawSize(display *d) {
 
 // Toggle whether the caret is displayed. Check whether the focus has been lost.
 static void blinkCaret(display *d) {
-    if (! focused(d->h)) d->showCaret = false;
+    if (! d->focused) d->showCaret = false;
     else d->showCaret = ! d->showCaret;
 }
 
@@ -368,6 +369,8 @@ void actOnDisplay(display *d, action a, char const *s) {
         case Paste: pasteEvent(d->h); break;
         case Cut: case Copy: clip(d->h, s); break;
         case Resize: checkResize(d); break;
+        case Focus: d->focused = true; break;
+        case Defocus: d->focused = false; break;
         default: break;
     }
 }
