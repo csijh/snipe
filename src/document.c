@@ -23,6 +23,7 @@
 // data for a pending action.
 struct document {
     char *path;
+    char *language;
     text *content;
     history *undos, *redos;
     int scrollTarget, pageRows;
@@ -37,7 +38,8 @@ static document *newEmptyDocument() {
     document *d = malloc(sizeof(document));
     scanner *sc = newScanner();
     *d = (document) {
-        .path = NULL, .content = NULL, .undos = NULL, .redos = NULL,
+        .path = NULL, .language = "txt", .content = NULL,
+        .undos = NULL, .redos = NULL,
         .changed = false, .sc = sc, .scrollTarget = 0, .pageRows = 30,
         .line = newChars(), .lineStyles = newChars()
     };
@@ -62,8 +64,8 @@ static void load(document *d, char const *path) {
     if (d->content == NULL) return;
     d->path = malloc(strlen(path) + 1);
     strcpy(d->path, path);
-    char *ext = extension(path);
-    changeLanguage(d->sc, ext);
+    d->language = extension(path);
+    changeLanguage(d->sc, d->language);
     d->undos = newHistory();
     d->redos = newHistory();
     d->changed = false;
@@ -145,14 +147,18 @@ static void repairLine(document *d, int r) {
     assert(length(styles) >= p);
     resize(styles, p + n);
     memcpy(&C(styles)[p], C(d->lineStyles), n);
-    resize(indents, r+1);
-    int runningIndent = 0;
-    if (r > 0) runningIndent = I(indents)[r-1];
-    int wanted = findIndent(&runningIndent, n, C(d->line), C(d->lineStyles));
-    I(indents)[r] = runningIndent;
-    int actual = getIndent(n, C(d->line));
-    if (wanted > actual) insertIndent(d, r, wanted - actual);
-    if (wanted < actual) deleteIndent(d, r, actual - wanted);
+    if (strcmp(d->language, "c") == 0 || strcmp(d->language, "h") == 0) {
+        resize(indents, r+1);
+        int runningIndent = 0;
+        if (r > 0) runningIndent = I(indents)[r-1];
+        int wanted = findIndent(&runningIndent, n, C(d->line),
+            C(d->lineStyles)
+        );
+        I(indents)[r] = runningIndent;
+        int actual = getIndent(n, C(d->line));
+        if (wanted > actual) insertIndent(d, r, wanted - actual);
+        if (wanted < actual) deleteIndent(d, r, actual - wanted);
+    }
 }
 
 chars *getLine(document *d, int row) {
@@ -172,22 +178,6 @@ chars *getStyle(document *d, int row) {
     ints *indents = getIndents(d->content);
     int unstyled = findRow(lines, length(styles));
     for (int r = unstyled; r <= row; r++) repairLine(d, r);
-/*
-    resize(indents, row + 1);
-    for (int r = unstyled; r <= row; r++) {
-        int p = startLine(lines, r);
-        int n = getWidth(d, r);
-        getText(d->content, p, n, d->line);
-        scan(d->sc, r, d->line, d->lineStyles);
-        assert(length(styles) >= p);
-        resize(styles, p + n);
-        memcpy(&C(styles)[p], C(d->lineStyles), n);
-        int runIndent = 0;
-        if (r > 0) runIndent = I(indents)[r-1];
-        findIndent(&runIndent, n, C(d->line), C(d->lineStyles));
-        I(indents)[r] = runIndent;
-    }
-*/
     int n = getWidth(d, row);
     int p = startLine(lines, row);
     resize(d->lineStyles, n);
