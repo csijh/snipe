@@ -28,6 +28,9 @@ int getHeight(document *d);
 // Get the number of bytes in a given line (excluding the newline).
 int getWidth(document *d, int row);
 
+// Set the page height of the display for PAGEUP/DOWN.
+void setPageRows(document *d, int rows);
+
 // Get the scroll target row.
 int getScrollTarget(document *d);
 

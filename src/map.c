@@ -107,6 +107,7 @@ bool dispatch(map *m, event e, int r, int c, char const *t) {
     else if (base == TEXT || base == PASTE) {
         setTextData(m->doc, t);
     }
+    setPageRows(m->doc, pageRows(m->dis));
     char const *copy = actOnDocument(m->doc, a);
     actOnDisplay(m->dis, a, copy);
     if (a == Open || a == Load) setTitle(m->dis, getPath(m->doc));

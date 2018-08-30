@@ -209,7 +209,7 @@ void freeDisplay(display *d) {
     free(d);
 }
 
-int pageHeight(display *d) {
+int pageRows(display *d) {
     return d->rows;
 }
 

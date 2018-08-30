@@ -24,7 +24,7 @@ struct document {
     char *path;
     text *content;
     history *undos, *redos;
-    int scrollTarget;
+    int scrollTarget, pageRows;
     bool changed;
     scanner *sc;
     chars *line, *lineStyles;
@@ -37,7 +37,7 @@ static document *newEmptyDocument() {
     scanner *sc = newScanner();
     *d = (document) {
         .path = NULL, .content = NULL, .undos = NULL, .redos = NULL,
-        .changed = false, .sc = sc, .scrollTarget = 0,
+        .changed = false, .sc = sc, .scrollTarget = 0, .pageRows = 30,
         .line = newChars(), .lineStyles = newChars()
     };
     return d;
@@ -94,6 +94,10 @@ int getHeight(document *d) { return length(getLines(d->content)); }
 
 int getWidth(document *d, int row) {
     return lengthLine(getLines(d->content), row);
+}
+
+void setPageRows(document *d, int rows) {
+    d->pageRows = rows;
 }
 
 int getScrollTarget(document *d) {
@@ -153,12 +157,12 @@ static void cutRight(document *d) {
 }
 
 static void doPageUp(document *d) {
-    d->scrollTarget -= 30;
+    d->scrollTarget -= d->pageRows;
     if (d->scrollTarget < 0) d->scrollTarget = 0;
 }
 
 static void doPageDown(document *d) {
-    d->scrollTarget += 30;
+    d->scrollTarget += d->pageRows;
     if (d->scrollTarget > getHeight(d) - 10) d->scrollTarget = getHeight(d) - 10;
 }
 
