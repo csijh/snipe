@@ -105,7 +105,9 @@ void enqueue(queue *q, event e, int x, int y, char const *t) {
     bool tell = empty(q);
     data *d = push(q);
     d->e = e;
-    if (e == CLICK || e == DRAG) { d->p.x = x; d->p.y = y; }
+    if (e == CLICK || e == DRAG || e == SCROLL) {
+        d->p.x = x; d->p.y = y;
+    }
     else if (e == TEXT) strcpy(d->t, t);
     else if (e == PASTE) d->s = (char *) t;
     if (tell) pthread_cond_broadcast(&q->pullable);
@@ -131,18 +133,12 @@ event dequeue(queue *q, int *px, int *py, char const **pt) {
     bool tell = full(q);
     data *d = pull(q);
     event e = d->e;
-    if (e == CLICK || e == DRAG) { *px = d->p.x; *py = d->p.y; }
+    if (e == CLICK || e == DRAG || e == SCROLL) {
+        *px = d->p.x; *py = d->p.y;
+    }
     else if (e == TEXT) *pt = d->t;
     else if (e == PASTE) {
         q->buffer = d->s;
-//        int n = strlen(d->s) + 1;
-//        if (q->bufferSize < n) {
-//            q->bufferSize = n;
-//            free(q->buffer);
-//            q->buffer = malloc(n);
-//        }
-//        strcpy(q->buffer, d->s);
-//        free(d->s);
         *pt = q->buffer;
     }
     if (tell) pthread_cond_broadcast(&q->pushable);

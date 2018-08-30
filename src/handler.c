@@ -223,7 +223,7 @@ static void mouseCB(GLFWwindow *w, int button, int action, int mods) {
 }
 
 // Callback for scroll wheel or touchpad scroll gesture events. Modifier info is
-// not directly available, so ask for it.
+// not directly available, so ask for it. Pass on integer 1/10ths of units.
 static void scrollCB(GLFWwindow *w, double x, double y) {
     handler *h = glfwGetWindowUserPointer(w);
     bool shift =
@@ -235,12 +235,10 @@ static void scrollCB(GLFWwindow *w, double x, double y) {
     glfwGetKey(w, GLFW_KEY_LEFT_SUPER) == GLFW_PRESS ||
     glfwGetKey(w, GLFW_KEY_RIGHT_SUPER) == GLFW_PRESS;
     event e;
-    if (y > 0) e = LINE_UP;
-    else e = LINE_DOWN;
-    if (e == LINE_DOWN) printf("D %f\n", y);
+    e = SCROLL;
     if (shift) e = addEventFlag(S_, e);
     if (ctrl) e = addEventFlag(C_, e);
-    enqueue(h->q, e, (int) x, (int) y, NULL);
+    enqueue(h->q, e, (int) (10 * x), (int) (10 * y), NULL);
 }
 
 // ---- Window -----------------------------------------------------------------
@@ -341,7 +339,7 @@ static void *run(void *vh) {
     char const *t;
     while (e != QUIT) {
         e = dequeue(h->q, &x, &y, &t);
-        printEvent(e, x, y, t); printf("\n");
+        printEvent(e, x, y, t, "\n");
     }
     return NULL;
 }
@@ -362,6 +360,7 @@ int main() {
     pthread_join(runner, NULL);
     pthread_join(ticker, NULL);
     freeHandler(h);
+    freeQueue(q);
     glfwDestroyWindow(gw);
     glfwTerminate();
     printf("Handler module OK\n");

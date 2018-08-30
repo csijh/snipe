@@ -21,10 +21,9 @@ static char *eventNames[COUNT_EVENTS] = {
     [KP_DIVIDE]="KP_DIVIDE", [KP_MULTIPLY]="KP_MULTIPLY",
     [KP_SUBTRACT]="KP_SUBTRACT", [KP_ADD]="KP_ADD", [KP_ENTER]="KP_ENTER",
     [KP_EQUAL]="KP_EQUAL", [MENU]="MENU", [CLICK]="CLICK", [DRAG]="DRAG",
-    [LINE_UP]="LINE_UP", [LINE_DOWN]="LINE_DOWN", [TEXT]="TEXT",
-    [PASTE]="PASTE", [RESIZE]="RESIZE", [FOCUS]="FOCUS", [DEFOCUS]="DEFOCUS",
-    [FRAME]="FRAME", [LOAD]="LOAD", [BLINK]="BLINK", [SAVE]="SAVE",
-    [QUIT]="QUIT"
+    [SCROLL]="SCROLL", [TEXT]="TEXT", [PASTE]="PASTE", [RESIZE]="RESIZE",
+    [FOCUS]="FOCUS", [DEFOCUS]="DEFOCUS", [FRAME]="FRAME", [LOAD]="LOAD",
+    [BLINK]="BLINK", [SAVE]="SAVE", [QUIT]="QUIT"
 };
 
 // Space for generated strings.
@@ -83,10 +82,13 @@ event findEvent(char *name) {
     exit(1);
 }
 
-void printEvent(event e, int r, int c, char const *t) {
+void printEvent(event e, int x, int y, char const *t, char *end) {
     printf("%s", findEventName(e));
     if (e == TEXT) printf(" %s", t);
-    else if (e == CLICK || e == DRAG) printf(" r=%d c=%d", r, c);
+    else if (e == CLICK || e == DRAG || e == SCROLL) {
+        printf(" x=%d y=%d", x, y);
+    }
+    printf("%s", end);
 }
 
 #ifdef test_event

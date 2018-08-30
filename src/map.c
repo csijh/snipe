@@ -76,8 +76,6 @@ void freeMap(map *m) {
 // Redraw the window after a change of any kind. Transfer the scroll target,
 // text, and style to the display.
 void redraw(map *m) {
-    int topRow = getScrollTarget(m->doc);
-    setScrollTarget(m->dis, topRow);
     int height = getHeight(m->doc);
     for (int r = firstRow(m->dis); r <= lastRow(m->dis); r++) {
         if (r > height) break;
@@ -91,25 +89,27 @@ void redraw(map *m) {
 }
 
 // Offer an action to the document, then the display, return whether quitting.
-bool dispatch(map *m, event e, int r, int c, char const *t) {
+bool dispatch(map *m, event e, int x, int y, char const *t) {
     action a;
     if (isDirectory(m->doc)) a = m->listArray[e];
     else a = m->array[e];
     if (m->testing && e != BLINK && e != SAVE && e != RESIZE && e != FRAME) {
-        printEvent(e, r, c, t);
+        printEvent(e, x, y, t, "");
         printf("  ->  ");
         printAction(a);
     }
     event base = clearEventFlags(e);
     if (base == CLICK || base == DRAG) {
+        int r, c;
+        charPosition(m->dis, x, y, &r, &c);
         setRowColData(m->doc, r, c);
     }
     else if (base == TEXT || base == PASTE) {
         setTextData(m->doc, t);
     }
-    setPageRows(m->doc, pageRows(m->dis));
+    setDocRows(m->dis, getHeight(m->doc));
     char const *copy = actOnDocument(m->doc, a);
-    actOnDisplay(m->dis, a, copy);
+    actOnDisplay(m->dis, a, x, y, copy);
     if (a == Open || a == Load) setTitle(m->dis, getPath(m->doc));
     redraw(m);
     return a == Quit;

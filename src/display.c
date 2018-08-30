@@ -38,7 +38,7 @@ struct display {
     GLFWwindow *gw;
     GLuint fontTextureId;
     int rows, cols, charWidth, charHeight, advance, pad, width, height, magnify;
-    int scroll, scrollTarget;
+    int scroll, scrollTarget, docRows;
     bool showCaret, focused;
     int showSize;
     page *p;
@@ -182,6 +182,7 @@ display *newDisplay(char const *path) {
     d->pad = 4;
     d->scroll = 0;
     d->scrollTarget = 0;
+    d->docRows = 10;
     d->showCaret = false;
     d->focused = true;
     d->showSize = 0;
@@ -212,6 +213,10 @@ void freeDisplay(display *d) {
 
 int pageRows(display *d) {
     return d->rows;
+}
+
+void setDocRows(display *d, int rows) {
+    d->docRows = rows;
 }
 
 static void bigger(display *d) {
@@ -338,10 +343,46 @@ static void smoothScroll(display *d) {
     if (d->scroll != d->scrollTarget) enqueue(d->q, FRAME, 0, 0, NULL);
 }
 
-// Set a new target and do the first step of animation.
-void setScrollTarget(display *d, int row) {
-    d->scrollTarget = row * d->charHeight;
-    if (d->scroll != d->scrollTarget) enqueue(d->q, FRAME, 0, 0, NULL);
+// Deal with a scroll. Use two strategies. For mouse wheels, expect y = 10 or
+// y = -10. Set a one-line target and start an animation to get there. For
+// touchpads, expect variable amounts to arrive at roughly animation rates, so
+// scroll straight to the given point (like holding and dragging the paper).
+static void doScroll(display *d, int x, int y) {
+    int maxScroll = (d->docRows - 10) * d->charHeight;
+    if (y == 10) {
+        d->scrollTarget -= d->charHeight;
+        if (d->scrollTarget < 0) d->scrollTarget = 0;
+        smoothScroll(d);
+    }
+    else if (y == -10) {
+        d->scrollTarget += d->charHeight;
+        if (d->scrollTarget > maxScroll) d->scrollTarget = maxScroll;
+        smoothScroll(d);
+    }
+    else if (y > 0) {
+        d->scroll -= y;
+        if (d->scroll < 0) d->scroll = 0;
+        d->scrollTarget = d->scroll;
+        d->scrollTarget = d->scrollTarget - d->scrollTarget % d->charHeight;
+    }
+    else if (y < 0) {
+        d->scroll -=y;
+        if (d->scroll > maxScroll) d->scroll = maxScroll;
+        d->scrollTarget = d->scroll;
+        d->scrollTarget += d->charHeight - 1 - (d->scrollTarget - 1) % d->charHeight;
+    }
+}
+
+static void doPageUp(display *d) {
+    d->scrollTarget -= d->rows * d->charHeight;
+    if (d->scrollTarget < 0) d->scrollTarget = 0;
+    smoothScroll(d);
+}
+
+static void doPageDown(display *d) {
+    int maxScroll = (d->docRows - 10) * d->charHeight;
+    d->scrollTarget += d->rows * d->charHeight;
+    if (d->scrollTarget > maxScroll) d->scrollTarget = maxScroll;
     smoothScroll(d);
 }
 
@@ -353,20 +394,23 @@ void charPosition(display *d, int x, int y, int *row, int *col) {
     *col = (x - d->pad + d->charWidth / 2) / d->charWidth;
 }
 
-event getEvent(display *d, int *pr, int *pc, char const **pt) {
-    int x, y;
-    event e = dequeue(d->q, &x, &y, pt);
-    if (e == CLICK || e == DRAG) charPosition(d, x, y, pr, pc);
+event getEvent(display *d, int *px, int *py, char const **pt) {
+//    int x, y;
+    event e = dequeue(d->q, px, py, pt);
+//    if (e == CLICK || e == DRAG) charPosition(d, x, y, pr, pc);
     return e;
 }
 
-void actOnDisplay(display *d, action a, char const *s) {
+void actOnDisplay(display *d, action a, int x, int y, char const *s) {
     switch (a) {
         case Bigger: bigger(d); break;
         case Smaller: smaller(d); break;
         case CycleTheme: cycleTheme(d); break;
         case Blink: blinkCaret(d); break;
         case Frame: smoothScroll(d); break;
+        case Scroll: doScroll(d, x, y); break;
+        case PageUp: doPageUp(d); break;
+        case PageDown: doPageDown(d); break;
         case Open: case Load: d->scroll = 0; break;
         case Paste: pasteEvent(d->h); break;
         case Cut: case Copy: clip(d->h, s); break;
@@ -402,11 +446,11 @@ static void testRedraw(display *d) {
 static void *run(void *vd) {
     display *d = (display *) vd;
     event e = BLINK;
-    int r, c;
+    int x, y;
     char const *t;
     while (e != QUIT) {
-        e = getEvent(d, &r, &c, &t);
-        if (e != BLINK) { printEvent(e, r, c, t); printf("\n"); }
+        e = getEvent(d, &x, &y, &t);
+        if (e != BLINK) printEvent(e, x, y, t, "\n");
         if (e == BLINK) blinkCaret(d);
         else if (e == addEventFlag(C_, '+')) bigger(d);
         else if (e == addEventFlag(C_, '=')) bigger(d);

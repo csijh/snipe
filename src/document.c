@@ -26,7 +26,6 @@ struct document {
     char *language;
     text *content;
     history *undos, *redos;
-    int scrollTarget, pageRows;
     bool changed;
     scanner *sc;
     chars *line, *lineStyles;
@@ -40,7 +39,7 @@ static document *newEmptyDocument() {
     *d = (document) {
         .path = NULL, .language = "txt", .content = NULL,
         .undos = NULL, .redos = NULL,
-        .changed = false, .sc = sc, .scrollTarget = 0, .pageRows = 30,
+        .changed = false, .sc = sc,
         .line = newChars(), .lineStyles = newChars()
     };
     return d;
@@ -69,7 +68,6 @@ static void load(document *d, char const *path) {
     d->undos = newHistory();
     d->redos = newHistory();
     d->changed = false;
-    d->scrollTarget = 0;
 }
 
 document *newDocument(char const *path) {
@@ -97,14 +95,6 @@ int getHeight(document *d) { return length(getLines(d->content)); }
 
 int getWidth(document *d, int row) {
     return lengthLine(getLines(d->content), row);
-}
-
-void setPageRows(document *d, int rows) {
-    d->pageRows = rows;
-}
-
-int getScrollTarget(document *d) {
-    return d->scrollTarget;
 }
 
 // Increase the indent on a given line.
@@ -203,28 +193,6 @@ static void cutRight(document *d) {
     d->changed = true;
 }
 
-static void doPageUp(document *d) {
-    d->scrollTarget -= d->pageRows;
-    if (d->scrollTarget < 0) d->scrollTarget = 0;
-}
-
-static void doPageDown(document *d) {
-    d->scrollTarget += d->pageRows;
-    int maxRows = getHeight(d) - 10;
-    if (d->scrollTarget > maxRows) d->scrollTarget = maxRows;
-}
-
-static void doLineUp(document *d) {
-    d->scrollTarget -= 1;
-    if (d->scrollTarget < 0) d->scrollTarget = 0;
-}
-
-static void doLineDown(document *d) {
-    d->scrollTarget += 1;
-    int maxRows = getHeight(d) - 10;
-    if (d->scrollTarget > maxRows) d->scrollTarget = maxRows;
-}
-
 // Delete any selection before inserting.
 static void doInsert(document *d) {
     cutLeft(d);
@@ -319,10 +287,6 @@ char const *actOnDocument(document *d, action a) {
         case CutEndLine: markEndLine(cs); cutRight(d); break;
         case Insert: doInsert(d); break;
         case Newline: doNewline(d); break;
-        case PageUp: doPageUp(d); break;
-        case PageDown: doPageDown(d); break;
-        case LineUp: doLineUp(d); break;
-        case LineDown: doLineDown(d); break;
         case Help: doHelp(d); break;
         case Point: point(cs, d->pos); break;
         case Select: doSelect(cs, d->pos); break;

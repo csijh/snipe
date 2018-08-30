@@ -25,7 +25,7 @@ enum event {
     F8, F9, F10, F11, F12, F13, F14, F15, F16, F17, F18, F19, F20, F21, F22,
     F23, F24, F25, KP_0, KP_1, KP_2, KP_3, KP_4, KP_5, KP_6, KP_7, KP_8, KP_9,
     KP_DECIMAL, KP_DIVIDE, KP_MULTIPLY, KP_SUBTRACT, KP_ADD, KP_ENTER, KP_EQUAL,
-    MENU, CLICK, DRAG, LINE_UP, LINE_DOWN, TEXT, PASTE, RESIZE, FOCUS, DEFOCUS,
+    MENU, CLICK, DRAG, SCROLL, TEXT, PASTE, RESIZE, FOCUS, DEFOCUS,
     FRAME, LOAD, BLINK, SAVE, QUIT,
     S_ = 0x100, C_ = 0x200, SC_ = S_ + C_, COUNT_EVENTS = 0x400,
 };
@@ -46,5 +46,5 @@ const char *findEventName(event e);
 // Find an event from its name (including S_ or C_ or SC_ prefix).
 event findEvent(char *name);
 
-// Print out an event, e.g. for testing.
-void printEvent(event e, int r, int c, char const *t);
+// Print out an event with a given terminating string, e.g. for testing.
+void printEvent(event e, int r, int c, char const *t, char *end);
