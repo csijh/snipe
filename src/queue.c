@@ -85,16 +85,23 @@ static inline data *pull(queue *q) {
     return d;
 }
 
-// Look at the next event on a non-empty queue without pulling it.
-static inline data *look(queue *q) {
-    data *d = &q->array[q->tail];
-    return d;
-}
-
 // Prepare to push an event to a non-full queue, returning the next slot.
 static inline data *push(queue *q) {
     data *d = &q->array[q->head];
     q->head = (q->head + 1) % q->size;
+    return d;
+}
+
+// Look at the last, i.e. most recent, event on a non-empty queue.
+static inline data *last(queue *q) {
+    int i = q->head - 1;
+    if (i < 0) i = q->size - 1;
+    return &q->array[i];
+}
+
+// Look at the next event on a non-empty queue without pulling it.
+static inline data *next(queue *q) {
+    data *d = &q->array[q->tail];
     return d;
 }
 
@@ -109,7 +116,9 @@ void enqueue(queue *q, event e, int x, int y, char const *t) {
     }
     while (full(q)) pthread_cond_wait(&q->pushable, &q->lock);
     bool tell = empty(q);
-    data *d = push(q);
+    data *d;
+    if (e == DRAG && ! empty(q) && last(q)->e == DRAG) d = last(q);
+    else d = push(q);
     d->e = e;
     if (e == CLICK || e == DRAG || e == SCROLL) {
         d->p.x = x; d->p.y = y;
@@ -138,10 +147,10 @@ event dequeue(queue *q, int *px, int *py, char const **pt) {
     bool tell = full(q);
     data *d = pull(q);
     event e = d->e;
-    if (e == DRAG && ! full(q)) {
-        data *d2 = look(q);
-        if (d2->e == DRAG) d = pull(q); 
-    }
+    //    if (e == DRAG && ! full(q)) {
+    //data *d2 = look(q);
+    //if (d2->e == DRAG) d = pull(q);
+    //}
     if (e == CLICK || e == DRAG || e == SCROLL) {
         *px = d->p.x; *py = d->p.y;
     }
@@ -153,7 +162,7 @@ event dequeue(queue *q, int *px, int *py, char const **pt) {
     if (tell) pthread_cond_broadcast(&q->pushable);
     pthread_mutex_unlock(&q->lock);
     return e;
-    }
+}
 
 #ifdef test_queue
 
