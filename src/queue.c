@@ -85,6 +85,12 @@ static inline data *pull(queue *q) {
     return d;
 }
 
+// Look at the next event on a non-empty queue without pulling it.
+static inline data *look(queue *q) {
+    data *d = &q->array[q->tail];
+    return d;
+}
+
 // Prepare to push an event to a non-full queue, returning the next slot.
 static inline data *push(queue *q) {
     data *d = &q->array[q->head];
@@ -119,9 +125,8 @@ void enqueue(queue *q, event e, int x, int y, char const *t) {
 // returning a FRAME event only if the queue is otherwise empty. For TEXT, it is
 // OK to return a pointer to the eventData structure, because further enqueued
 // events can't overwrite the current data before the next event is requested.
-
-// Buffer text to
-// keep it valid until the next request.
+// Buffer text to keep it valid until the next request. If two DRAG events
+// have arrived from a fast mouse movement discard the first.
 event dequeue(queue *q, int *px, int *py, char const **pt) {
     pthread_mutex_lock(&q->lock);
     if (empty(q) && q->frames > 0) {
@@ -133,6 +138,10 @@ event dequeue(queue *q, int *px, int *py, char const **pt) {
     bool tell = full(q);
     data *d = pull(q);
     event e = d->e;
+    if (e == DRAG && ! full(q)) {
+        data *d2 = look(q);
+        if (d2->e == DRAG) d = pull(q); 
+    }
     if (e == CLICK || e == DRAG || e == SCROLL) {
         *px = d->p.x; *py = d->p.y;
     }
@@ -144,7 +153,7 @@ event dequeue(queue *q, int *px, int *py, char const **pt) {
     if (tell) pthread_cond_broadcast(&q->pushable);
     pthread_mutex_unlock(&q->lock);
     return e;
-}
+    }
 
 #ifdef test_queue
 

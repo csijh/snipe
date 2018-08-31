@@ -395,7 +395,7 @@ void charPosition(display *d, int x, int y, int *row, int *col) {
 }
 
 event getEvent(display *d, int *px, int *py, char const **pt) {
-//    int x, y;
+    //    int x, y;
     event e = dequeue(d->q, px, py, pt);
 //    if (e == CLICK || e == DRAG) charPosition(d, x, y, pr, pc);
     return e;

@@ -1,5 +1,5 @@
 POINT    #93a1a1 base1
-SELECT   #073642 base02
+SELECT   #eee8d5 base2
 GAP      #002b36 base03
 COMMENT  #586e75 base01
 WORD     #839496 base0

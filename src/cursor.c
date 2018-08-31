@@ -399,7 +399,7 @@ void addPoint(cursors *cs, int p) {
 // Can follow Point or AddPoint.
 void doSelect(cursors *cs, int p) {
     cursor *c = &cs->cs[cs->current];
-    c->from = c->at;
+    //    c->from = c->at;
     c->at = p;
     c->col = -1;
 }

@@ -25,7 +25,7 @@ struct handler {
     GLFWwindow *w;
     double blinkRate, saveRate;
     double blinkTime, saveTime;
-    bool alive;
+    bool alive, dragging;
     queue *q;
     int width, height;
     bool pasting;
@@ -48,6 +48,7 @@ handler *newHandler(void *w, queue *q, double blinkRate) {
     h->blinkTime = h->blinkRate;
     h->saveTime = h->saveRate;
     h->alive = true;
+    h->dragging = false;
     h->width = h->height = 0;
     h->pasting = false;
     h->clipping = NULL;
@@ -214,12 +215,27 @@ static void mouseCB(GLFWwindow *w, int button, int action, int mods) {
     handler *h = glfwGetWindowUserPointer(w);
     bool shift = (mods & GLFW_MOD_SHIFT) != 0;
     bool ctrl = (mods & (GLFW_MOD_CONTROL | GLFW_MOD_SUPER)) != 0;
-    event e = (action == GLFW_PRESS) ? CLICK : DRAG;
-    if (shift) e = addEventFlag(S_, e);
-    if (ctrl) e = addEventFlag(C_, e);
+    event e;
+    if (action == GLFW_PRESS) {
+        h->dragging = true;
+        e = CLICK;
+        if (shift) e = addEventFlag(S_, e);
+        if (ctrl) e = addEventFlag(C_, e);
+    } else {
+        h->dragging = false;
+        e = DRAG;
+    }
     double dx, dy;
     glfwGetCursorPos(w, &dx, &dy);
     enqueue(h->q, e, (int) dx, (int) dy, NULL);
+}
+
+// Callback for mouse movement events, only passed on while the button is
+// pressed.
+static void dragCB(GLFWwindow *w, double dx, double dy) {
+    handler *h = glfwGetWindowUserPointer(w);
+    if (! h->dragging) return;
+    enqueue(h->q, DRAG, (int) dx, (int) dy, NULL);
 }
 
 // Callback for scroll wheel or touchpad scroll gesture events. Modifier info is
@@ -270,6 +286,7 @@ void handle(handler *h) {
     glfwSetKeyCallback(h->w, keyCB);
     glfwSetCharCallback(h->w, charCB);
     glfwSetMouseButtonCallback(h->w, mouseCB);
+    glfwSetCursorPosCallback(h->w, dragCB);
     glfwSetScrollCallback(h->w, scrollCB);
     glfwSetWindowCloseCallback(h->w, closeCB);
     glfwSetWindowFocusCallback(h->w, focusCB);
