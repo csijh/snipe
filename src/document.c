@@ -63,7 +63,7 @@ static void load(document *d, char const *path) {
     if (d->content == NULL) return;
     d->path = malloc(strlen(path) + 1);
     strcpy(d->path, path);
-    d->language = extension(path);
+    d->language = extension(d->path);
     changeLanguage(d->sc, d->language);
     d->undos = newHistory();
     d->redos = newHistory();
