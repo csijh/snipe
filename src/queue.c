@@ -13,8 +13,9 @@
 struct point { int x, y; };
 typedef struct point point;
 
-// Size of text to support. Must be >= 5 for maximum-length UTF8 code point.
-enum { TEXT_SIZE = 8 };
+// Size of queue and size of in-place event text (must be >= 5 for
+// maximum-length UTF8 code point.
+enum { QUEUE_SIZE = 512, TEXT_SIZE = 8 };
 
 // An event structure holds an event, with coordinates or text or a string.
 struct data {
@@ -35,9 +36,6 @@ struct queue {
     pthread_mutex_t lock;
     pthread_cond_t pushable;
     pthread_cond_t pullable;
-    int bufferSize;
-    char *buffer;
-    int frames;
 };
 
 // Check that a result from a pthread function is zero.
@@ -49,13 +47,9 @@ static inline void Z(int r) {
 
 queue *newQueue() {
     queue *q = malloc(sizeof(queue));
-    q->size = 1024;
+    q->size = QUEUE_SIZE;
     q->head = q->tail = 0;
     q->array = malloc(q->size * sizeof(data));
-    q->bufferSize = 256;
-    q->buffer = NULL;
-    q->frames = 0;
-    assert(q->bufferSize >= TEXT_SIZE);
     Z(pthread_cond_init(&q->pushable, NULL));
     Z(pthread_cond_init(&q->pullable, NULL));
     Z(pthread_mutex_init(&q->lock, NULL));
@@ -64,7 +58,6 @@ queue *newQueue() {
 
 void freeQueue(queue *q) {
     free(q->array);
-    free(q->buffer);
     free(q);
 }
 
@@ -73,7 +66,9 @@ static inline bool empty(queue *q) {
     return q->head == q->tail;
 }
 
-// Check if the queue is full.
+// Check if the queue is full. The last slot is unused, otherwise full would be
+// indistinguishable from empty. Also, not using the last slot ensures that the
+// data for an event can't get overwritten while that event is being processed.
 static inline bool full(queue *q) {
     return ((q->head + 1) % q->size) == q->tail;
 }
@@ -85,40 +80,58 @@ static inline data *pull(queue *q) {
     return d;
 }
 
-// Prepare to push an event to a non-full queue, returning the next slot.
+// Prepare to push an event to a non-full queue, returning the slot pointer.
 static inline data *push(queue *q) {
     data *d = &q->array[q->head];
     q->head = (q->head + 1) % q->size;
     return d;
 }
 
-// Look at the last, i.e. most recent, event on a non-empty queue.
-static inline data *last(queue *q) {
+// Look at the previous event on a non-empty queue.
+static inline data *previous(queue *q) {
     int i = q->head - 1;
     if (i < 0) i = q->size - 1;
     return &q->array[i];
 }
 
-// Look at the next event on a non-empty queue without pulling it.
+// XXXLook at the next event on a non-empty queue without pulling it.
 static inline data *next(queue *q) {
     data *d = &q->array[q->tail];
     return d;
+}
+
+// Attempt to merge the event with the most recently added event.
+static bool combine(queue *q, event e, int x, int y) {
+    if (empty(q)) return false;
+    data *p = previous(q);
+    if (p->e != e) return false;
+    switch (e) {
+        case FRAME:
+            return true;
+        case RESIZE: case DRAG:
+            p->p.x = x;
+            p->p.y = y;
+            return true;
+        case SCROLL:
+            p->p.x += x;
+            p->p.y += y;
+            return true;
+        default:
+            return false;
+    }
 }
 
 // Push an event, waiting if necessary. If adding to an empty queue, wake up any
 // threads waiting to pull. For a FRAME event, count it rather than queueing it.
 void enqueue(queue *q, event e, int x, int y, char const *t) {
     pthread_mutex_lock(&q->lock);
-    if (e == FRAME) {
-        q->frames++;
+    if (combine(q, e, x, y)) {
         pthread_mutex_unlock(&q->lock);
         return;
     }
     while (full(q)) pthread_cond_wait(&q->pushable, &q->lock);
     bool tell = empty(q);
-    data *d;
-    if (e == DRAG && ! empty(q) && last(q)->e == DRAG) d = last(q);
-    else d = push(q);
+    data *d = push(q);
     d->e = e;
     if (e == CLICK || e == DRAG || e == SCROLL) {
         d->p.x = x; d->p.y = y;
@@ -138,27 +151,21 @@ void enqueue(queue *q, event e, int x, int y, char const *t) {
 // have arrived from a fast mouse movement discard the first.
 event dequeue(queue *q, int *px, int *py, char const **pt) {
     pthread_mutex_lock(&q->lock);
-    if (empty(q) && q->frames > 0) {
-        q->frames--;
-        pthread_mutex_unlock(&q->lock);
-        return FRAME;
-    }
     while (empty(q)) pthread_cond_wait(&q->pullable, &q->lock);
     bool tell = full(q);
     data *d = pull(q);
     event e = d->e;
-    //    if (e == DRAG && ! full(q)) {
-    //data *d2 = look(q);
-    //if (d2->e == DRAG) d = pull(q);
-    //}
+    if (e != FRAME) {
+        if (! combine(q, FRAME, 0, 0)) {
+            data *d = push(q);
+            d->e = FRAME;
+        }
+    }
     if (e == CLICK || e == DRAG || e == SCROLL) {
         *px = d->p.x; *py = d->p.y;
     }
     else if (e == TEXT) *pt = d->t;
-    else if (e == PASTE) {
-        q->buffer = d->s;
-        *pt = q->buffer;
-    }
+    else if (e == PASTE) *pt = d->s;
     if (tell) pthread_cond_broadcast(&q->pushable);
     pthread_mutex_unlock(&q->lock);
     return e;

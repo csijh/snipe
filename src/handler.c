@@ -301,9 +301,9 @@ void handle(handler *h) {
         if (h->pasting) {
             char const *s = glfwGetClipboardString(h->w);
             if (s == NULL) s = "";
-            char *temp = malloc(strlen(s) + 1);
-            strcpy(temp, s);
-            enqueue(h->q, PASTE, 0, 0, temp);
+//            char *temp = malloc(strlen(s) + 1);
+//            strcpy(temp, s);
+            enqueue(h->q, PASTE, 0, 0, s);
             h->pasting = false;
         }
         if (h->clipping != NULL) {

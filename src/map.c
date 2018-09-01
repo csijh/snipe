@@ -111,7 +111,7 @@ bool dispatch(map *m, event e, int x, int y, char const *t) {
     setDocRows(m->dis, getHeight(m->doc));
     actOnDisplay(m->dis, a, x, y, copy);
     if (a == Open || a == Load) setTitle(m->dis, getPath(m->doc));
-    redraw(m);
+    if (a == Frame) redraw(m);
     return a == Quit;
 }
 

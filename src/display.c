@@ -335,58 +335,82 @@ void showFrame(display *d) {
     paintBackground(d);
 }
 
-// Do a small amount of scrolling, and generate another frame event.
+/*
+// XXX Do a small amount of scrolling, and generate another frame event.
 static void smoothScroll(display *d) {
-    int diff = d->scrollTarget - d->scroll;
-    diff = (diff >= 0) ? (diff + 9)/10 : (diff - 9)/10;
-    d->scroll += diff;
-    if (d->scroll != d->scrollTarget) enqueue(d->q, FRAME, 0, 0, NULL);
+int diff = d->scrollTarget - d->scroll;
+diff = (diff >= 0) ? (diff + 9)/10 : (diff - 9)/10;
+d->scroll += diff;
+if (d->scroll != d->scrollTarget) enqueue(d->q, FRAME, 0, 0, NULL);
+}
+*/
+// Add the scroll amount (+ve or -ve) from a SCROLL event to the target. The
+// units are tenths of a line height. At this stage, the target may not be a
+// multiple of the line height, but it gets adjusted later.
+static void addToTarget(display *d, int tenths) {
+    int delta = tenths * d->charHeight / 10;
+    d->scrollTarget -= delta;
+    if (d->scrollTarget < 0) d->scrollTarget = 0;
+    int maxScroll = (d->docRows - 10) * d->charHeight;
+    if (d->scrollTarget > maxScroll) d->scrollTarget = maxScroll;
 }
 
-// Deal with a scroll. Use two strategies. For mouse wheels, expect y = 10 or
+// Add the scroll amount to the target, then scroll by a small amount, larger if
+// there is further to go. If the target is reached, adjust it to a multiple of
+// the line height.
+static void doScroll(display *d, int tenths) {
+    addToTarget(d, tenths);
+    int diff = d->scrollTarget - d->scroll;
+    int inc = (diff >= 0) ? (diff + 9)/10 : (diff - 9)/10;
+    if (inc == diff && (d->scrollTarget % d->charHeight != 0)) {
+        if (inc < 0) d->scrollTarget -= d->scrollTarget % d->charHeight;
+        else d->scrollTarget += d->charHeight - d->scrollTarget % d->charHeight;
+    }
+    d->scroll += inc;
+    if (d->scroll != d->scrollTarget) {
+        enqueue(d->q, SCROLL, 0, 0, NULL);
+    }
+}
+/*
+// XXX Deal with a scroll. Use two strategies. For mouse wheels, expect y = 10 or
 // y = -10. Set a one-line target and start an animation to get there. For
 // touchpads, expect variable amounts to arrive at roughly animation rates, so
 // scroll straight to the given point (like holding and dragging the paper).
 static void doScroll(display *d, int x, int y) {
-    int maxScroll = (d->docRows - 10) * d->charHeight;
-    if (y == 10) {
-        d->scrollTarget -= d->charHeight;
-        if (d->scrollTarget < 0) d->scrollTarget = 0;
-        smoothScroll(d);
-    }
-    else if (y == -10) {
-        d->scrollTarget += d->charHeight;
-        if (d->scrollTarget > maxScroll) d->scrollTarget = maxScroll;
-        smoothScroll(d);
-    }
-    else if (y > 0) {
-        d->scroll -= y;
-        if (d->scroll < 0) d->scroll = 0;
-        d->scrollTarget = d->scroll;
-        d->scrollTarget = d->scrollTarget - d->scrollTarget % d->charHeight;
-    }
-    else if (y < 0) {
-        d->scroll -=y;
-        if (d->scroll > maxScroll) d->scroll = maxScroll;
-        d->scrollTarget = d->scroll;
-        d->scrollTarget += d->charHeight - 1 - (d->scrollTarget - 1) % d->charHeight;
-    }
+int maxScroll = (d->docRows - 10) * d->charHeight;
+if (y == 10) {
+d->scrollTarget -= d->charHeight;
+if (d->scrollTarget < 0) d->scrollTarget = 0;
+smoothScroll(d);
 }
-
+else if (y == -10) {
+d->scrollTarget += d->charHeight;
+if (d->scrollTarget > maxScroll) d->scrollTarget = maxScroll;
+smoothScroll(d);
+}
+else if (y > 0) {
+d->scroll -= y;
+if (d->scroll < 0) d->scroll = 0;
+d->scrollTarget = d->scroll;
+d->scrollTarget = d->scrollTarget - d->scrollTarget % d->charHeight;
+}
+else if (y < 0) {
+d->scroll -=y;
+if (d->scroll > maxScroll) d->scroll = maxScroll;
+d->scrollTarget = d->scroll;
+d->scrollTarget += d->charHeight - 1 - (d->scrollTarget - 1) % d->charHeight;
+}
+}
+*/
 static void doPageUp(display *d) {
-    d->scrollTarget -= d->rows * d->charHeight;
-    if (d->scrollTarget < 0) d->scrollTarget = 0;
-    smoothScroll(d);
+    doScroll(d, d->rows * 10);
 }
 
 static void doPageDown(display *d) {
-    int maxScroll = (d->docRows - 10) * d->charHeight;
-    d->scrollTarget += d->rows * d->charHeight;
-    if (d->scrollTarget > maxScroll) d->scrollTarget = maxScroll;
-    smoothScroll(d);
+    doScroll(d, - (d->rows * 10));
 }
 
-// Scale up and round to nearest column.
+// Scale up and round pixels to nearest document row/column.
 void charPosition(display *d, int x, int y, int *row, int *col) {
     x = x * d->magnify;
     y = y * d->magnify;
@@ -395,9 +419,7 @@ void charPosition(display *d, int x, int y, int *row, int *col) {
 }
 
 event getEvent(display *d, int *px, int *py, char const **pt) {
-    //    int x, y;
     event e = dequeue(d->q, px, py, pt);
-//    if (e == CLICK || e == DRAG) charPosition(d, x, y, pr, pc);
     return e;
 }
 
@@ -407,8 +429,8 @@ void actOnDisplay(display *d, action a, int x, int y, char const *s) {
         case Smaller: smaller(d); break;
         case CycleTheme: cycleTheme(d); break;
         case Blink: blinkCaret(d); break;
-        case Frame: smoothScroll(d); break;
-        case Scroll: doScroll(d, x, y); break;
+        //        case Frame: smoothScroll(d); break;
+        case Scroll: doScroll(d, y); break;
         case PageUp: doPageUp(d); break;
         case PageDown: doPageDown(d); break;
         case Open: case Load: d->scroll = 0; break;

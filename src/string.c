@@ -102,18 +102,18 @@ static inline bool check3(byte a, byte b, byte c) {
 static inline bool check4(byte a, byte b, byte c, byte d) {
     if (a == 0xF0) {
         if ((0x90 <= b && b <= 0xBF) &&
-        (0x80 <= c && c <= 0xBF) &&
-        (0x80 <= d && d <= 0xBF)) return true;
+            (0x80 <= c && c <= 0xBF) &&
+            (0x80 <= d && d <= 0xBF)) return true;
     }
     else if (0xF1 <= a && a <= 0xF3) {
         if ((0x80 <= b && b <= 0xBF) &&
-        (0x80 <= c && c <= 0xBF) &&
-        (0x80 <= d && d <= 0xBF)) return true;
+            (0x80 <= c && c <= 0xBF) &&
+            (0x80 <= d && d <= 0xBF)) return true;
     }
     else if (a == 0xF4) {
         if ((0x80 <= b && b <= 0x8F) &&
-        (0x80 <= c && c <= 0xBF) &&
-        (0x80 <= d && d <= 0xBF)) return true;
+            (0x80 <= c && c <= 0xBF) &&
+            (0x80 <= d && d <= 0xBF)) return true;
     }
     return false;
 }
@@ -155,7 +155,7 @@ int normalize(char *s) {
     }
     while (out >= 1 && s[out-1] == ' ') out--;
     while (out >= 1 && s[out-1] == '\n') out--;
-    s[out++] = '\n';
+    if (out > 0) s[out++] = '\n';
     s[out] = '\0';
     return out;
 }
