@@ -14,12 +14,21 @@ enum { TAB = 4 };
 // Reuse the POINT/SELECT flags temporarily as indenter/outdenter markers.
 enum { IN = POINT, OUT = SELECT };
 
-// Match two bracket characters.
-static bool match(char o, char c) {
-    if (o == '{' && c == '}') return true;
-    if (o == '[' && c == ']') return true;
-    if (o == '(' && c == ')') return true;
-    return false;
+// Compare open and close bracket characters according to priority.
+static int match(char o, char c) {
+    switch(o) {
+        case '{':
+        if (c == '}') return 0;
+        else return 1;
+        case '[':
+        if (c == '}') return -1;
+        else if (c == ']') return 0;
+        return 1;
+        case '(':
+        if (c == ')') return 0;
+        else return -1;
+        default: return 0;
+    }
 }
 
 // Implement a stack as an array s of ints with the top index at s[0].
@@ -28,6 +37,9 @@ static inline bool empty(int s[]) { return s[0] == 1; }
 static inline void push(int s[], int i) { s[s[0]++] = i; }
 static inline int pop(int s[]) { return s[--s[0]]; }
 static inline int top(int s[]) { return s[s[0]-1]; }
+
+// A conventional stack algorithm is used to mark brackets as matched,
+// mismatched, or unmatched (IN or OUT), taking priority into account.
 
 // Use a variation on the usual stack-based algorithm. An open bracket is
 // tentatively marked as an indenter and pushed on the stack. If ...[] is found,
@@ -55,38 +67,53 @@ static void matchBrackets(int n, char const line[n], char styles[n]) {
             continue;
         }
         int j = pop(stack);
-        if (match(line[j], c)) {
+        char o = line[j];
+        int m = match(o, c);
+        if (m == 0) {
             styles[j] = styles[i] = addStyleFlag(SIGN,START);
             continue;
         }
-        if (styles[j] == addStyleFlag(BAD,START)) {
+        else if (m < 0) {
+            styles[j] = addStyleFlag(BAD,START);
             i--;
             continue;
         }
-        if (!empty(stack) && match(line[top(stack)], c)) {
-            styles[j] = addStyleFlag(BAD,START);
-            int k = pop(stack);
-            styles[k] = styles[i] = addStyleFlag(SIGN,START);
+        else {
+            push(stack, j);
+            styles[i] = addStyleFlag(BAD,START);
             continue;
         }
-        styles[j] = addStyleFlag(BAD,START);
-        push(stack,j);
-        styles[i] = addStyleFlag(BAD,START);
     }
 }
+
+// TEMPORARILY mark round and square brackets as mismatches, so that
+// continuation lines are not yet implemented, and lines aren't moved in and out
+// as users type. TODO: match outdenters and indenters with surrounding lines,
+// then implement continuation lines properly.
 
 // Count the number of outdenters and indenters, and remove their flags. A line
 // contains any number of them. There can't be an outdenter after an indenter,
 // because that would cause a mismatch. Each outdenter reduces the indent on the
 // current line, and each indenter increases the indent on the following line.
-static void countOutIn(int *out, int *in, int n, char styles[n]) {
+static void countOutIn(
+    int *out, int *in, int n, char const line[n], char styles[n]
+) {
     *in = 0;
     *out = 0;
     for (int i = 0; i < n; i++) {
         if (hasStyleFlag(styles[i], OUT)) *out = *out + 1;
         else if (hasStyleFlag(styles[i], IN)) *in = *in + 1;
         else continue;
-        styles[i] = addStyleFlag(clearStyleFlags(styles[i]), START);
+        char ch = line[i];
+        if (ch == '(' || ch == '[') {
+            styles[i] = addStyleFlag(BAD,START);
+            *in = *in - 1;
+        }
+        else if (ch == ')' || ch == ']') {
+            styles[i] = addStyleFlag(BAD,START);
+            *out = *out - 1;
+        }
+        else styles[i] = addStyleFlag(clearStyleFlags(styles[i]), START);
     }
 }
 
@@ -97,18 +124,23 @@ int getIndent(int n, char const line[n]) {
 }
 
 // Match brackets then update the running indent according to the outdenters
-// and indenters. Make the indent zero for a blank line.
+// and indenters. Make the indent zero for a blank line. Make the indent 2 less
+// for a label line.
 int findIndent(int *runningIndent, int n, char const line[n], char styles[n]) {
     int indent = *runningIndent;
     int outdenters, indenters, result;
     matchBrackets(n, line, styles);
-    countOutIn(&outdenters, &indenters, n, styles);
+    countOutIn(&outdenters, &indenters, n, line, styles);
     int currentIndent = getIndent(n, line);
     indent -= outdenters * TAB;
     if (indent < 0) indent = 0;
     result = indent;
-    if (currentIndent == n || (currentIndent == n-1 && line[n-1] == '\n')) {
+    if (currentIndent == n ||
+        (n > 0 && currentIndent == n-1 && line[n-1] == '\n')) {
         result = 0;
+    }
+    else if (result > 2 && n > 1 && (line[n-1] == ':' || line[n-2] == ':')) {
+        result -= 2;
     }
     else {
         char c = line[currentIndent];
@@ -149,7 +181,7 @@ static void testMatch() {
     assert(checkMatch("()", "XX"));
     assert(checkMatch("(", "I"));
     assert(checkMatch(")", "O"));
-    assert(checkMatch("(]", "BB"));
+    assert(checkMatch("(]", "BO"));
     assert(checkMatch("](", "OI"));
     assert(checkMatch("[(]", "XBX"));
     assert(checkMatch("[)]", "XBX"));
