@@ -17,14 +17,14 @@ enum { IN = POINT, OUT = SELECT };
 // Compare open and close bracket characters according to priority.
 static int match(char o, char c) {
     switch(o) {
-        case '{':
+      case '{':
         if (c == '}') return 0;
         else return 1;
-        case '[':
+      case '[':
         if (c == '}') return -1;
         else if (c == ']') return 0;
         return 1;
-        case '(':
+      case '(':
         if (c == ')') return 0;
         else return -1;
         default: return 0;
@@ -36,7 +36,7 @@ static inline void make(int s[]) { s[0] = 1; }
 static inline bool empty(int s[]) { return s[0] == 1; }
 static inline void push(int s[], int i) { s[s[0]++] = i; }
 static inline int pop(int s[]) { return s[--s[0]]; }
-static inline int top(int s[]) { return s[s[0]-1]; }
+// static inline int top(int s[]) { return s[s[0]-1]; }
 
 // A conventional stack algorithm is used to mark brackets as matched,
 // mismatched, or unmatched (IN or OUT), taking priority into account.
