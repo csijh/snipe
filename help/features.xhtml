@@ -36,27 +36,42 @@ double click on <code>help/index.xhtml</code> or load it with the browser.</p>
 <p>Typing <code>CTRL_O</code> (Open) brings up the file menu. The mouse or arrow
 keys can be used to choose a file or directory, including <code>../</code> to
 move up to the directory above. Typing <code>Enter</code> opens the chosen
-file.</p>
+file or directory.</p>
 
 <p>At present, there is no way to create a new file. Create a blank file with
 e.g. <code>touch filename</code> and then open it in the editor. Double
 clicking and other features will be added later.</p>
 
+<h2>Scrolling</h2>
+
+<p>Scrolling a page at a time is supported using <code>PageUp/PageDown</code>,
+or <code>Fn_Up/Fn_Down</code> on a Mac laptop. Scrolling with a
+mouse wheel or touchpad gesture is also supported. Scrolling is smoothly
+animated, and always ends at a line boundary. Scrolling by grabbing a bar
+with the mouse is not yet supported.</p>
+
 <h2>Bracket matching</h2>
 
 <p>Round, square and curly brackets <code>()[]{}</code> on each line are
-matched, and mismatched brackets are syntax-coloured as errors. Care is taken
+matched, and mismatched brackets are syntax-coloured as errors, e.g. in red.
+Care is taken
 over the way in which brackets are matched, because it affects
 auto-indenting. However, bracket matching is currently only done on each
-line separately, not at a distance.</p>
+line separately, not between lines.</p>
 
 <p>Only syntactically meaningful brackets are matched, not brackets
-inside comments or strings. Brackets which are unmatched rather than mismatched
+inside comments or strings. To avoid ambiguities, the brackets form a hierarchy
+with <code>()</code> as the most local and <code>{}</code> as the most global.
+For example, with both <code>(}</code> and <code>{)</code> it is the round
+bracket that is reported as mismatched.</p>
+
+<p>Brackets which are unmatched rather than mismatched
 are not marked as errors. Instead, they affect indenting.</p>
 
 <h2>Auto-indenting</h2>
 
-<p>Most editors provide something that ought to be called semi-auto-indenting.
+<p>Most editors provide something that ought to be called semi-auto-indenting,
+where typing a newline adds an automatic indent.
 It works well when typing new program text. But it typically works badly when
 changing existing text. The result is that, for most programmers, there is
 little or no net gain.</p>
@@ -79,37 +94,35 @@ styles, and which the majority of programmers can learn to accept comfortably
 without irritation.</p>
 
 <p>The rules chosen are adapted from Python, and should work across all
-curly-bracket-based languages, and possibly many more. The rules work on a
-line-by-line basis, based on unmatched bracket characters <code>()[]{}</code>
-whether round, square or curly. Only syntactically active brackets (i.e. ones
-not inside comments or strings) count. To avoid ambiguities, the brackets
-form a hierarchy with <code>()</code> as the most local and <code>{}</code>
-as the most global. This is not a restriction - it only affects mismatched
-brackets.</p>
-
-<p>An <dfn>indenter</dfn> is an unmatched open bracket on a line, and an
+curly-bracket-based languages, and possibly many more.
+An <dfn>indenter</dfn> is an unmatched open bracket on a line, and an
 <dfn>outdenter</dfn> is similarly an unmatched close bracket. Each indenter
 causes the indent to be increased, starting on the following line. An outdenter
 causes the indent to be decreased, starting on the following line, or on the
 same line if it starts with an outdenter.</p>
 
+<p>At present, only curly brackets affect
+indenting. Treatment of round and square brackets will be added to
+support continuation lines, but this will require bracket matching between lines
+as well as within lines to be aesthetically acceptable.</p>
+
 <p>Comment lines currently follow the same indenting rules, as well as
-ordinary code. The indent of a blank line is temporarily zero. This feature
+ordinary code. The indent of a blank line is temporarily zero. The indent of
+a label line such as a case in a switch statement is temorarily reduced by
+half an indent.
+This feature
 currently supports the two most popular
 <a href="https://en.wikipedia.org/wiki/Indentation_style">indenting styles</a>,
 K&amp;R and Allman, and to a lesser extent, some other styles such as Horstmann
 and Pico.</p>
 
-<p>This feature is experimental, and currently a bit rough. In future, the
-cursor will
-be kept out of the indent area, and a newline and following indent will be
-treated as a single unit.
-The handling of
-blank lines and trailing spaces on the ends of lines needs to be improved.
-The feature needs to be enabled and controlled from language definition files so
-that, for example, more indent styles can be supported, labels and cases in
-switches can be handled specially, and keywords can be marked as indenters or
-outdenters so that more languages can be supported.</p>
+<p>This feature is experimental, and currently a bit rough. For example, at
+present, the
+cursor is allowed to be within the indent, though any attempt to increase or
+decrease it is immediately corrected. A line can only be joined to the
+previous one using backspace if the cursor is at the start of the line.
+In future, a newline and the following indent will be treated as a single unit,
+for movement and deletion.</p>
 
 <h2>Line endings</h2>
 
@@ -148,8 +161,9 @@ with a single blank line.</p>
 
 <p>The final newline convention is also maintained during editing, in line with
 having no notional buffer. The more usual convention of treating a buffer as a
-string with newlines as separators causes a surprising amount of confusion
-because the editor's line count for the buffer doesn't match the normal line
+string with newlines as separators causes a surprising amount of confusion,
+e.g. because the editor's line count for the buffer doesn't match the normal
+line
 count for the file. In <mark>Snipe</mark>, it is still reasonable to regard the
 text as a single array of characters. The last cursor position is after the
 final newline, which is naturally below the last line on the screen. However,
@@ -186,6 +200,9 @@ doesn't have separate settings for indent width and tab width. In any sensible
 editor, soft tabs are implemented to behave just like hard tabs, so soft tabs
 have no significant disadvantages. The current indent width is currently fixed
 at four spaces.</p>
+
+<p>For Makefiles, which require hard tabs, the tabs are convert to (currently
+single) spaces, and converted back to tabs on saving.</p>
 
 </body>
 </html>

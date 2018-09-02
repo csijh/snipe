@@ -21,7 +21,8 @@ mark {
 
 <h2>Character encoding</h2>
 
-<p>Only UTF-8 is supported. It has become the only sensible encoding, being
+<p>International text will be supported, but only via UTF-8. It has become the
+only sensible encoding, being
 plain-text compatible, supporting all human languages, and allowing documents
 with mixed languages. There is no reliable way to detect what encoding is used
 in a file, making it <em>impossible</em> to support other encodings in a fully
@@ -78,25 +79,18 @@ started up from.</p>
 
 <h2>Scrolling</h2>
 
-<p>Smooth scrolling should be available both from the keyboard and using the
-mouse. If done using the keyboard, it is accompanied by moving the cursor. A
-conventional 'thumb' is displayed, but using a (semi-)transparent overlay rather
+<p>Scrolling by grabbing a bar with the mouse, and some kind of equivalent
+using the keyboard, will be implemented. This will probably use a
+(semi-)transparent overlayed bar rather
 than permanently stealing space from the text, and much larger than usual to
 make an easy target for the mouse. Line numbers should also be visible as an
-overlay. The rate of scrolling should be controllable.</p>
+overlay.</p>
 
 <h2>Line numbers</h2>
 
 <p>To go straight to a specific line number, the CTRL key is held down while the
 digits are typed. A line number overlay, and perhaps scrolling overlay, is
 displayed during the operation.</p>
-
-<h2>File Menu</h2>
-
-<p>When the mouse is over the left hand side of the window, or when CTRL+F is
-typed, a file menu page or overlay is displayed. It shows the available files
-and directories, which files are current (with undo info available) and allows
-navigation.</p>
 
 </body>
 </html>

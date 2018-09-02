@@ -52,9 +52,8 @@ which can be run with <code>./snipe</code> or it can be copied to the directory
 above and run with <code>../snipe</code> to move it out of the way of
 subsequent unit tests.</p>
 
-<p>The modules most likely to cause difficulties, and which should probably be
-tested separately before building the whole editor, are <code>font</code>,
-<code>handler</code> and <code>display</code>.</p>
+<p>The modules <code>font</code>, <code>handler</code> and <code>display</code>
+need to be tested separately before building the whole editor.</p>
 
 <p>The command <code>make font</code> causes the <code>freetype</code> library
 to be built. Since the cut down source of the freetype library provided
@@ -113,10 +112,11 @@ Then install <code>homebrew</code> from its web site. This
 has three good effects. Installing it causes the command line tools associated
 with XCode to be installed (that's <code>gcc</code>, <code>git</code>,
 <code>make</code> and so on, but not the IDE, which is not recommended for
-cross-platform programmers anyway). It provides the command <code>brew</code>
-which acts as a package manager to install further software. And it provides
+cross-platform programmers anyway). It provides
 the command <code>brew doctor</code> which checks consistency of installed
-software, and suggests fixes if it finds problems.</p>
+software, and suggests fixes if it finds problems.
+And it provides the command <code>brew</code>
+which acts as a package manager to install further software.</p>
 
 <p>Install <code>cmake</code> with <code>brew install cmake</code>.
 The <code>gcc</code> command is probably a synonym for the Mac version of
@@ -133,11 +133,12 @@ then type <code>pkg-config --static --libs glfw3</code>, then uninstall.</p>
 <p>The Windows C compiler MSVC (included with Visual Studio) is unsuitable
 for cross-platform use, because it focusses on C++ and doesn't support C11,
 or C99, or the "hosted" part of C90 (i.e. the libraries). Cygwin is unsuitable,
-because it depends on a large extra DLL, and the X11-based graphics is very
+because it depends on a large extra DLL, and the X11-based graphics system is
+very
 clunky and unreliable.</p>
 
-<p>Instead, MSYS2 is recommended, which is built on <code>mingw-w64</code>,
-adding a shell window and the <code>pacman</code> package manager. Install
+<p>Instead, MSYS2 is recommended, which is built on <code>mingw-w64</code>
+and adds a shell window and the <code>pacman</code> package manager. Install
 MSYS2 from its web site. When setting up MSYS2, take care to
 install <code>mingw-w64-x86_64-gcc</code> rather than the default version of
 <code>gcc</code>, to support native compiling and avoid the need for a
@@ -262,14 +263,15 @@ beyond the C11 standard are required to handle directories properly
 threads (<code>pthread.h</code>) but fortunately all the recommended platform
 environments provide what is needed. The preprocessor variable
 <code>_POSIX_C_SOURCE 200809L</code> is defined before including Posix headers,
-to satisfy a standard-conforming C compiler that extended Posix functions are
-allowed.</p>
+to tell a standard-conforming C compiler that extended Posix functions are
+allowed (otherwise it may select only a subset of the Posix headers).</p>
 
 <p>To make modules independent, and their dependencies clear, each module has
 its own header file which defines its API. None of the module headers mention
 anything related to the OpenGL or GLFW APIs, isolating the use of those
-libraries to the modules that need them. (Isolating libraries in this way in C++
-can be surprisingly difficult, e.g. involving the PIMPL strategy.)</p>
+libraries to the modules that need them. (By the way, isolating libraries in
+this way in C++ can be surprisingly difficult, e.g. involving the PIMPL
+strategy.)</p>
 
 <p>In order to make modules robust, most are encapsulated by
 defining an opaque structure in the header:</p>
@@ -289,7 +291,7 @@ times, so enumerated types are effectively the only problem.</p>
 
 <p>Enumerated types in C are not type-safe. It is possible to use typesafe
 opaque constants, but they are tedious to define and awkward to use and, in
-particular, they can't be used in switch statements. So conventional C
+particular, they can't be used in switch statements. So ordinary C
 enumerated types are used.</p>
 
 <p>The convention used is that an enumerated type such as <code>event</code> is
@@ -305,9 +307,9 @@ typedef int event;
 possible, <strong>but</strong> (a) it gives a false sense of type safety,
 (b) it requires the enumeration to be in scope, and (c) it prevents the use of
 <code>-1</code> as an exceptional value (e.g. the compiler's optimizer may
-replace <code>e&lt;0</code> by <code>true</code>).</p>
+replace <code>e&lt;0</code> by <code>false</code>!).</p>
 
-<p>The header <code>event.h</code> is included only in implementation
+<p>The header <code>event.h</code> is then included only in implementation
 <code>.c</code> files, not in other header files. If the <code>event</code>
 type is needed in another header in order to define an API, that header uses
 the line:</p>
@@ -336,10 +338,11 @@ current state of the screen during each callback. This works, if a single
 redraw is all that is required. However, it may not fit in with a clean design,
 because the 'low level' callback may need to call 'high level' functions to
 update the state and redraw. Also, the redrawing work must happen entirely
-within the callback, so if the callback triggers an animation which is supposed to
-continue after the callback returns, the animation won't run during the long
+within the callback, so if the callback triggers an animation which is supposed
+to continue after the callback returns, the animation won't run during the long
 user gesture. You might think that a cross-platform event library like GLFW
-would insulate the programmer from such things, but it doesn't.</p>
+would insulate the programmer from such paltform-dependent effects, but it
+doesn't.</p>
 
 <p>In <mark>Snipe</mark>, it is desirable to use animation to achieve smooth
 scrolling, and there are other problems with long user gestures. The only
@@ -378,12 +381,12 @@ terminates GLFW and OpenGL, handles events, creates and destroys the window,
 handles window events such as resize, creates and releases the OpenGL
 context</li>
 <li><strong>ticker:</strong> generates regular timer events</li>
-<li><strong>runner:</strong>runs the bulk of the program, takes over the openGL
+<li><strong>runner:</strong> runs the bulk of the program, takes over the openGL
 context, displays graphics, generates animation frame events</li>
 </ul>
 
 <p>Some awkwardnesses arise from this. For example, resizing the window might
-be needed wile drawing graphics, but it can't be done on the runner thread
+be needed while drawing graphics, but it can't be done on the runner thread
 with the other graphics. It has to be done on the handler thread. Moreover,
 the window can't be redrawn immediately a resize is requested, but only after
 a window resize callback from the system confirms that it has been done. So

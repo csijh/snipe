@@ -21,7 +21,7 @@
 <h1>Design of <mark>Snipe</mark></h1>
 <h4>Ian Holyer, 2017</h4>
 
-<p>This is a report that was written before implementation of <mark>Snipe</mark>
+<p>This report was mostly written before implementation of <mark>Snipe</mark>
 began.</p>
 
 <p>This project involves rethinking the design of editors for programmers. There
@@ -555,6 +555,39 @@ something, removing the need for a panoply of options.  Of course, there will be
 people who don't like the choice made, but that situation is normal for any
 editor.  And in any case, the ultimate option is always available - use a
 different editor.</p>
+
+<h2>Bracket matching</h2>
+
+<p>Bracket matching is important because it provides useful feedback while a
+user types. It can improve productivity quite a bit, because a mismatch is
+noticed immediately, rather than generating a later compiler error message.
+It is also important because it can be used for auto-indenting, as below.
+The approach taken in <mark>Snipe</mark> is to use syntax colouring to highlight
+mismatched brackets, and it applies to round, square, curly and potentially
+other types of bracket, depending on the language.</p>
+
+<p>It is well known that bracket matching can be checked using a simple,
+linear, left-to-right algorithm. A stack of currently unmatched open brackets
+is used. However, when marking of mismatched brackets is desired, and when
+that is to be used to drive other editor features, interesting problems
+arise.</p>
+
+<p>First, especially when there are multiple bracket types, there is
+considerable ambiguity over which brackets to mark as mismatched, and it turns
+out to be over-complex to try to minimize the number of mismatched brackets.
+The best way to achieve unambiguity and simplicity
+seems to be to treat the brackets as hierarchical, in the order
+round <code>()</code> then square <code>[]</code> then curly <code>{}</code>,
+say. Then, if a pair <code>(}</code> or <code>{)</code> say meet during the
+algorithm, it is the round bracket which is marked as a mismatch.</p>
+
+<p>Second, it is very convenient if the algorithm can be
+executed one line at a time, so that it may be only the current line or a
+limited number of lines that need to be repaired after an edit. There is
+a simple variation on the algorithm which applies to a single line, where
+the brackets are marked as matched, mismatched, or unmatched. The unmatched
+brackets are the ones that need to be matched against information from the
+lines on either side.</p>
 
 <h2>Indents</h2>
 

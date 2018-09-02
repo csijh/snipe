@@ -30,7 +30,8 @@ HelpWindows start %
 // Help index file
 HelpIndex help/index.xhtml
 
-// Theme files: cycle through with CTRL+Enter
+// Theme files: cycle through with CTRL+Enter. By default, provide switching
+// between dark and light solarized.
 Theme files/solarized-dark.txt
 Theme files/solarized-light.txt
-Theme files/monokai.txt
+// Theme files/monokai.txt

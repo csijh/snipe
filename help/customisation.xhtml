@@ -46,25 +46,27 @@ files.</p>
 
 <h2>Themes</h2>
 
-<p>The <code>settings.txt</code> file lists the file paths for themes, in the
-order that the editor should cycle through them, with the default theme
-first.</p>
+<p>The <code>settings.txt</code> file lists the file paths for themes, and the
+editor cycles through them with C_Enter,</p>
 
 <p>Your choice of theme may depend on the ambient light level, your eyesight,
 your chosen font and size, the colour quality of your screen, or your taste. The
-default themes provided include <a
+default themes provided are <a
 href="https://github.com/altercation/solarized">solarized-dark and
-solarized-light</a>, which are designed to have fairly low contrast and to be
+solarized-light</a>, which are designed to have low to medium contrast, to
+be
 restful on the eye over long periods of time with indoor lighting, and to match
-each other so that switching between them is comfortable. A higher contrast
-theme is also provided.</p>
+each other so that it is comfortable to switch between them. Other themes
+may be provided, e.g. with higher contrast, which can be used instead or
+as well.</p>
 
 <p>You can construct your own theme file, perhaps based on information from <a
 href="https://github.com/highlightjs/highlight.js/tree/master/src/styles"
 >highlight.js</a> or elsewhere. If a line of a theme file is blank, or doesn't
 start with a letter, it is a comment. Otherwise, it has the name of a style
 followed by one or more spaces followed by a # character and a hex RGB colour
-value. Anything following that is a comment. Each style is a token type or
+value. Anything following that is a comment. Each style is used for a token
+type or
 similar. For the available styles, see the <a href="style.h">style.h</a> source
 file.</p>
 
@@ -72,8 +74,8 @@ file.</p>
 
 <p><mark>Snipe</mark> has a scanner used to divide the text of a file being
 edited into tokens or words, and to give each a style. The result is used for
-syntax highlighting, word-based actions, line breaking, auto indenting, auto
-semicolons and so on.</p>
+syntax highlighting, word-based actions, auto indenting, auto
+semicolons, line breaking and so on.</p>
 
 <p>The scanner uses description files in the <kbd>languages</kbd> directory,
 named according to file extensions. For example, <code>c.txt</code> defines the
@@ -88,7 +90,8 @@ actions and line breaking.</p>
 
 <p>Lines which are blank or start with anything other than a letter are ignored
 as comments. Otherwise, a line represents a string matching rule, and consists
-of the name of a state, a list of strings, and a target state. A state name must
+of the name of a state, a list of strings to match, and a target state. A state
+name must
 start with a letter. When the scanner is in the given state and one of the
 strings in the list is matched, the scanner moves past the matched string in the
 input and goes into the target state. For example:</p>
@@ -107,8 +110,8 @@ separated by two dots, it represents a range of one-character strings, e.g.
 <code>0..9</code> stands for <code>0 1 2 3 4 5 6 7 8 9</code>. Underscore is
 used as an escape character. An underscore on its own stands for a space, e.g.
 <code>_</code> for a single space or <code>_..~</code> for any printable plain
-text character. A double underscore <code>__</code> stands for the underscore
-character.</p>
+text character. A double underscore <code>__</code> stands for a verbatim
+underscore character.</p>
 
 <p>An optional action can appear at the end of a rule. An action has the form
 <code>&lt;X</code> or <code>&gt;X</code> where <code>X</code> is a style name.
