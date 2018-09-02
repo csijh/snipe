@@ -154,8 +154,8 @@ static void setSize(display *d) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexImage2D(
-        GL_TEXTURE_2D, 0, GL_RGBA, pageWidth(d->p), pageHeight(d->p), 0,
-        GL_RGBA, GL_UNSIGNED_BYTE, pageImage(d->p)
+    GL_TEXTURE_2D, 0, GL_RGBA, pageWidth(d->p), pageHeight(d->p), 0,
+    GL_RGBA, GL_UNSIGNED_BYTE, pageImage(d->p)
     );
     setupGL(d);
 }
@@ -433,7 +433,7 @@ void actOnDisplay(display *d, action a, int x, int y, char const *s) {
         case Scroll: doScroll(d, y); break;
         case PageUp: doPageUp(d); break;
         case PageDown: doPageDown(d); break;
-        case Open: case Load: d->scroll = 0; break;
+        case Open: case Load: d->scroll = d->scrollTarget = 0; break;
         case Paste: pasteEvent(d->h); break;
         case Cut: case Copy: clip(d->h, s); break;
         case Resize: checkResize(d); break;
