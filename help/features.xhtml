@@ -19,26 +19,40 @@ mark {
 
 <h1>Features</h1>
 
-<p>The actions corresponding to keyboard and mouse gestures can be gleaned
+<p>The basic actions corresponding to keyboard and mouse gestures can be gleaned
 from the file <a href="../files/map.txt">files/map.txt</a>, which can be
 customised. There are also some general settings in the file
 <a href="../settings.txt">settings.txt</a>.</p>
+
+<h2>Help</h2>
+
+<p>Typing CTRL+H makes a help page appear in the browser. The command to do
+that varies by platform. Unfortunately, this is not always reliable,
+so it may need to be customized in the settings file. Alternatively,
+double click on <code>help/index.xhtml</code> or load it with the browser.</p>
+
+<h2>File menu</h2>
+
+<p>Typing <code>CTRL_O</code> (Open) brings up the file menu. The mouse or arrow
+keys can be used to choose a file or directory, including <code>../</code> to
+move up to the directory above. Typing <code>Enter</code> opens the chosen
+file.</p>
+
+<p>At present, there is no way to create a new file. Create a blank file with
+e.g. <code>touch filename</code> and then open it in the editor. Double
+clicking and other features will be added later.</p>
 
 <h2>Bracket matching</h2>
 
 <p>Round, square and curly brackets <code>()[]{}</code> on each line are
 matched, and mismatched brackets are syntax-coloured as errors. Care is taken
 over the way in which brackets are matched, because it affects
-auto-indenting.</p>
+auto-indenting. However, bracket matching is currently only done on each
+line separately, not at a distance.</p>
 
-<p>Only syntactically meaningful brackets are matched. Others are assumed to be
+<p>Only syntactically meaningful brackets are matched, not brackets
 inside comments or strings. Brackets which are unmatched rather than mismatched
 are not marked as errors. Instead, they affect indenting.</p>
-
-<p>Where there is a mismatched pair of brackets <code>(]</code> say, only one is
-marked as an error where reasonably possible, e.g. if the pair appears in the
-context  <code>(]...)</code> or <code>[...(]</code> only the middle bracket is
-marked as an error.</p>
 
 <h2>Auto-indenting</h2>
 
@@ -68,45 +82,34 @@ without irritation.</p>
 curly-bracket-based languages, and possibly many more. The rules work on a
 line-by-line basis, based on unmatched bracket characters <code>()[]{}</code>
 whether round, square or curly. Only syntactically active brackets (i.e. ones
-not inside comments or strings) count.</p>
+not inside comments or strings) count. To avoid ambiguities, the brackets
+form a hierarchy with <code>()</code> as the most local and <code>{}</code>
+as the most global. This is not a restriction - it only affects mismatched
+brackets.</p>
 
-<p>An <dfn>indenter</dfn> is an unmatched open bracket, and an
+<p>An <dfn>indenter</dfn> is an unmatched open bracket on a line, and an
 <dfn>outdenter</dfn> is similarly an unmatched close bracket. Each indenter
 causes the indent to be increased, starting on the following line. An outdenter
 causes the indent to be decreased, starting on the following line, or on the
-same line if there is an outdenter at the start.</p>
+same line if it starts with an outdenter.</p>
 
-<p>Comment lines currently follow these indenting rules, as well as
-ordinary code. The indent of a blank line is temporarily zero. The feature
+<p>Comment lines currently follow the same indenting rules, as well as
+ordinary code. The indent of a blank line is temporarily zero. This feature
 currently supports the two most popular
 <a href="https://en.wikipedia.org/wiki/Indentation_style">indenting styles</a>,
-K&amp;R and Allman, and to a lsser extent, some other styles such as Horstmann
+K&amp;R and Allman, and to a lesser extent, some other styles such as Horstmann
 and Pico.</p>
 
-<p>This feature is experimental, and currently a bit rough. The cursor needs to
-be kept out of the indent area, and a newline and following indent need to be
-treated like a single character.
+<p>This feature is experimental, and currently a bit rough. In future, the
+cursor will
+be kept out of the indent area, and a newline and following indent will be
+treated as a single unit.
 The handling of
 blank lines and trailing spaces on the ends of lines needs to be improved.
 The feature needs to be enabled and controlled from language definition files so
 that, for example, more indent styles can be supported, labels and cases in
 switches can be handled specially, and keywords can be marked as indenters or
-outdenters so that more languages can be supported. It isn't clear whether the
-continual movement in and out of the code below the line being edited will
-seem natural after a while, or whether it needs improvement, perhaps by not
-repairing indents below a line until the cursor moves off it.</p>
-
-<h2>Help</h2>
-
-<p>Typing CTRL+H makes a help page appears in the browser. The command to do
-that varies by platform. Unfortunately, this tends not to be very reliable,
-so it may need to be customized in the settings file.</p>
-
-<h2>File menu</h2>
-
-<p>Typing CTRL+O makes a file menu appears. Choose a line with the arrow keys
-or mouse, and press ENTER to load a file or change directory. Later, double
-clicking and syntax highlighting will be added.</p>
+outdenters so that more languages can be supported.</p>
 
 <h2>Line endings</h2>
 
@@ -124,12 +127,15 @@ Notepad, but there are other good reasons to avoid using that.</p>
 copy in a buffer. This gets rid of an unnecessary extra complication in the
 user's mental model, and removes the need for frequent saving, which is entirely
 routine and therefore should be automated. Autosave becomes a necessary feature
-of <mark>Snipe</mark> rather than an option. <mark>Snipe</mark> doesn't create
-backups of files, on the basis that programmers use other tools such as
-<code>git</code> for that. Autosaving is done frequently and, in particular,
+of <mark>Snipe</mark> rather than an option.
+Autosaving is done frequently and, in particular,
 when the window loses the input focus. So, when moving from the editor to a
 terminal window to type commands, the file should be saved by the time a
 command is issued.</p>
+
+<p><mark>Snipe</mark> doesn't create
+backups of files, on the basis that programmers use other tools such as
+<code>git</code> for that.</p>
 
 <h2>Final newline</h2>
 
@@ -178,15 +184,8 @@ files use an indent width of four and a hard tab width of eight, leading to a
 mixture of tabs and spaces. Such files are unreadable in any editor which
 doesn't have separate settings for indent width and tab width. In any sensible
 editor, soft tabs are implemented to behave just like hard tabs, so soft tabs
-have no significant disadvantages.</p>
-
-<p>When full auto-indenting is implemented, the indent width for a file will
-be set according to the first indent found in the file itself, or 4 if there
-aren't any. Any tab width will be allowed, but it should
-be noted that widths other than 2, 4, 8 are quite unlikely to be supported in
-other editors. To change the indent width of a file, rename the file to have a
-<code>.txt</code> extension, change the first indent in the file, then rename it
-back.</p>
+have no significant disadvantages. The current indent width is currently fixed
+at four spaces.</p>
 
 </body>
 </html>

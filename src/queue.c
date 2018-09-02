@@ -94,12 +94,6 @@ static inline data *previous(queue *q) {
     return &q->array[i];
 }
 
-// XXXLook at the next event on a non-empty queue without pulling it.
-static inline data *next(queue *q) {
-    data *d = &q->array[q->tail];
-    return d;
-}
-
 // Attempt to merge the event with the most recently added event.
 static bool combine(queue *q, event e, int x, int y) {
     if (empty(q)) return false;
