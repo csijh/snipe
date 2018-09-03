@@ -142,7 +142,7 @@ static void repairLine(document *d, int r) {
         int runningIndent = 0;
         if (r > 0) runningIndent = I(indents)[r-1];
         int wanted = findIndent(&runningIndent, n, C(d->line),
-            C(d->lineStyles)
+        C(d->lineStyles)
         );
         I(indents)[r] = runningIndent;
         int actual = getIndent(n, C(d->line));
@@ -224,13 +224,9 @@ static void doLoad(document *d) {
     int p = cursorAt(cs, 0);
     int r = findRow(lines, p);
     chars *line = getLine(d, r);
-    int n1 = strlen(d->path);
     int n2 = length(line) - 1;
-    char *path = malloc(n1 + n2 + 1);
-    strcpy(path, d->path);
-    resize(line, n2);
-    memcpy(&path[n1], C(line), n2);
-    path[n1 + n2] = '\0';
+    C(line)[n2] = '\0';
+    char *path = addPath(d->path, C(line));
     load(d, path);
     free(path);
 }

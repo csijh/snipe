@@ -1,6 +1,6 @@
 // The Snipe editor is free and open source, see licence.txt.
 
-// TODO: handle security by checking for being within a HONE directory.
+// TODO: handle security by checking for being within a HOME directory.
 
 // Find the path to the installation directory from args[0]. This appears to be
 // the only simple cross-platform technique which doesn't involve making an
@@ -118,7 +118,9 @@ char *parentPath(char const *path) {
 
 char *addPath(char const *path, char const *file) {
     if (strcmp(file, "..") == 0) return parentPath(path);
+    if (strcmp(file, "../") == 0) return parentPath(path);
     if (strcmp(file, ".") == 0) file = "";
+    else if (strcmp(file, "./") == 0) file = "";
     else if (absolute(file)) path = "";
     return join(path, file);
 }
@@ -143,7 +145,7 @@ static bool isDirPath(const char *path) {
 char *fullPath(char const *file) {
     if (current == NULL) crash("Must call findResources first");
     char *path = addPath(current, file);
-    if (isDirPath(path)) {
+    if (isDirPath(path) && path[strlen(path) - 1] != '/') {
         char *p = path;
         path = join(path, "/");
         free(p);
