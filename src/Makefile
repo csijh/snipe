@@ -6,6 +6,15 @@ Linux := $(findstring Linux, $(shell uname -s))
 MacOS := $(findstring Darwin, $(shell uname -s))
 Windows := $(findstring NT, $(shell uname -s))
 
+# The static library files for freetype and GLFW
+LIBFT = ../freetype/objs/libfreetype.a
+LIBGL = ../glfw/lib/libglfw3.a
+
+# Compiler options to include Freetype, and GLFW. Use explicit paths for the
+# library files, not -l, to ensure linking to the right version. 
+FT = -I../freetype/include $(LIBFT)
+GL = -I../glfw/include $(LIBGL) $(SYS)
+
 # Compiler options to include OpenGL and system libraries needed by GLFW,
 # advanced debugging options where available, and the name of the executable,
 # for the Linux platform.
@@ -18,7 +27,6 @@ endif
 
 # Same for the MacOS platform
 ifdef MacOS
-	MM = mmmm
 	SYS = -framework Cocoa -framework IOKit -framework CoreFoundation \
 	-framework CoreVideo -framework OpenGL
 	DEBUG = -fsanitize=address -fsanitize=undefined
@@ -32,24 +40,20 @@ ifdef Windows
 	EXEC = snipe.exe
 endif
 
-# Compiler options to include Freetype, and GLFW.
-FT = -I../freetype/include -L../freetype/objs/ -lfreetype
-GL = -I../glfw/include -L../glfw/lib -lglfw3 $(SYS)
-
 # Compiler commands for production compiling, and for test compiling.
 # The gcc compiler ca be replaced by clang, if desired.
 PCC = gcc -std=c11 -o $(EXEC) -O2 -DNDEBUG
 TCC = gcc -std=c11 -o $(EXEC) -Wall -pedantic -g $(DEBUG) -Dtest_$@
 
 # Build a cut down version of freetype (with no dependencies) from source.
-../freetype/objs/libfreetype.a:
+$(LIBFT):
 	rm -rf ../freetype/objs
 	mkdir ../freetype/objs
 	cd ../freetype && make setup ansi
 	cd ../freetype && make
 
 # Build the glfw static library (with only system dependencies) from source.
-../glfw/lib/libglfw3.a:
+$(LIBGL):
 	rm -rf ../glfw/lib
 	mkdir ../glfw/lib
 	cd ../glfw/lib && cmake -G "Unix Makefiles" ..
@@ -82,7 +86,7 @@ string:
 	./snipe
 
 setting:
-	$(TCC) setting.c string.c list.c file.c $(SYS)
+	$(TCC) setting.c string.c list.c file.c
 	./snipe
 
 style:
@@ -101,7 +105,7 @@ theme:
 	$(TCC) theme.c style.c setting.c string.c list.c file.c
 	./snipe
 
-font: ../freetype/objs/libfreetype.a
+font: $(LIBFT)
 	$(TCC) font.c file.c $(FT)
 	./snipe
 
@@ -113,11 +117,11 @@ queue:
 	$(TCC) queue.c event.c
 	./snipe
 
-handler: ../glfw/lib/libglfw3.a
+handler: $(LIBGL)
 	$(TCC) handler.c queue.c event.c theme.c $(UTILS) $(GL)
 	./snipe
 
-display: ../glfw/lib/libglfw3.a
+display: $(LIBFT) $(LIBGL)
 	$(TCC) $(VIEW) $(UTILS) $(FT) $(GL)
 	./snipe
 
@@ -162,15 +166,15 @@ document:
 # makes a binary zip file for release.
 .PHONY: map snipe psnipe zip
 
-map:
+map: $(LIBFT) $(LIBGL)
 	$(TCC) map.c $(MODEL) $(VIEW) $(UTILS) $(FT) $(GL)
 	./snipe
 
-snipe:
+snipe: $(LIBFT) $(LIBGL)
 	cp setting.h style.h event.h action.h Makefile ../help/
 	$(TCC) snipe.c map.c $(MODEL) $(VIEW) $(UTILS) $(FT) $(GL)
 
-psnipe:
+psnipe: $(LIBFT) $(LIBGL)
 	cp setting.h style.h event.h action.h Makefile ../help/
 	$(PCC) snipe.c map.c $(MODEL) $(VIEW) $(UTILS) $(FT) $(GL)
 	cp $(EXEC) ..
