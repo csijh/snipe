@@ -172,7 +172,7 @@ snipe:
 
 psnipe:
 	cp setting.h style.h event.h action.h Makefile ../help/
-	$(PCC) snipe.c map.c $(MODEL) $(VIEW) $(UTILS) $(FT) $(GL)
+	$(PCC) snipe.c map.c $(MODEL) $(VIEW) $(UTILS) -Wl,-Bstatic $(FT) $(GL) -lpthread
 	cp $(EXEC) ..
 
 # Make a binary distribution after making psnipe.
