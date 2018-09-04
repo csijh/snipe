@@ -41,7 +41,7 @@ ifdef Windows
 endif
 
 # Compiler commands for production compiling, and for test compiling.
-# The gcc compiler ca be replaced by clang, if desired.
+# The gcc compiler can be replaced by clang, if desired.
 PCC = gcc -std=c11 -o $(EXEC) -O2 -DNDEBUG
 TCC = gcc -std=c11 -o $(EXEC) -Wall -pedantic -g $(DEBUG) -Dtest_$@
 
@@ -66,8 +66,12 @@ $(LIBGL):
 # ------------------------------------------
 
 # The modules which are shared by the view and the model.
-UTILS = action.c style.c setting.c string.c list.c array.c file.c
+UTILS = action.c style.c setting.c string.c list.c array.c file.c utf8.c
 .PHONY: $(UTILS)
+
+unicode:
+	$(TCC) unicode.c
+	./snipe
 
 file:
 	$(TCC) file.c

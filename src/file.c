@@ -235,11 +235,16 @@ static bool valid(char *name) {
     return true;
 }
 
+// Add a string to a character array, making sure it is big enough.
+static char *addString(int n, int m, char a[m], char *s) {
+
+}
+
 // Measure the number of entries and text length of a directory (including room
 // for its path and for adding final slashes).
 static void measureDirectory(char const *path, DIR *dir, int *n, int *t) {
     *n = 1;
-    *t = strlen(path) + 1;
+        *t = strlen(path) + 1;
     struct dirent *entry;
     while (true) {
         entry = readdir(dir);
@@ -253,7 +258,7 @@ static void measureDirectory(char const *path, DIR *dir, int *n, int *t) {
 
 // Gather names from a directory, leaving room for adding slashes.
 static void gatherNames(
-    char const *path, DIR *dir, int n, char *names[n], int t, char text[t]
+char const *path, DIR *dir, int n, char *names[n], int t, char text[t]
 ) {
     strcpy(text, path);
     names[0] = text;
