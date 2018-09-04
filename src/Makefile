@@ -11,7 +11,7 @@ LIBFT = ../freetype/objs/libfreetype.a
 LIBGL = ../glfw/lib/libglfw3.a
 
 # Compiler options to include Freetype, and GLFW. Use explicit paths for the
-# library files, not -l, to ensure linking to the right version. 
+# library files, not -l, to ensure linking to the right version.
 FT = -I../freetype/include $(LIBFT)
 GL = -I../glfw/include $(LIBGL) $(SYS)
 
@@ -126,8 +126,13 @@ display: $(LIBFT) $(LIBGL)
 	./snipe
 
 # The modules which form the model.
-MODEL = document.c text.c history.c cursor.c indent.c scan.c line.c lines.c
+MODEL = document.c text.c history.c cursor.c indent.c scan.c line.c lines.c \
+change.c
 .PHONY: $(MODEL)
+
+change:
+	$(TCC) change.c
+	./snipe
 
 lines:
 	$(TCC) lines.c array.c
