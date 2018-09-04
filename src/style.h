@@ -32,7 +32,7 @@ enum style {
     COMMENT,      // Z multi-line comment
     NOTE,         // Y one-line comment, default colour COMMENT
     BAD,          // B illegal token
-    COUNT_STYLES = BAD + 1
+    COUNT_STYLES
 };
 typedef unsigned char style;
 typedef unsigned char compoundStyle;

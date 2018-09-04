@@ -4,6 +4,7 @@
 #include "event.h"
 #include "file.h"
 #include "string.h"
+#include "unicode.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>

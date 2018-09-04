@@ -6,39 +6,37 @@ Linux := $(findstring Linux, $(shell uname -s))
 MacOS := $(findstring Darwin, $(shell uname -s))
 Windows := $(findstring NT, $(shell uname -s))
 
-# The static library files for freetype and GLFW
-LIBFT = ../freetype/objs/libfreetype.a
-LIBGL = ../glfw/lib/libglfw3.a
-
-# Compiler options to include Freetype, and GLFW. Use explicit paths for the
-# library files, not -l, to ensure linking to the right version.
-FT = -I../freetype/include $(LIBFT)
-GL = -I../glfw/include $(LIBGL) $(SYS)
-
-# Compiler options to include OpenGL and system libraries needed by GLFW,
-# advanced debugging options where available, and the name of the executable,
-# for the Linux platform.
-ifdef Linux
-	SYS = -lGL -lm -ldl -lXrandr -lXinerama -lXcursor -lpthread \
-	-lXxf86vm -lX11
-	DEBUG = -fsanitize=address -fsanitize=undefined
+# The name of the executable (clang on Windows doesn't add .exe automatically).
+ifdef Windows
+	EXEC = snipe.exe
+else
 	EXEC = snipe
 endif
 
-# Same for the MacOS platform
-ifdef MacOS
+# Advanced debugging options (not easily available on Windows)
+ifdef Windows
+	DEBUG =
+else
+	DEBUG = -fsanitize=address -fsanitize=undefined
+endif
+
+# System libraries needed by GLFW (different on each platform). Force
+# pthread to be linked statically on Windows.
+ifdef Linux
+	SYS = -lGL -lm -ldl -lXrandr -lXinerama -lXcursor -lpthread -lXxf86vm -lX11
+else ifdef MacOS
 	SYS = -framework Cocoa -framework IOKit -framework CoreFoundation \
 	-framework CoreVideo -framework OpenGL
-	DEBUG = -fsanitize=address -fsanitize=undefined
-	EXEC = snipe
+else ifdef Windows
+	SYS = -lopengl32 -lgdi32 $(FT) -Wl,-Bstatic -lpthread -Wl,-Bdynamic
 endif
 
-# Same for the Windows platform
-ifdef Windows
-	SYS = -lopengl32 -lgdi32
-	DEBUG =
-	EXEC = snipe.exe
-endif
+# The library files for freetype and GLFW, and their headers. Use explicit
+# paths for the libraries, not -l, to ensure linking to the right version.
+LIBFT = ../freetype/objs/libfreetype.a
+LIBGL = ../glfw/lib/libglfw3.a
+FT = -I../freetype/include $(LIBFT)
+GL = -I../glfw/include $(LIBGL) $(SYS)
 
 # Compiler commands for production compiling, and for test compiling.
 # The gcc compiler can be replaced by clang, if desired.
@@ -62,27 +60,27 @@ $(LIBGL):
 	rm -rf ../glfw/lib/*
 	mv ../glfw/libglfw3.a ../glfw/lib
 
-# The modules are listed in dependency order.
-# ------------------------------------------
+# The modules, listed in dependency order.
+# ----------------------------------------
 
 # The modules which are shared by the view and the model.
-UTILS = action.c style.c setting.c string.c list.c array.c file.c utf8.c
+UTILS = action.c style.c setting.c string.c array.c file.c list.c unicode.c
 .PHONY: $(UTILS)
 
 unicode:
 	$(TCC) unicode.c
 	./snipe
 
+list:
+	$(TCC) list.c
+	./snipe
+
 file:
-	$(TCC) file.c
+	$(TCC) file.c list.c unicode.c
 	./snipe
 
 array:
 	$(TCC) array.c
-	./snipe
-
-list:
-	$(TCC) list.c
 	./snipe
 
 string:
@@ -163,7 +161,7 @@ history:
 	./snipe
 
 text:
-	$(TCC) text.c cursor.c style.c line.c string.c list.c file.c
+	$(TCC) text.c cursor.c style.c line.c string.c list.c file.c unicode.c
 	./snipe
 
 document:
@@ -185,7 +183,7 @@ snipe: $(LIBFT) $(LIBGL)
 
 psnipe: $(LIBFT) $(LIBGL)
 	cp setting.h style.h event.h action.h Makefile ../help/
-	$(PCC) snipe.c map.c $(MODEL) $(VIEW) $(UTILS) -Wl,-Bstatic $(FT) $(GL) -lpthread
+	$(PCC) snipe.c map.c $(MODEL) $(VIEW) $(UTILS) $(FT) $(GL)
 	cp $(EXEC) ..
 
 # Make a binary distribution after making psnipe.

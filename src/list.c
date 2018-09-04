@@ -25,11 +25,11 @@ list *newList(char type, int size) {
 }
 
 void freeList(list *xs) {
-   free(xs->array);
-   free(xs);
+    free(xs->array);
+    free(xs);
 }
 
-// Switch off assertions for maximum efficiency.
+// Check type. Switch off assertions for maximum efficiency.
 extern inline void *A(char type, list *xs) {
     assert(xs->type == type);
     return xs->array;
@@ -42,8 +42,8 @@ int length(list *xs) {
 void resize(list *xs, int n) {
     assert(n >= 0);
     xs->length = n;
-    if (n > xs->capacity) {
-        while (n > xs->capacity) xs->capacity = xs->capacity * 3 / 2;
+    if (n >= xs->capacity) {
+        while (n >= xs->capacity) xs->capacity = xs->capacity * 3 / 2;
         xs->array = realloc(xs->array, xs->capacity * xs->size);
     }
 }
@@ -51,7 +51,7 @@ void resize(list *xs, int n) {
 void expand(list *xs, int i, int n) {
     assert(0 <= i && i <= xs->length && n >= 0);
     resize(xs, xs->length + n);
-    int amount = xs->length - n - i;
+    int amount = xs->length + 1 - n - i;
     char *a = xs->array;
     int s = xs->size;
     if (amount != 0) memmove(a + (i+n)*s, a + i*s, amount*s);
@@ -59,7 +59,7 @@ void expand(list *xs, int i, int n) {
 
 void delete(list *xs, int i, int n) {
     assert(0 <= i && n >= 0 && i + n <= xs->length);
-    int amount = xs->length - i - n;
+    int amount = xs->length + 1 - i - n;
     char *a = xs->array;
     int s = xs->size;
     if (amount != 0) memmove(a + i*s, a + (i+n)*s, amount*s);
@@ -72,7 +72,7 @@ int main() {
     setbuf(stdout, NULL);
     ints *xs = newInts();
     resize(xs, 1000);
-    assert(length(xs) >= 1000);
+    assert(length(xs) == 1000);
     I(xs)[999] = 42;
     assert(I(xs)[999] == 42);
     freeList(xs);
