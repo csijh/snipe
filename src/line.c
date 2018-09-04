@@ -10,7 +10,10 @@ int startLine(ints *lines, int row) {
 
 // Pretend there is an extra line containing just a newline.
 int endLine(ints *lines, int row) {
-    if (row == length(lines)) return I(lines)[row - 1] + 1;
+    if (row == length(lines)) {
+        if (row == 0) return 1;
+        return I(lines)[row - 1] + 1;
+    }
     return I(lines)[row];
 }
 
