@@ -1,5 +1,6 @@
 // The Snipe editor is free and open source, see licence.txt.
 #include <stddef.h>
+#include <stddef.h>
 
 // Read a UTF8 character, and report its length.
 int getUTF8(char const *t, int *plength);
@@ -11,5 +12,8 @@ void putUTF8(unsigned int code, char *s);
 // invalid. Assume s[n+1] exists. Return an error message or NULL.
 char const *utf8valid(char *s, int n);
 
-// Measure the number of bytes needed to convert a UTF16 string to UTF8.
-int length16(int n, wchar_t s[n]);
+// Convert a UTF16 string to a UTF8 string. (Allow twice the number of bytes.)
+void utf16to8(wchar_t *ws, char *s);
+
+// Convert a UTF8 string to a UTF16 string. (Allow twice the number of bytes.)
+void utf8to16(char *s, wchar_t *ws);

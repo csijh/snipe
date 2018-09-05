@@ -1,7 +1,5 @@
 // The Snipe editor is free and open source, see licence.txt.
 
-// TODO: handle security by checking for being within a HOME directory.
-
 // Find the path to the installation directory from args[0]. This appears to be
 // the only simple cross-platform technique which doesn't involve making an
 // installer. Also find the current working directory on startup,
@@ -13,6 +11,7 @@
 #define _POSIX_C_SOURCE 200809L
 #define _FILE_OFFSET_BITS 64
 #include "file.h"
+#include "list.h"
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -235,16 +234,62 @@ static bool valid(char *name) {
     return true;
 }
 
-// Add a string to a character array, making sure it is big enough.
-static char *addString(int n, int m, char a[m], char *s) {
+#ifndef _WIN32
 
+// Read directory entries into an array of names. Represent the strings as
+// indexes, in case the underlying character array moves. Leave space to add a
+// slash on the end of subdirectory names.
+static void readEntries(char const *path, ints *names, chars *text) {
+    DIR *dir = opendir(path);
+    struct dirent *entry;
+    for (entry = readdir(dir); entry != NULL; entry = readdir(dir)) {
+        char *name = entry->d_name;
+        if (! valid(name)) continue;
+        int index = length(text);
+        resize(text, index + strlen(name) + 2);
+        strcpy(&C(text)[index], name);
+        int n = length(names);
+        resize(names, n + 1);
+        I(names)[n] = index;
+    }
+    closedir(dir);
 }
+
+#else
+
+// For Windows, use the native UTF16 facilities and convert to/from UTF8.
+static void readEntries(char const *path, ints *names, chars *text) {
+    wchar_t wpath[2 * strlen(path)];
+    utf8to16(path, wpath);
+    WDIR *dir = _wopendir(path);
+    struct wdirent *entry;
+    for (entry = _wreaddir(dir); entry != NULL; entry = _wreaddir(dir)) {
+        wchar_t *wname = entry->d_name;
+        char name[2 * wcslen(wname)];
+        utf16to8(wname, name);
+        if (! valid(name)) continue;
+        int index = length(text);
+        resize(text, index + strlen(name) + 2);
+        strcpy(&C(text)[index], name);
+        int n = length(names);
+        resize(names, n + 1);
+        I(names)[n] = index;
+    }
+    _wclosedir(dir);
+}
+
+#endif
+
+// Add a string to a character array, making sure it is big enough.
+//static char *addString(int n, int m, char a[m], char *s) {
+
+//}
 
 // Measure the number of entries and text length of a directory (including room
 // for its path and for adding final slashes).
 static void measureDirectory(char const *path, DIR *dir, int *n, int *t) {
     *n = 1;
-        *t = strlen(path) + 1;
+    *t = strlen(path) + 1;
     struct dirent *entry;
     while (true) {
         entry = readdir(dir);
@@ -434,8 +479,16 @@ int main(int n, char *args[n]) {
     testSort();
     testReadDirectory();
     freeResources();
+    ints *names = newInts();
+    chars *text = newChars();
+    readEntries(".", names, text);
+    for (int i=0; i<length(names); i++) {
+        printf("%s\n", &C(text)[I(names)[i]]);
+    }
+    freeList(names);
+    freeList(text);
     printf("File module OK\n");
     return 0;
 }
 
-#endif
+    #endif

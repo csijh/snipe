@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <wchar.h>
 #include <assert.h>
 
 // For utf8valid, see
@@ -110,24 +111,48 @@ char const *utf8valid(char *s, int length) {
     return NULL;
 }
 
-int length16(int n, wchar_t s[n]) {
-    int count = 0;
+void utf16to8(wchar_t *ws, char *s) {
+    int n = wcslen(ws);
+    int out = 0;
     for (int i = 0; i < n; i++) {
-        wchar_t wc = s[i];
-        if (wc < 0x7f) count++;
-        else if (wc < 0x7ff) count += 2;
-        else if (wc < 0xd800) count += 3;
-        else if (wc < 0xdc00) {
-            unsigned int code = (wc & 0x3ff) << 10;
-            code = code | (s[i++] & 0x3ff);
-            code += 0x10000;
-            char t[5];
-            putUTF8(code, t);
-            count += strlen(t);
+        wchar_t wc = ws[i];
+        if (wc < 0x80) {
+            s[out++] = (char) wc;
         }
-        else count += 4;
+        else if (wc < 0x800) {
+            s[out++] = (char) (0xc0 | (wc >> 6));
+            s[out++] = (char) (0x80 | (wc & 0x3f));
+        }
+        else if (wc < 0xd800 || wc >= 0xe000) {
+            s[out++] = (char) (0xe0 | (wc >> 12));
+            s[out++] = (char) (0x80 | ((wc >> 6) & 0x3f));
+            s[out++] = (char) (0x80 | (wc & 0x3f));
+        }
+        else {
+            int ch = 0x10000 + (((wc & 0x3ff) << 10) | (ws[++i] & 0x3ff));
+            s[out++] = (char) (0xf0 | (ch >> 18));
+            s[out++] = (char) (0x80 | ((ch >> 12) & 0x3f));
+            s[out++] = (char) (0x80 | ((ch >> 6) & 0x3f));
+            s[out++] = (char) (0x80 | (ch & 0x3f));
+        }
     }
-    return count;
+    s[out] = '\0';
+}
+
+void utf8to16(char *s, wchar_t *ws) {
+    int out = 0;
+    for (int i = 0; i < strlen(s); ) {
+        int len;
+        int ch = getUTF8(&s[i], &len);
+        i += len;
+        if (ch < 0x10000) ws[out++] = (wchar_t) ch;
+        else {
+            ch = ch - 0x10000;
+            ws[out++] = 0xd800 | ((ch >> 10) & 0x3ff);
+            ws[out++] = 0xdc00 | (ch & 0x3ff);
+        }
+    }
+    ws[out] = 0;
 }
 
 #ifdef test_unicode
@@ -169,11 +194,26 @@ static void testCheck4() {
     assert(! check4(0xF4, 0x90, 0x80, 0x80)); // > limit
 }
 
+static void test16() {
+    wchar_t w[] = {
+        0x1, 0x7f, 0x80, 0xd7ff, 0xd800 | 0x3ef, 0xdcba, 0xe000, 0xffff, 0
+    };
+    wchar_t x[10];
+    char s[20];
+    utf16to8(w, s);
+    utf8to16(s, x);
+    assert(wcslen(w) == wcslen(x));
+    for (int i = 0; i < wcslen(w); i++) {
+        assert(x[i] == w[i]);
+    }
+}
+
 int main(int n, char const *args[n]) {
     testGetUTF8();
     testCheck2();
     testCheck3();
     testCheck4();
+    test16();
     printf("Unicode module OK\n");
     return 0;
 }
