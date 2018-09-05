@@ -314,6 +314,7 @@ static char *readDirectory(char const *path) {
         strcat(result, names[i]);
         strcat(result, "\n");
     }
+    free(names);
     freeList(text);
     return result;
 }

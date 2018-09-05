@@ -375,6 +375,7 @@ void scan(scanner *sc, int row, chars *line, chars *styles) {
     int empty = sc->offsets[127];
     while (i < n || s < i) {
         int ch = C(line)[i];
+        if ((ch & 0x80) != 0) ch = 'A';
         int start = sc->offsets[ch];
         int end = sc->offsets[ch + 1];
         int matched = empty;
