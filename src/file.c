@@ -242,6 +242,7 @@ static bool valid(char *name) {
 // slash on the end of subdirectory names.
 static void readEntries(char const *path, ints *names, chars *text) {
     DIR *dir = opendir(path);
+    if (dir == NULL) { err("can't read dir", path); return; }
     struct dirent *entry;
     for (entry = readdir(dir); entry != NULL; entry = readdir(dir)) {
         char *name = entry->d_name;
@@ -263,6 +264,7 @@ static void readEntries(char const *path, ints *names, chars *text) {
     wchar_t wpath[2 * strlen(path)];
     utf8to16(path, wpath);
     _WDIR *dir = _wopendir(wpath);
+    if (dir == NULL) { err("can't read dir", path); return; }
     struct _wdirent *entry;
     for (entry = _wreaddir(dir); entry != NULL; entry = _wreaddir(dir)) {
         wchar_t *wname = entry->d_name;
@@ -281,49 +283,6 @@ static void readEntries(char const *path, ints *names, chars *text) {
 
 #endif
 
-// Add a string to a character array, making sure it is big enough.
-//static char *addString(int n, int m, char a[m], char *s) {
-
-//}
-
-// Measure the number of entries and text length of a directory (including room
-// for its path and for adding final slashes).
-static void measureDirectory(char const *path, DIR *dir, int *n, int *t) {
-    *n = 1;
-    *t = strlen(path) + 1;
-    struct dirent *entry;
-    while (true) {
-        entry = readdir(dir);
-        if (entry == NULL) break;
-        char *name = entry->d_name;
-        if (! valid(name)) continue;
-        *n = *n + 1;
-        *t = *t + strlen(name) + 2;
-    }
-}
-
-// Gather names from a directory, leaving room for adding slashes.
-static void gatherNames(
-char const *path, DIR *dir, int n, char *names[n], int t, char text[t]
-) {
-    strcpy(text, path);
-    names[0] = text;
-    int i = 1, length = strlen(path) + 1;
-    struct dirent *entry;
-    while (true) {
-        entry = readdir(dir);
-        if (entry == NULL) break;
-        char *name = entry->d_name;
-        if (! valid(name)) continue;
-        char *file = &text[length];
-        names[i++] = file;
-        strcpy(file, name);
-        length = length + strlen(name);
-        text[++length] = '\0';
-        length++;
-    }
-}
-
 // Check whether a given entry in a given directory is a subdirectory.
 static bool isDir(char const *dir, char *name) {
     char path[strlen(dir) + strlen(name) + 1];
@@ -334,27 +293,28 @@ static bool isDir(char const *dir, char *name) {
 
 static char *readDirectory(char const *path) {
     assert(path[strlen(path) - 1] == '/');
-    DIR *dir = opendir(path);
-    if (dir == NULL) { err("can't read dir", path); return NULL; }
-    int count, size;
-    measureDirectory(path, dir, &count, &size);
-    rewinddir(dir);
+    ints *inames = newInts();
+    chars *text = newChars();
+    resize(text, strlen(path) + 2);
+    strcpy(C(text), path);
+    resize(inames, 1);
+    I(inames)[0] = 0;
+    readEntries(path, inames, text);
+    int count = length(inames);
     char **names = malloc(count * sizeof(char *));
-    char *text = malloc(size);
-    gatherNames(path, dir, count, names, size, text);
-    closedir(dir);
-    for (int i=0; i<count; i++) {
+    for (int i = 0; i < count; i++) names[i] = &C(text)[I(inames)[i]];
+    freeList(inames);
+    for (int i=1; i<count; i++) {
         if (isDir(path, names[i])) strcat(names[i], "/");
     }
     sort(count - 1, &names[1]);
-    char *result = malloc(size);
+    char *result = malloc(length(text));
     result[0] = '\0';
     for (int i = 0; i < count; i++) {
         strcat(result, names[i]);
         strcat(result, "\n");
     }
-    free(names);
-    free(text);
+    freeList(text);
     return result;
 }
 
@@ -480,16 +440,8 @@ int main(int n, char *args[n]) {
     testSort();
     testReadDirectory();
     freeResources();
-    ints *names = newInts();
-    chars *text = newChars();
-    readEntries(".", names, text);
-    for (int i=0; i<length(names); i++) {
-        printf("%s\n", &C(text)[I(names)[i]]);
-    }
-    freeList(names);
-    freeList(text);
     printf("File module OK\n");
     return 0;
 }
 
-    #endif
+#endif
