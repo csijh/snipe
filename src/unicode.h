@@ -13,7 +13,7 @@ void putUTF8(unsigned int code, char *s);
 char const *utf8valid(char *s, int n);
 
 // Convert a UTF16 string to a UTF8 string. (Allow twice the number of bytes.)
-void utf16to8(wchar_t *ws, char *s);
+void utf16to8(wchar_t const *ws, char *s);
 
 // Convert a UTF8 string to a UTF16 string. (Allow twice the number of bytes.)
-void utf8to16(char *s, wchar_t *ws);
+void utf8to16(char const *s, wchar_t *ws);

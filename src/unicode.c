@@ -111,7 +111,7 @@ char const *utf8valid(char *s, int length) {
     return NULL;
 }
 
-void utf16to8(wchar_t *ws, char *s) {
+void utf16to8(wchar_t const *ws, char *s) {
     int n = wcslen(ws);
     int out = 0;
     for (int i = 0; i < n; i++) {
@@ -139,7 +139,7 @@ void utf16to8(wchar_t *ws, char *s) {
     s[out] = '\0';
 }
 
-void utf8to16(char *s, wchar_t *ws) {
+void utf8to16(char const *s, wchar_t *ws) {
     int out = 0;
     for (int i = 0; i < strlen(s); ) {
         int len;

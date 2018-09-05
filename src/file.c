@@ -12,6 +12,7 @@
 #define _FILE_OFFSET_BITS 64
 #include "file.h"
 #include "list.h"
+#include "unicode.h"
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -257,12 +258,12 @@ static void readEntries(char const *path, ints *names, chars *text) {
 
 #else
 
-// For Windows, use the native UTF16 facilities and convert to/from UTF8.
+// For Windows, use the native UTF16 functions and convert to/from UTF8.
 static void readEntries(char const *path, ints *names, chars *text) {
     wchar_t wpath[2 * strlen(path)];
     utf8to16(path, wpath);
-    WDIR *dir = _wopendir(path);
-    struct wdirent *entry;
+    _WDIR *dir = _wopendir(wpath);
+    struct _wdirent *entry;
     for (entry = _wreaddir(dir); entry != NULL; entry = _wreaddir(dir)) {
         wchar_t *wname = entry->d_name;
         char name[2 * wcslen(wname)];
