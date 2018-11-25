@@ -1,0 +1,50 @@
+Refactor
+--------
+text (just gap-buffer, maybe with newline conventions).
+history (edits passed on)
+lines
+cursors (does own repairs)
+style (points to lines, text, scanner, auto-full-repair on edit)
+brackets (needs style and lines of text)
+
+Lines
+-----
+scan-state and semicolon-flags are fixed amounts.
+so is indent-amount, but not indent-brackets.
+
+Style changes.
+--------------
+NEED Open, Close, Bad. Bad needs to be an O/C flag.
+Remove START in favour of MORE.
+Add BAD as a genuine flag?
+Do POINT/SELECT some other way, or as now.
+Use names to indicate simulated defaults:
+HOW tell the indenter to switch off inside comments?
+MAYBE it is enough for the indenter to look for a first COMMENT token.
+(Note Open_COMMENT, OPEN_NOTE should be indented correctly.)
+
+SIGN
+OPEN_SIGN  (_1, _2, ... ?)
+CLOSE_SIGN
+LABEL_SIGN
+OP_SIGN
+OPEN_COMMENT ?
+CLOSE_COMMENT
+KEY
+OPEN_KEY
+CLOSE_KEY  (how pair up?) (maybe OPEN_KEY2...)
+TYPE_KEY
+PROPERTY_KEY
+NAME_WORD
+ID_WORD
+VARIABLE_WORD
+FIELD_WORD
+FUNCTION_WORD
+NOTE_COMMENT
+
+Could just have "default = previous", but can't skip.
+
+Distinct:
+Gap, Word, Key, Sign, Literal, Comment
+Flags:
+Alt1, Alt2, Alt3, Alt4, Alt5, Open, Close, Bad
