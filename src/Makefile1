@@ -1,50 +1,5 @@
-# Compile snipe or test its modules. This is the definitive list of modules and
-# their dependencies.
-
-# The utility modules which are shared by the view and the model.
-unicode = unicode.c
-list = list.c
-file = file.c list.c
-array = array.c
-string = string.c list.c
-setting = setting.c string.c list.c file.c
-style = style.c string.c list.c file.c
-action = action.c string.c list.c file.c
-UTILS = action.c style.c setting.c string.c array.c file.c list.c unicode.c
-
-# The modules which form the model.
-change = change.c
-lines = lines.c array.c
-line = line.c list.c
-scan = scan.c $(UTILS)
-indent = indent.c style.c
-cursor = cursor.c style.c line.c list.c
-history = history.c list.c
-text = text.c cursor.c style.c line.c string.c list.c file.c unicode.c
-document = $(MODEL) $(UTILS)
-MODEL = document.c text.c history.c cursor.c indent.c scan.c line.c lines.c \
-	change.c
-
-# The modules which form the view. The LIB variables are the library files for
-# freetype and GLFW. The FT and GL variables are their headers. Use explicit
-# paths for the libraries, not -l, to ensure linking to the right version.
-LIBFT = ../freetype/objs/libfreetype.a
-FT = -I../freetype/include $(LIBFT)
-LIBGL = ../glfw/lib/libglfw3.a
-GL = -I../glfw/include $(LIBGL) $(SYS)
-theme = theme.c style.c setting.c string.c list.c file.c
-font = font.c file.c list.c $(FT)
-event = event.c
-queue = queue.c event.c
-handler = handler.c queue.c event.c theme.c $(UTILS) $(GL)
-display = $(VIEW) $(UTILS) $(FT) $(GL)
-VIEW = display.c handler.c font.c queue.c event.c theme.c
-
-# The modules which form the controller: snipe is a test version of the whole
-# editor, psnipe is a production version to go in the directory above, zip
-# makes a binary zip file for release.
-map = map.c $(MODEL) $(VIEW) $(UTILS) $(FT) $(GL)
-snipe = snipe.c $(map)
+# Compile snipe or test its modules. This file holds the definitive information
+# about module dependencies.
 
 # Find the OS platform using the uname command.
 Linux := $(findstring Linux, $(shell uname -s))
@@ -76,6 +31,13 @@ else ifdef Windows
 	SYS = -lopengl32 -lgdi32 $(FT) -Wl,-Bstatic -lpthread -Wl,-Bdynamic
 endif
 
+# The library files for freetype and GLFW, and their headers. Use explicit
+# paths for the libraries, not -l, to ensure linking to the right version.
+LIBFT = ../freetype/objs/libfreetype.a
+LIBGL = ../glfw/lib/libglfw3.a
+FT = -I../freetype/include $(LIBFT)
+GL = -I../glfw/include $(LIBGL) $(SYS)
+
 # Compiler commands for production compiling, and for test compiling.
 # The gcc compiler can be replaced by clang, if desired.
 PCC = gcc -std=c11 -o $(EXEC) -O2 -DNDEBUG
@@ -98,16 +60,122 @@ $(LIBGL):
 	rm -rf ../glfw/lib/*
 	mv ../glfw/libglfw3.a ../glfw/lib
 
-# Default rule for building and testing a module.
-%: %.c
-	$(TCC) $($@)
+# The modules, listed in dependency order.
+# ----------------------------------------
+
+# The modules which are shared by the view and the model.
+UTILS = action.c style.c setting.c string.c array.c file.c list.c unicode.c
+.PHONY: $(UTILS)
+
+unicode:
+	$(TCC) unicode.c
 	./snipe
 
+list:
+	$(TCC) list.c
+	./snipe
 
+file:
+	$(TCC) file.c list.c unicode.c
+	./snipe
+
+array:
+	$(TCC) array.c
+	./snipe
+
+string:
+	$(TCC) string.c list.c
+	./snipe
+
+setting:
+	$(TCC) setting.c string.c list.c file.c
+	./snipe
+
+style:
+	$(TCC) style.c string.c list.c file.c
+	./snipe
+
+action:
+	$(TCC) action.c string.c list.c file.c
+	./snipe
+
+# The modules which form the view.
+VIEW = display.c handler.c font.c queue.c event.c theme.c
+.PHONY: $(VIEW)
+
+theme:
+	$(TCC) theme.c style.c setting.c string.c list.c file.c
+	./snipe
+
+font: $(LIBFT)
+	$(TCC) font.c file.c $(FT)
+	./snipe
+
+event:
+	$(TCC) event.c
+	./snipe
+
+queue:
+	$(TCC) queue.c event.c
+	./snipe
+
+handler: $(LIBGL)
+	$(TCC) handler.c queue.c event.c theme.c $(UTILS) $(GL)
+	./snipe
+
+display: $(LIBFT) $(LIBGL)
+	$(TCC) $(VIEW) $(UTILS) $(FT) $(GL)
+	./snipe
+
+# The modules which form the model.
+MODEL = document.c text.c history.c cursor.c indent.c scan.c line.c lines.c \
+change.c
+.PHONY: $(MODEL)
+
+change:
+	$(TCC) change.c
+	./snipe
+
+lines:
+	$(TCC) lines.c array.c
+	./snipe
+
+line:
+	$(TCC) line.c list.c
+	./snipe
+
+scan:
+	$(TCC) scan.c $(UTILS)
+	./snipe
+
+indent:
+	$(TCC) indent.c style.c
+	./snipe
+
+cursor:
+	$(TCC) cursor.c style.c line.c list.c
+	./snipe
+
+history:
+	$(TCC) history.c list.c
+	./snipe
+
+text:
+	$(TCC) text.c cursor.c style.c line.c string.c list.c file.c unicode.c
+	./snipe
+
+document:
+	$(TCC) $(MODEL) $(UTILS)
+	./snipe
 
 # The modules which form the controller: snipe is a test version of the whole
 # editor, psnipe is a production version to go in the directory above, zip
 # makes a binary zip file for release.
+.PHONY: map snipe psnipe zip
+
+map: $(LIBFT) $(LIBGL)
+	$(TCC) map.c $(MODEL) $(VIEW) $(UTILS) $(FT) $(GL)
+	./snipe
 
 snipe: $(LIBFT) $(LIBGL)
 	cp setting.h style.h event.h action.h Makefile ../help/

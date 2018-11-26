@@ -80,43 +80,6 @@ static void testSplitWords() {
     freeList(words);
 }
 
-static void testGetUTF8() {
-    char *s = "\xE2\x80\x8C";
-    int len;
-    assert(getUTF8(s, &len) == 0x200C);
-    assert(len == 3);
-}
-
-static void testCheck2() {
-    assert(check2(0xC2, 0x80));   // 8 bits
-    assert(check2(0xC2, 0xBF));
-    assert(check2(0xDF, 0x80));   // 11 bits
-    assert(check2(0xDF, 0xBF));
-    assert(! check2(0xC0, 0xBF)); // < 8 bits
-    assert(! check2(0xC1, 0xBF));
-    assert(! check2(0xC2, 0x7F)); // bad 2nd byte
-    assert(! check2(0xC2, 0xC0));
-    assert(! check2(0xE0, 0xBF)); // > 11 bits
-}
-
-static void testCheck3() {
-    assert(check3(0xE0, 0xA0, 0x80));   // 12 bits
-    assert(check3(0xE0, 0xBF, 0xBF));
-    assert(check3(0xE8, 0x80, 0x80));   // 15 bits
-    assert(check3(0xEF, 0xBF, 0xBF));
-    assert(! check3(0xE0, 0x9F, 0xBF)); // < 12 bits
-    assert(! check3(0xED, 0xA0, 0x80)); // UTF-16 surrogates
-    assert(! check3(0xED, 0xBF, 0xBF)); // UTF-16 surrogates
-    assert(! check3(0xF0, 0x80, 0x80)); // > 15 bits
-}
-
-static void testCheck4() {
-    assert(check4(0xF0, 0x90, 0x80, 0x80));   // 16 bits
-    assert(check4(0xF4, 0x8F, 0xBF, 0xBF));   // limit 1114111
-    assert(! check4(0xF0, 0x8F, 0xBF, 0xBF)); // < 16 bits
-    assert(! check4(0xF4, 0x90, 0x80, 0x80)); // > limit
-}
-
 // Run a test on the normalize function.
 static bool norm(char *in, char *out) {
     char *t = malloc(100);
@@ -152,10 +115,6 @@ static void testNorm() {
 int main(int n, char const *args[n]) {
     testSplitLines();
     testSplitWords();
-    testGetUTF8();
-    testCheck2();
-    testCheck3();
-    testCheck4();
     testNorm();
     printf("String module OK\n");
     return 0;
