@@ -63,3 +63,25 @@ void getText(text *t, int p, int n, chars *s) {
     resize(s, n);
     memcpy(C(s), &t->data[p], n);
 }
+
+// Insert s at position p, and handle the side effects.
+void insertText(text *t, int p, char const *s) {
+    int n = strlen(s);
+    char line[n + 2];
+    bool addLine = p == lengthText(t) && n > 0 && s[n-1] != '\n';
+    if (addLine) {
+        strcpy(line, s);
+        strcat(line, "\n");
+        s = line;
+        n++;
+    }
+    moveGap(t, p);
+    if (n > t->hi - t->lo) resizeText(t, n);
+    memcpy(&t->data[t->lo], s, n);
+    t->lo = t->lo + n;
+    if (addLine) updateCursors(t->cs, p, n-1);
+    else updateCursors(t->cs, p, n);
+    updateLines(t, p, n);
+    insertLines(t, p, s);
+    invalidateStyles(t, p);
+}
