@@ -1,6 +1,13 @@
 // The Snipe editor is free and open source, see licence.txt.
 #include "gap.h"
-#include "list.h"
+#include "string.h"
+#include "file.h"
+#include "unicode.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <string.h>
+#include <assert.h>
 
 // A text object stores an array of bytes, as a gap buffer. For realloc info,
 // see http://blog.httrack.com/blog/2014/04/05/a-story-of-realloc-and-laziness/
@@ -64,24 +71,108 @@ void getText(text *t, int p, int n, chars *s) {
     memcpy(C(s), &t->data[p], n);
 }
 
-// Insert s at position p, and handle the side effects.
+// Insert s at position p.
 void insertText(text *t, int p, char const *s) {
     int n = strlen(s);
-    char line[n + 2];
-    bool addLine = p == lengthText(t) && n > 0 && s[n-1] != '\n';
-    if (addLine) {
-        strcpy(line, s);
-        strcat(line, "\n");
-        s = line;
-        n++;
-    }
     moveGap(t, p);
     if (n > t->hi - t->lo) resizeText(t, n);
     memcpy(&t->data[t->lo], s, n);
     t->lo = t->lo + n;
-    if (addLine) updateCursors(t->cs, p, n-1);
-    else updateCursors(t->cs, p, n);
-    updateLines(t, p, n);
-    insertLines(t, p, s);
-    invalidateStyles(t, p);
 }
+
+// Delete n bytes at position p, and handle the side effects.
+// Move to the nearest end of the deletion, in case n is very large.
+void deleteText(text *t, int p, int n) {
+    if (t->lo < p + n / 2) {
+        moveGap(t, p + n);
+        t->lo = p;
+    }
+    else {
+        moveGap(t, p);
+        t->hi = t->hi + n;
+    }
+}
+
+void changeText(text *t, change c) {
+    
+}
+int changeFlags(change *c);
+int changeLength(change *c);
+char *changeText(change *c);
+bool changeLast(change *c);
+
+static text *emptyText() {
+    int size = 24;
+    char *data = malloc(size);
+    strcpy(data, "\n");
+    text *t = malloc(sizeof(text));
+    *t = (text) { .lo = 1, .hi = size, .end = size, .data = data };
+    return t;
+}
+
+static void err(char const *e, char const *p) {
+    printf("Error, %s: %s\n", e, p);
+}
+
+text *readText(char const *path) {
+    char *data = readPath(path);
+    if (data == NULL) return emptyText();
+    int size = strlen(data);
+    char const *message = utf8valid(data, size);
+    if (message != NULL) { err(message, path); free(data); return emptyText(); }
+    size = normalize(data);
+    text *t = malloc(sizeof(text));
+    *t = (text) { .lo = size, .hi = size, .end = size, .data = data };
+    return t;
+}
+
+void writeText(text *t, char const *path) {
+    int size = lengthText(t);
+    moveGap(t, size);
+    writeFile(path, size, t->data);
+}
+
+// Unit testing
+#ifdef gapTest
+
+// Compare text object against pattern with ... as the gap.
+static bool compare(text *t, char *p) {
+    char *gap = strstr(p, "...");
+    int n = gap - p;
+    if (n != t->lo) return false;
+    if (memcmp(p, t->data, n) != 0) return false;
+    p = gap + 3;
+    n = strlen(p);
+    if (n != t->end - t->hi) return false;
+    if (memcmp(p, &t->data[t->hi], n) != 0) return false;
+    return true;
+}
+
+int main() {
+    setbuf(stdout, NULL);
+    text *t = newText();
+    assert(compare(t, "..."));
+    insertText(t, 0, "abcdz\n");
+    assert(compare(t, "abcdz\n..."));
+    insertText(t, 4, "efghijklmnopqrstuvwxy");
+    assert(compare(t, "abcdefghijklmnopqrstuvwxy...z\n"));
+    moveGap(t, 5);
+    assert(compare(t, "abcde...fghijklmnopqrstuvwxyz\n"));
+    deleteText(t, 4, 4);
+    assert(compare(t, "abcd...ijklmnopqrstuvwxyz\n"));
+    deleteText(t, 0, 7);
+    assert(compare(t, "...lmnopqrstuvwxyz\n"));
+    deleteText(t, 0, 16);
+    assert(compare(t, "..."));
+    insertText(t, 0, "a\nbb\nccc\n");
+    assert(compare(t, "a\nbb\nccc\n..."));
+    deleteText(t, 3, 3);
+    assert(compare(t, "a\nb...cc\n"));
+    insertText(t, 3, "b\nc");
+    assert(compare(t, "a\nbb\nc...cc\n"));
+    freeText(t);
+    printf("Text module OK\n");
+    return 0;
+}
+
+#endif

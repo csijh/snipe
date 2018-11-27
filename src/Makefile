@@ -13,17 +13,20 @@ action = action.c string.c $(file)
 UTILS = action.c style.c setting.c string.c array.c $(file)
 
 # The modules which form the model.
+# change is a proposed new module.
+# gap is a proposed replacement for the text module.
+# lines is not currently used.
 change = change.c
+gap = gap.c string.c $(file)
 lines = lines.c array.c
 line = line.c list.c
 scan = scan.c $(UTILS)
 indent = indent.c style.c
 cursor = cursor.c style.c line.c list.c
 history = history.c list.c
-text = text.c cursor.c style.c line.c string.c list.c file.c unicode.c
+text = text.c cursor.c style.c line.c string.c $(file)
 document = $(MODEL) $(UTILS)
-MODEL = document.c text.c history.c cursor.c indent.c scan.c line.c lines.c \
-	change.c
+MODEL = document.c text.c history.c cursor.c indent.c scan.c line.c
 
 # The modules which form the view.
 theme = theme.c style.c setting.c string.c $(file)
