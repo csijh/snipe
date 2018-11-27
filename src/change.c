@@ -32,7 +32,7 @@ int changeLength(change *c) { return c->n; }
 char *changeText(change *c) { return c->s; }
 bool changeLast(change *c) { return c->last; }
 
-#ifdef test_change
+#ifdef changeTest
 
 // No testing.
 int main() {

@@ -54,7 +54,7 @@ void decrease(void *xs, int i, int n) {
     a->len = new;
 }
 
-#ifdef test_array
+#ifdef arrayTest
 
 int main() {
     char *s = newArray(sizeof(char));

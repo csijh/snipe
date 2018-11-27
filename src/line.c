@@ -33,7 +33,7 @@ int findRow(ints *lines, int p) {
     return start;
 }
 
-#ifdef test_line
+#ifdef lineTest
 
 int main() {
     setbuf(stdout, NULL);

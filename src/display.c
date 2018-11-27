@@ -444,7 +444,7 @@ void actOnDisplay(display *d, action a, int x, int y, char const *s) {
     }
 }
 
-#ifdef test_display
+#ifdef displayTest
 
 // Redraw with text for testing.
 static void testRedraw(display *d) {

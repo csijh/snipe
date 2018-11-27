@@ -165,7 +165,7 @@ event dequeue(queue *q, int *px, int *py, char const **pt) {
     return e;
 }
 
-#ifdef test_queue
+#ifdef queueTest
 
 int main() {
     setbuf(stdout, NULL);

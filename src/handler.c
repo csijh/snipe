@@ -345,7 +345,7 @@ void *tick(void *vh) {
     return NULL;
 }
 
-#ifdef test_handler
+#ifdef handlerTest
 
 #include <pthread.h>
 

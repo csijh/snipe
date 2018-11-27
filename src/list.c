@@ -66,7 +66,7 @@ void delete(list *xs, int i, int n) {
     xs->length = xs->length - n;
 }
 
-#ifdef test_list
+#ifdef listTest
 
 int main() {
     setbuf(stdout, NULL);

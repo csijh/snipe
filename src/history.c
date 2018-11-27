@@ -140,7 +140,7 @@ void popEdit(history *h, opcode *op, int *at, int *n, char *s, bool *last) {
     }
 }
 
-#ifdef test_history
+#ifdef historyTest
 
 // Check pushing and popping an op.
 static bool checkBytecode(history *h, int op, int n) {

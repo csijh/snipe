@@ -412,7 +412,7 @@ void scan(scanner *sc, int row, chars *line, chars *styles) {
     sc->endStates = setEndState(sc->endStates, row, state);
 }
 
-#ifdef test_scan
+#ifdef scanTest
 
 // Check a list of tokens produced by readLine.
 static bool checkReadLine(char *t, int n, char *e[n]) {

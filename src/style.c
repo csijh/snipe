@@ -80,7 +80,7 @@ style clearStyleFlags(compoundStyle s) {
     return s & 0x1F;
 }
 
-#ifdef test_style
+#ifdef styleTest
 
 int main(int n, char const *args[]) {
     setbuf(stdout, NULL);

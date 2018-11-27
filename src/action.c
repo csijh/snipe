@@ -47,7 +47,7 @@ void printAction(action a) {
     printf("%s\n", actionNames[a]);
 }
 
-#ifdef test_action
+#ifdef actionTest
 
 int main(int n, char const *args[]) {
     setbuf(stdout, NULL);

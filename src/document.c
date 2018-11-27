@@ -300,7 +300,7 @@ char const *actOnDocument(document *d, action a) {
     return C(d->line);
 }
 
-#ifdef test_document
+#ifdef documentTest
 
 int main(int n, char *args[n]) {
     setbuf(stdout, NULL);

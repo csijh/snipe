@@ -151,7 +151,7 @@ int findIndent(int *runningIndent, int n, char const line[n], char styles[n]) {
     return result;
 }
 
-#ifdef test_indent
+#ifdef indentTest
 
 static bool checkMatch(char *line, char *out) {
     int n = strlen(line);

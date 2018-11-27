@@ -1,16 +1,16 @@
-# Compile snipe or test its modules. This is the definitive list of modules and
-# their dependencies.
+# Compile snipe or test its modules.
 
-# The utility modules which are shared by the view and the model.
+# This is the definitive list of modules and their dependencies.
+# First, the utility modules which are shared by the view and the model.
 unicode = unicode.c
 list = list.c
-file = file.c list.c
+file = file.c list.c unicode.c
 array = array.c
 string = string.c list.c
-setting = setting.c string.c list.c file.c
-style = style.c string.c list.c file.c
-action = action.c string.c list.c file.c
-UTILS = action.c style.c setting.c string.c array.c file.c list.c unicode.c
+setting = setting.c string.c $(file)
+style = style.c string.c $(file)
+action = action.c string.c $(file)
+UTILS = action.c style.c setting.c string.c array.c $(file)
 
 # The modules which form the model.
 change = change.c
@@ -25,38 +25,41 @@ document = $(MODEL) $(UTILS)
 MODEL = document.c text.c history.c cursor.c indent.c scan.c line.c lines.c \
 	change.c
 
-# The modules which form the view. The LIB variables are the library files for
-# freetype and GLFW. The FT and GL variables are their headers. Use explicit
-# paths for the libraries, not -l, to ensure linking to the right version.
-LIBFT = ../freetype/objs/libfreetype.a
-FT = -I../freetype/include $(LIBFT)
-LIBGL = ../glfw/lib/libglfw3.a
-GL = -I../glfw/include $(LIBGL) $(SYS)
-theme = theme.c style.c setting.c string.c list.c file.c
-font = font.c file.c list.c $(FT)
+# The modules which form the view.
+theme = theme.c style.c setting.c string.c $(file)
+font = font.c $(file) $(FT)
 event = event.c
 queue = queue.c event.c
 handler = handler.c queue.c event.c theme.c $(UTILS) $(GL)
 display = $(VIEW) $(UTILS) $(FT) $(GL)
 VIEW = display.c handler.c font.c queue.c event.c theme.c
 
-# The modules which form the controller: snipe is a test version of the whole
-# editor, psnipe is a production version to go in the directory above, zip
-# makes a binary zip file for release.
+# The modules which form the controller.
 map = map.c $(MODEL) $(VIEW) $(UTILS) $(FT) $(GL)
 snipe = snipe.c $(map)
 
-# Find the OS platform using the uname command.
-Linux := $(findstring Linux, $(shell uname -s))
-MacOS := $(findstring Darwin, $(shell uname -s))
-Windows := $(findstring NT, $(shell uname -s))
+# Default rule for building and testing a module. Insist on the FT and GLFW
+# libraries being built first. (Use gcc or clang.)
+%: %.c $(LIBFT) $(LIBGL)
+	gcc -std=c11 -o snipe -Wall -pedantic -g $(DEBUG) -D$@Test $($@)
+	./snipe
 
-# The name of the executable (clang on Windows doesn't add .exe automatically).
-ifdef Windows
-	EXEC = snipe.exe
-else
-	EXEC = snipe
-endif
+# Copy files into the help folder, so that help pages can refer to them.
+HELPFILES:
+	cp setting.h style.h event.h action.h Makefile ../help/
+
+# For testing snipe as a whole, add HELPFILES as an extra dependency.
+snipe: HELPFILES
+
+# Type make psnipe for a production version. (Use gcc or clang.)
+psnipe: $(LIBFT) $(LIBGL) HELPFILES
+	gcc -std=c11 -o snipe -O2 -DNDEBUG $($@)
+
+# Make a zip file for distribution. Assumes a production version of snipe has
+# been copied to the directory above src. Change to snipe.exe for Windows.
+zip:
+	cd ../.. && zip -r snipe.zip snipe/files snipe/help snipe/languages \
+	snipe/settings.txt snipe/snipe
 
 # Advanced debugging options (not easily available on Windows)
 ifdef Windows
@@ -65,7 +68,14 @@ else
 	DEBUG = -fsanitize=address -fsanitize=undefined
 endif
 
-# System libraries needed by GLFW (different on each platform). Force
+# ---------- FT and GLFW libraries ----------
+
+# Find the OS platform using the uname command.
+Linux := $(findstring Linux, $(shell uname -s))
+MacOS := $(findstring Darwin, $(shell uname -s))
+Windows := $(findstring NT, $(shell uname -s))
+
+# Define system libraries needed by GLFW (different on each platform). Force
 # pthread to be linked statically on Windows.
 ifdef Linux
 	SYS = -lGL -lm -ldl -lXrandr -lXinerama -lXcursor -lpthread -lXxf86vm -lX11
@@ -73,13 +83,16 @@ else ifdef MacOS
 	SYS = -framework Cocoa -framework IOKit -framework CoreFoundation \
 	-framework CoreVideo -framework OpenGL
 else ifdef Windows
-	SYS = -lopengl32 -lgdi32 $(FT) -Wl,-Bstatic -lpthread -Wl,-Bdynamic
+	SYS = -lopengl32 -lgdi32 -Wl,-Bstatic -lpthread -Wl,-Bdynamic
 endif
 
-# Compiler commands for production compiling, and for test compiling.
-# The gcc compiler can be replaced by clang, if desired.
-PCC = gcc -std=c11 -o $(EXEC) -O2 -DNDEBUG
-TCC = gcc -std=c11 -o $(EXEC) -Wall -pedantic -g $(DEBUG) -Dtest_$@
+# The LIB variables are the library files for freetype and GLFW. Use explicit
+# paths, not -l, to ensure the right versions get linked. The FT and GL
+# variables add the headers.
+LIBFT = ../freetype/objs/libfreetype.a
+LIBGL = ../glfw/lib/libglfw3.a
+FT = -I../freetype/include $(LIBFT)
+GL = -I../glfw/include $(LIBGL) $(SYS)
 
 # Build a cut down version of freetype (with no dependencies) from source.
 $(LIBFT):
@@ -97,28 +110,3 @@ $(LIBGL):
 	mv ../glfw/lib/src/libglfw3.a ../glfw
 	rm -rf ../glfw/lib/*
 	mv ../glfw/libglfw3.a ../glfw/lib
-
-# Default rule for building and testing a module.
-%: %.c
-	$(TCC) $($@)
-	./snipe
-
-
-
-# The modules which form the controller: snipe is a test version of the whole
-# editor, psnipe is a production version to go in the directory above, zip
-# makes a binary zip file for release.
-
-snipe: $(LIBFT) $(LIBGL)
-	cp setting.h style.h event.h action.h Makefile ../help/
-	$(TCC) snipe.c map.c $(MODEL) $(VIEW) $(UTILS) $(FT) $(GL)
-
-psnipe: $(LIBFT) $(LIBGL)
-	cp setting.h style.h event.h action.h Makefile ../help/
-	$(PCC) snipe.c map.c $(MODEL) $(VIEW) $(UTILS) $(FT) $(GL)
-	cp $(EXEC) ..
-
-# Make a binary distribution after making psnipe.
-zip:
-	cd ../.. && zip -r snipe.zip snipe/files snipe/help snipe/languages \
-	snipe/settings.txt snipe/$(EXEC)

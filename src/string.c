@@ -58,7 +58,7 @@ int normalize(char *s) {
     return out;
 }
 
-#ifdef test_string
+#ifdef stringTest
 
 static void testSplitLines() {
     char s[] = "a\nbb\nccc\n";

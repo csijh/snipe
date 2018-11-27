@@ -351,7 +351,7 @@ void writeFile(char const *path, int size, char data[size]) {
     fclose(file);
 }
 
-#ifdef test_file
+#ifdef fileTest
 // Unit testing.
 
 // Test the program is being tested from snipe/src.

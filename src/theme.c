@@ -92,7 +92,7 @@ extern inline unsigned char green(colour *c) { return c->g; }
 extern inline unsigned char blue(colour *c) { return c->b; }
 extern inline unsigned char opacity(colour *c) { return c->a; }
 
-#ifdef test_theme
+#ifdef themeTest
 
 int main(int n, char const *args[]) {
     setbuf(stdout, NULL);

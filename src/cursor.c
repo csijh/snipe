@@ -427,7 +427,7 @@ void applyCursors(cursors *cs, int row, chars *styles) {
     }
 }
 
-#ifdef test_cursor
+#ifdef cursorTest
 
 // During testing, a text pattern has ; . [] ][ to mean newline, cursor
 // position, and forward or backward selection.

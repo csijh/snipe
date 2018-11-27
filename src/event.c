@@ -91,7 +91,7 @@ void printEvent(event e, int x, int y, char const *t, char *end) {
     printf("%s", end);
 }
 
-#ifdef test_event
+#ifdef eventTest
 
 int main(int n, char const *args[]) {
     setbuf(stdout, NULL);

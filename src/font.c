@@ -142,7 +142,7 @@ int pageHeight(page *p) { return p->height; }
 unsigned char *pageImage(page *p) { return p->image; }
 extern inline int charAdvance(page *p, int ch) { return p->advances[ch % 256]; }
 
-#ifdef test_font
+#ifdef fontTest
 
 int main(int n, char const *args[]) {
     setbuf(stdout, NULL);

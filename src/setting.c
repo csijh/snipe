@@ -80,7 +80,7 @@ char *getThemeFile(int i) {
     return values[t];
 }
 
-#ifdef test_setting
+#ifdef settingTest
 
 int main(int n, char const *args[]) {
     setbuf(stdout, NULL);

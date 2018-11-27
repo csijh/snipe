@@ -115,7 +115,7 @@ bool dispatch(map *m, event e, int x, int y, char const *t) {
     return a == Quit;
 }
 
-#ifdef test_map
+#ifdef mapTest
 
 int main(int n, char const *args[]) {
     setbuf(stdout, NULL);

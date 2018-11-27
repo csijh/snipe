@@ -155,7 +155,7 @@ void utf8to16(char const *s, wchar_t *ws) {
     ws[out] = 0;
 }
 
-#ifdef test_unicode
+#ifdef unicodeTest
 
 static void testGetUTF8() {
     char *s = "\xE2\x80\x8C";

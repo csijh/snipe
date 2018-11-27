@@ -278,7 +278,7 @@ void writeText(text *t, char const *path) {
 }
 
 // Unit testing
-#ifdef test_text
+#ifdef textTest
 
 // Compare text object against pattern with ... as the gap.
 static bool compare(text *t, char *p) {

@@ -87,7 +87,7 @@ void setLineEndIndent(lines *ls, int row, int i) {
     ls[row].endIndent = i;
 }
 
-#ifdef test_lines
+#ifdef linesTest
 
 int main() {
     setbuf(stdout, NULL);
