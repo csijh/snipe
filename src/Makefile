@@ -18,7 +18,7 @@ UTILS = action.c style.c setting.c string.c array.c $(file)
 # lines is a proposed replacement for line.
 op = op.c
 gap = gap.c op.c string.c $(file)
-lines = lines.c array.c
+lines = lines.c op.c list.c
 line = line.c list.c
 scan = scan.c $(UTILS)
 indent = indent.c style.c

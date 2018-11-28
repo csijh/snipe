@@ -1,3 +1,11 @@
+Trail
+-----
+User ins or del. Just need max range of op to shorten search.
+Check if any characters are now spaces at end of line.
+Check if newline at end of text.
+Check if causes blank lines at end of text.
+Where put the fix ops?
+
 Refactor
 --------
 text (just gap-buffer, maybe with newline conventions).

@@ -11,19 +11,19 @@ typedef struct op op;
 op *newOp();
 void freeOp(op *o);
 
-// Flags describing the op. Fix specifies an automatic adjustment rather
-// than a user edit (which affects the undo history). Del specifies a deletion
-// rather than an insertion, which is the default. If a cursor is involved, Left
+// Flags describing the op. Fix specifies an automatic adjustment rather than a
+// user edit (which affects the undo history). Del specifies a deletion rather
+// than an insertion, which is the default. If a cursor is involved, Left
 // specifies a leftward direction compared to the cursor (so typing a character
 // is a Left insertion, and Backspace is a Left deletion, and undo restores a
 // cursor on the right.) Sel specifies that the deleted text was selected (so
-// Undo restores the selection.)
-extern const int Fix, Del, Left, Sel;
+// Undo restores the selection.) Multi says whether this is an op in a
+// multi-cursor sequence, other than the last.
+extern const int Fix, Del, Left, Sel, Multi;
 
 // Fill in the structure. The flags can be any meaningful combination of the
-// above, s is the text for an insertion, last says whether it is the last
-// op of a multi-cursor edit.
-void setOp(op *o, int flags, int at, int n, char s[n], bool last);
+// above, s is the text for an insertion, last s
+void setOp(op *o, int flags, int at, int n, char s[n]);
 
 // When there is a deletion, fill in the deleted text.
 void setDeletion(op *o, char *s);
@@ -33,4 +33,3 @@ int flagsOp(op *o);
 int atOp(op *o);
 int lengthOp(op *o);
 char *textOp(op *o);
-bool lastOp(op *o);
