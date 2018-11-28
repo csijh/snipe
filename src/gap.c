@@ -14,7 +14,7 @@
 // The bytes are stored in data and the gap is between offsets lo and hi.
 struct text {
     char *data;
-    int lo, hi, end;
+    int lo, hi, top;
 };
 
 // Create an empty array with a small capacity.
@@ -22,7 +22,7 @@ text *newText() {
     int n = 24;
     text *t = malloc(sizeof(text));
     char *data = malloc(n);
-    *t = (text) { .lo = 0, .hi = n, .end = n, .data = data };
+    *t = (text) { .lo = 0, .hi = n, .top = n, .data = data };
     return t;
 }
 
@@ -32,81 +32,81 @@ void freeText(text *t) {
 }
 
 int lengthText(text *t) {
-    return t->lo + t->end - t->hi;
+    return t->lo + t->top - t->hi;
 }
 
 // Resize to make room for an insertion of n bytes.
 static void resizeText(text *t, int n) {
-    int hilen = t->end - t->hi;
+    int hilen = t->top - t->hi;
     int needed = t->lo + n + hilen;
-    int size = t->end;
+    int size = t->top;
     while (size < needed) size = size * 3 / 2;
     t->data = realloc(t->data, size);
     memmove(&t->data[size - hilen], &t->data[t->hi], hilen);
     t->hi = size - hilen;
-    t->end = size;
+    t->top = size;
 }
 
 // Move the gap to the given position.
-static void moveGap(text *t, int p) {
-    assert(p <= lengthText(t));
-    if (p < t->lo) {
-        int len = (t->lo - p);
-        memmove(&t->data[t->hi - len], &t->data[p], len);
+static void moveGap(text *t, int at) {
+    assert(at <= lengthText(t));
+    if (at < t->lo) {
+        int len = (t->lo - at);
+        memmove(&t->data[t->hi - len], &t->data[at], len);
         t->hi = t->hi - len;
-        t->lo = p;
+        t->lo = at;
     }
-    else if (p > t->lo) {
-        int len = (p - t->lo);
+    else if (at > t->lo) {
+        int len = (at - t->lo);
         memmove(&t->data[t->lo], &t->data[t->hi], len);
         t->hi = t->hi + len;
-        t->lo = p;
+        t->lo = at;
     }
 }
 
-void getText(text *t, int p, int n, chars *s) {
-    assert(p + n <= lengthText(t));
-    moveGap(t, p + n);
+void getText(text *t, int at, int n, chars *s) {
+    assert(at + n <= lengthText(t));
+    moveGap(t, at + n);
     resize(s, n);
-    memcpy(C(s), &t->data[p], n);
+    memcpy(C(s), &t->data[at], n);
 }
 
-// Insert s at position p.
-void insertText(text *t, int p, char const *s) {
-    int n = strlen(s);
-    moveGap(t, p);
+// Insert s at position at.
+void insertText(text *t, int at, int n, char const s[n]) {
+    moveGap(t, at);
     if (n > t->hi - t->lo) resizeText(t, n);
     memcpy(&t->data[t->lo], s, n);
     t->lo = t->lo + n;
 }
 
-// Delete n bytes at position p, and handle the side effects.
+// Delete n bytes at position at, and handle the side effects.
 // Move to the nearest end of the deletion, in case n is very large.
-void deleteText(text *t, int p, int n) {
-    if (t->lo < p + n / 2) {
-        moveGap(t, p + n);
-        t->lo = p;
+void deleteText(text *t, int at, int n) {
+    if (t->lo < at + n / 2) {
+        moveGap(t, at + n);
+        t->lo = at;
     }
     else {
-        moveGap(t, p);
+        moveGap(t, at);
         t->hi = t->hi + n;
     }
 }
 
-void changeText(text *t, change c) {
-    
+void changeText(text *t, op *o) {
+    int flags = flagsOp(o);
+    int at = atOp(o);
+    int n = lengthOp(o);
+    char *s = textOp(o);
+    if (flags & Del) deleteText(t, at, n);
+    else insertText(t, at, n, s);
 }
-int changeFlags(change *c);
-int changeLength(change *c);
-char *changeText(change *c);
-bool changeLast(change *c);
 
 static text *emptyText() {
     int size = 24;
     char *data = malloc(size);
     strcpy(data, "\n");
     text *t = malloc(sizeof(text));
-    *t = (text) { .lo = 1, .hi = size, .end = size, .data = data };
+    *t = (text) { .lo = 1, .hi = size, .top = size, .data = data };
     return t;
 }
 
@@ -122,7 +122,7 @@ text *readText(char const *path) {
     if (message != NULL) { err(message, path); free(data); return emptyText(); }
     size = normalize(data);
     text *t = malloc(sizeof(text));
-    *t = (text) { .lo = size, .hi = size, .end = size, .data = data };
+    *t = (text) { .lo = size, .hi = size, .top = size, .data = data };
     return t;
 }
 
@@ -143,7 +143,7 @@ static bool compare(text *t, char *p) {
     if (memcmp(p, t->data, n) != 0) return false;
     p = gap + 3;
     n = strlen(p);
-    if (n != t->end - t->hi) return false;
+    if (n != t->top - t->hi) return false;
     if (memcmp(p, &t->data[t->hi], n) != 0) return false;
     return true;
 }
@@ -152,9 +152,9 @@ int main() {
     setbuf(stdout, NULL);
     text *t = newText();
     assert(compare(t, "..."));
-    insertText(t, 0, "abcdz\n");
+    insertText(t, 0, 6, "abcdz\n");
     assert(compare(t, "abcdz\n..."));
-    insertText(t, 4, "efghijklmnopqrstuvwxy");
+    insertText(t, 4, 21, "efghijklmnopqrstuvwxy");
     assert(compare(t, "abcdefghijklmnopqrstuvwxy...z\n"));
     moveGap(t, 5);
     assert(compare(t, "abcde...fghijklmnopqrstuvwxyz\n"));
@@ -164,11 +164,11 @@ int main() {
     assert(compare(t, "...lmnopqrstuvwxyz\n"));
     deleteText(t, 0, 16);
     assert(compare(t, "..."));
-    insertText(t, 0, "a\nbb\nccc\n");
+    insertText(t, 0, 9, "a\nbb\nccc\n");
     assert(compare(t, "a\nbb\nccc\n..."));
     deleteText(t, 3, 3);
     assert(compare(t, "a\nb...cc\n"));
-    insertText(t, 3, "b\nc");
+    insertText(t, 3, 3, "b\nc");
     assert(compare(t, "a\nbb\nc...cc\n"));
     freeText(t);
     printf("Text module OK\n");

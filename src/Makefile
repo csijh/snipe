@@ -13,11 +13,11 @@ action = action.c string.c $(file)
 UTILS = action.c style.c setting.c string.c array.c $(file)
 
 # The modules which form the model.
-# change is a proposed new module.
+# op is a proposed new module.
 # gap is a proposed replacement for the text module.
-# lines is not currently used.
-change = change.c
-gap = gap.c string.c $(file)
+# lines is a proposed replacement for line.
+op = op.c
+gap = gap.c op.c string.c $(file)
 lines = lines.c array.c
 line = line.c list.c
 scan = scan.c $(UTILS)
