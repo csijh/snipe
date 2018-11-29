@@ -1,3 +1,13 @@
+Ops
+---
+An op (edit or fix) is offered to:
+text, lines, brackets, history, cursors, style (after)
+An op is offered to these, to generate fixes:
+trail, indent, semis
+
+Brackets: forward normal precedence algorithm to cursor, backward from end to
+cursor, mark any mismatched pairs red, use leftovers as completion.
+
 Trail
 -----
 User ins or del. Just need max range of op to shorten search.

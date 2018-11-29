@@ -41,7 +41,7 @@ less likely and not unreasonable to mark () as mismatched. This doesn't prevent
 ({}), which seems to be common in JavaScript, for example, but it means that
 with ({) all the brackets are marked as mismatches. Mismatches are no longer
 minimized, but the algorithm is simpler and long-distance effects may be
-reduced. 
+reduced.
 
 Bracket matching and scanning could interact, especially if /* and */ are
 regarded as brackets. In most editors, if you type an unmatched /* then the
