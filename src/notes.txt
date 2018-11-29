@@ -8,6 +8,24 @@ trail, indent, semis
 Brackets: forward normal precedence algorithm to cursor, backward from end to
 cursor, mark any mismatched pairs red, use leftovers as completion.
 
+void f() [
+if () {
+}
+void g() {
+}
+
+void f() {
+    if () [
+}
+void g() {
+}
+
+void f() {
+    if () {
+    }
+    void g() [
+}
+
 Trail
 -----
 User ins or del. Just need max range of op to shorten search.
