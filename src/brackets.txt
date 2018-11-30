@@ -1,226 +1,75 @@
 Bracket marking
 ---------------
 
+Bracket matching is well known, but marking the unmatched or mismatched
+brackets, e.g. by highlighting them, is a greater challenge.
+
 To check that brackets are matched, in a left to right pass, each close bracket
 is matched with the most recent unmatched open bracket. The algorithm can be
 extended to mark the unmatched brackets, e.g. by highlighting them. If a close
 bracket is encountered when there are no unmatched open brackets, it is marked
 and then ignored. At the end, any remaining unmatched open brackets are marked.
 
-But things get more interesting if there are different kinds of brackets. There
-are now mismatched brackets which need to be marked as well as unmatched
-brackets. A close bracket such as ] might not match the most recent unmatched
-open bracket such as ( and then it isn't clear which bracket should be marked.
+Things get more interesting if there are different kinds of brackets. There are
+now mismatched brackets which need to be marked as well as unmatched brackets. A
+close bracket such as ] might not match the most recent unmatched open bracket
+such as ( and then it isn't clear which bracket should be marked.
 
 Minimizing the number of marked brackets might be thought desirable. For
 example, with [[[((]]])) it is better to mark the round brackets, and with
-[[(((]]))) it is better to mark the square brackets. But the examples suggest
-that this would require a global analysis rather than a simple local algorithm.
+[[(((]]))) it is better to mark the square brackets. But examples like these
+suggest that this would require a global analysis rather than a simple local
+algorithm. This could be both slow and counter-intuitive for the user.
 
 Perhaps the simplest way of handling the situation is to introduce priorities.
 Suppose brackets {} have a higher priority than [] and [] have a higher priority
 than (). Then when two brackets mismatch, the lower priority one is marked. For
 example, with {(} the open round bracket would be marked.
 
-Matching pairs of brackets on separate lines are used to control indenting
-automatically. It is natural for marked brackets not to take part in indenting.
-But then the algorithm developed so far may not mark optimally. For example, if
-there are two open curly brackets and one close curly bracket, either of the
-open brackets may be the most natural one to mark. This:
-
-    void g(int n) {
-        if (n > 0) {    // marked
-    }
-
-is more natural than:
+Things get more interesting still if brackets are used to control indenting.
+Essentially, a line is indented according to the number of unmatched open
+brackets at that point in the text. Marked brackets don't take part in
+indenting. The algorithm developed so far doesn't produce natural results. For
+example, the normal algorithm produces this:
 
     void g(int n) {    // marked
     if (n > 0) {
     }
 
-On the other hand:
+However, marking the second open curly bracket gives a more natural result:
+
+    void g(int n) {
+        if (n > 0) {    // marked
+    }
+
+On the other hand, the normal algorithm produces a natural result in this case:
 
     void f() {    // marked
     void g(int n) {
     }
 
-is more natural than:
+The alternative is worse:
 
     void f() {
         void g(int n) {    // marked
     }
 
-In the natural cases, it seems likely that the marked bracket has been typed
-most recently.
+It isn't just a question of whether the indenting is natural. It is also a
+question of the amount of change caused by a local edit. With a fixed algorithm,
+adding a bracket is likely to change the indenting of all the text below the
+current position. Then typing the corresponding close bracket would change the
+indenting back again. That would be very distracting for the user, and also
+cause problems for the implementation.
 
- suppose the
-open curly bracket of an if statement with a block has just been typed in the
-editor. The algorithm so far might produce something like this, with the first
-open curly bracket marked:
+It seems that the most recently typed bracket is the one that should be marked.
+However, keeping track of the history of insertion of characters seems too heavy
+a price to pay for natural indenting.
 
-But it would look much more natural for the second open curly bracket to be
-marked, producing:
-
-
-But on the other hand, in this case:
-
-
-
-When the second open curly bracket is typed, it is better for the
-
-...
-It doesn't seem possible to come up
-with a simple scheme that minimizes the
-
-
- Now
-there are ambiguities to be resolved, and the effect on auto-indenting to
-consider.
-
-
-If the text is (() then either open bracket can be marked as mismatched.
-The usual algorithm would match the close bracket with the second open
-bracket, making it natural to mark the first open bracket as mismatched. But that is
-not always the best result.
-
-
- But if mismatched
-brackets are allowed, as they must be in a normal editor, and if they are to
-be marked, e.g. in red, then complications arise.
-
-    - Can the number of brackets marked as mismatched be minimized?
-    - Are there ambiguities?
-    - Do different brackets have different priorities?
-    - How does bracket matching interact with scanning?
-    - How does bracket matching affect auto-indenting?
-    - Can the algorithm be made incremental and efficient on each edit?
-
-In the example (() it isn't clear which open bracket to mark as a mismatch.
-From the user's point of view, it is probably the one which has been typed most
-recently, but it not sensible for bracket matching to depend on the order
-things are typed. It is better to treat the issue as an invariant being
-maintained, especially when it is used for things like auto-indenting. Marking
-the first bracket as a mismatch fits well with the usual matching algorithm,
-and feels natural if the user types a new expression with unmatched brackets
-((( and then types the close brackets one at a time. It feels slightly less
-natural when a new open bracket is typed inside an existing matching pair
-(..(...) but  this is a minor and short-lived effect.
-
-In the example [(] the normal matching algorithm wouldn't match any
-brackets. But matching the square brackets would reduce the number of
-mismatches, and feel more natural in practical situations where the inner
-bracket has just been typed. With [((])) it should be the round brackets that
-match if the mismatches are to be minimised. An examples such as
-[[[[((((]]]] shows that brackets with an arbitrary number of unmatched brackets
-in between might need to be matched. That doesn't feel as if it would lead to a
-simple algorithm, or a simple explanation to users. In addition, with [(]),
-there is an ambiguity because one pair of brackets needs to be matched, but it
-isn't clear which.
-
-Perhaps the best approach to cope with these problems is to have a hierarchy of
-bracket types, e.g. () being the most local and {} the most global. A sequence
-{(((} might occur naturally when a new line is being typed within a block, so
-it makes sense to match {} and mark ((( as mismatched. whereas ({{{) is much
-less likely and not unreasonable to mark () as mismatched. This doesn't prevent
-({}), which seems to be common in JavaScript, for example, but it means that
-with ({) all the brackets are marked as mismatches. Mismatches are no longer
-minimized, but the algorithm is simpler and long-distance effects may be
-reduced.
-
-Bracket matching and scanning could interact, especially if /* and */ are
-regarded as brackets. In most editors, if you type an unmatched /* then the
-rest of the file, or at least the part up to the end of the next multiline
-comment, is marked up as a comment. But scanning text as a comment could
-possibly be delayed until the comment markers match. With /*.../*...*/ which
-is technically legal, it is important to match the first /* rather than the
-second.
-
-If a user types an unmatched open bracket ( or [ or { at the end of a line,
-a simple left-to-right auto-indent algorithm would immediately indent all
-subsequent lines. That means the lines after the current one would move in and
-out frequently while typing, which doesn't feel good. It would be better to
-use a bracket matching algorithm which marked the newly typed open brackets as
-mismatched. That means processing each line in the context of the subsequent
-lines (as if using a right-to-left algorithm for them).
-
-There are always cases where many lines need to be moved in or out to correct
-the indenting. But if a user types curly brackets round a block of lines, the
-best outcome might be if the open bracket is marked as a mismatch, and then
-the block of lines moved in when the matching close curly bracket is typed.
-
-It would be good if the algorithm consisted of a local phase which operates
-on the current line, followed by a possible but relatively rare fix-up phase
-between lines.
-
-The usual linear left-to-right version of this is, roughly
-
-    mark all brackets as mismatched
-    for each bracket
-        if it is a close bracket
-            if it matches the most recent mismatched open bracket
-                mark both as matched
-
-However, if there are mismatched brackets, the questions arise of (a) how to
-make sure the minimum number are marked and (b) which ones to mark if there is
-any ambiguity. Consider the following variation:
-
-   when ( is the most recent unmatched bracket and ] is the next close bracket
-   if ] matches the second most recent [..(] match them
-   else if ( matches the next close bracket (]...) match them
-
-Is two enough? What about the ambiguity of ([)] ?
-
- only one of a mismatched
-pair of brackets (] is marked as a mismatch where reasonably possible, e.g. in
-cases (]..) and [..(] only the middle bracket is marked as a mismatch. [Prove
-this yields a minimum?]
-
-There are two markings for ([)] where one of the matching pairs is marked as
-mismatching. Left-to-right would match up the round brackets.
-
-As well as marking brackets as mismatched, there is a question of which to mark.
-
-    in      l-r    i-o   r-l   o-i
-    (()     [()    [()   [()   ([)
-    ())     ()]    ()]   ()]   ([)
-
-There is a lot to be said for the o-i algorithm. One, it matches the above
-algorithm. Two, it is better for incremental matching, where the outer () might
-be a long way away. Three, it is better for multi-line comments: /* /* */.
-Since this is 'correct', it would be better to regard the second /* as a
-mismatch (unless the second can be discounted by the scanner).
-
-What about when typing? It is good for inserting ( inside (...) because the
-most recently typed bracket is marked as a mismatch. Typing ( in front of (...)
-gives ([...) which is arguably not intuitive, but provided typing a )
-immediately after the new ( doesn't give (][...), all is well.
-
-If ( is typed in the middle of (...), it
-would be more natural for the most recently typed bracket to be marked as a
-mismatch. If ( is typed in front of (...) then it is also the most recent
-bracket that would be most natural.  Suppose not: ([...) then what happens
-when ) is typed after ]? Immediately, it is (][...) yet a better match is
-possible. On the other hand, [(...) followed by [(]...) works well.
-
- This is clear. If
-you match up brackets using any normal algorithm, the mismatched ones
-consist of some 'extra' closers and openers, with all the closers coming before
-all the openers.
-
-Current state: string of brackets, some marked red as mismatches. The unmarked
-ones are guaranteed to be properly matched. ALSO, in some sense, the number of
-mismatched brackets should be 'minimum' and 'optimum'. Minimum = mark
-outdenters before indenters.
-
-Operations: insert a bracket, delete a bracket.
-
-Insertion: at any point, insert (. If it 'matches' the next red close bracket,
-mark them both as matched, otherwise mark it as mismatched. At any point,
-insert ). If it matches the previous red open bracket, mark both matched.
-
-Deletion: at any point, delete black (. Find matching ) and paint red.
-Delete black ) similar. Delete red ( or ), do nothing (or check for newly
-matched brackets on either side?).
-
-Do you allow brackets on either side of a mismatched bracket to match, e.g. {(}.
-Answer yes, because you just typed the (.
+A simple alternative is to take the cursor position into account. The text up to
+the cursor is processed by the usual algorithm, and the text after the cursor is
+processed in the same way, but right to left from the end of the text. Then the
+unmatched brackets before the cursor are compared with the unmatched close
+brackets after the cursor. Typing a single character is now likely to have only
+a local effect. If an open curly bracket is typed, and then the cursor is moved
+down a few lines before inserting the close bracket, the lines moved over get
+indented one by one.

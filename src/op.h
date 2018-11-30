@@ -1,8 +1,8 @@
 // The Snipe editor is free and open source, see licence.txt.
 #include <stdbool.h>
 
-// The op structure stores a single atomic insertion or deletion as an object,
-// to be offered to all relevant components (text, style, lines, history,
+// The op structure stores a single insertion, deletion or cursor movement as an
+// object, to be offered to all relevant components (text, lines, style, undo,
 // brackets, indents, cursors). The data is valid only until the next op.
 struct op;
 typedef struct op op;
@@ -21,8 +21,8 @@ void freeOp(op *o);
 // multi-cursor sequence, other than the last.
 extern const int Fix, Del, Left, Sel, Multi;
 
-// Fill in the structure. The flags can be any meaningful combination of the
-// above, s is the text for an insertion, last s
+// Fill in the structure, with s as the text for an insertion or deletion. If n
+// is 0, the op is a cursor movement.
 void setOp(op *o, int flags, int at, int n, char s[n]);
 
 // When there is a deletion, fill in the deleted text.

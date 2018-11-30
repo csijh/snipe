@@ -1,34 +1,13 @@
 Ops
 ---
 An op (edit or fix) is offered to:
-text, lines, brackets, history, cursors, style (after)
+text, lines, cursors, history/undo, style/hightlights (after), brackets
 An op is offered to these, to generate fixes:
 trail, indent, semis
 
-Brackets: forward normal precedence algorithm to cursor, backward from end to
-cursor, mark any mismatched pairs red, use leftovers as completion.
-
-void f() [
-if () {
-}
-void g() {
-}
-
-void f() {
-    if () [
-}
-void g() {
-}
-
-void f() {
-    if () {
-    }
-    void g() [
-}
-
 Trail
 -----
-User ins or del. Just need max range of op to shorten search.
+User ins or del. Need (one) character beyond s to check.
 Check if any characters are now spaces at end of line.
 Check if newline at end of text.
 Check if causes blank lines at end of text.
