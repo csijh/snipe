@@ -1,7 +1,12 @@
+Scan
+----
+API for language scanner.
+void scanC(style previous, char const *text, token *t);
+
 Ops
 ---
 An op (edit or fix) is offered to:
-text, lines, cursors, history/undo, style/hightlights (after), brackets
+text, lines, cursors, history/undo, style/highlights (after), brackets
 An op is offered to these, to generate fixes:
 trail, indent, semis
 

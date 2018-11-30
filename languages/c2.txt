@@ -1,0 +1,108 @@
+COMMENT _ commentGap
+COMMENT  comment
+COMMENTGAP  comment
+NOTE _ noteGap
+NOTE  note
+NOTEGAP  note
+
+start  __Alignas __Atomic __Bool __Complex __Generic __Imaginary  key
+start  __Noreturn __Static__assert __Thread__Local alignof auto  key
+start  bool break case char const continue default do double else  key
+start  enum extern false float for goto if inline int long  key
+start  register restrict return short signed sizeof static struct  key
+start  switch true typedef union unsigned void volatile while  key
+start  ## %: %= %> ( ) , -> ... . :> : ; <% <: = ?? ? [ ] { }  SIGN
+start  != ! % && &= & *= * ++ += + -- -= - /= / <<= << <= < ==  OP
+start  >= >>= >> > ^= ^ |= || | ~  OP
+start  a..z A..Z __ \U \u  id
+start  /*    comment
+start  //    note
+start  .     dot
+start  0..9  num
+start  '     char
+start  "     string
+start  #     hash
+start  _     gap
+start  _..~  BADCHAR
+start        BADCHAR
+
+key  a..z A..Z 0..9  id
+key  __ \U \u  id
+key  KEY
+
+id  a..z A..Z 0..9  id
+id  __ \U \u  id
+id  (  <FUNCTION
+id  ID
+
+comment  */  COMMENT
+comment  !..~  comment
+comment  COMMENT
+
+commentGap _ commentGap
+commentGap COMMENTGAP
+
+note  !..~  note
+note  NOTE
+
+noteGap  _  noteGap
+noteGap  NOTEGAP
+
+dot 0..9 num
+dot SIGN
+
+num . 0..9 num
+num e+ e- E+ E- num
+num p+ p- P+ P- num
+num NUMBER
+
+char ' CHAR
+char \\ char
+char \' char
+char _..~ char
+char BADCHARCONST
+
+string " STRING
+string \\ string
+string \" string
+string _..~ string
+string BADSTRING
+
+hash _ hash
+hash include fileGap        RESERVED
+hash define elif RESERVED
+hash else endif RESERVED
+hash error if RESERVED
+hash ifdef ifndef RESERVED
+hash line pragma RESERVED
+hash undef RESERVED
+hash RESERVED
+
+fileGap _ fileGap
+fileGap fileStart       GAP ?
+
+fileStart < file
+fileStart BADSTRING     ?
+
+file > STRING
+file _..~ file
+file BADSTRING
+
+gap _ gap
+gap GAP
+
+----------
+x
+I
+xy, z
+IiSGI
+int x;
+KkkGIS
+intx;
+IiiiS
+// A note
+NnGNGNnnn
+/* A multi-line
+CcGCGCccccccccc
+comment */
+CccccccGCc
