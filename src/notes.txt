@@ -1,7 +1,29 @@
 Scan
 ----
-API for language scanner.
-void scanC(style previous, char const *text, token *t);
+POSSIBLE: pre-compute the tables from the file we have now, making a dynamically
+loadable binary data file.
+
+PROPOSE
+a) Store line-boundary scan state in lines
+b) Simplify comments by basing "word-based" ops on tokens OR spaces
+c) Have a separate token store:
+c1) index into token store is kept in lines
+c2) two bytes per token: type and length
+c3) POINT, SELECT, BAD 'flags' are inserted type values (with length 0?)
+
+(c) having a better way of mixing token
+types with flags, e.g. (c1) using a short for each text byte or (c2) using a
+length encoding (three bytes per token maybe: type, flags, length) with a
+separate index in the lines buffer into a separate tokens buffer.
+Probably (a), (b), (c2)
+
+If we have two scans per line, one assuming within multiline comment at start,
+then maybe all changes can be kept local.
+
+Current flags with a style are START (can replace with a single CONTINUE style
+value), POINT, SELECT (can be handled e.g. by inserting single style values as
+extras). We want to add BAD as a flag (insertion is more difficult because we
+need permanent storage).
 
 Ops
 ---
