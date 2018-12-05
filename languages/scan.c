@@ -85,7 +85,7 @@ void readLines(char *text, char **lines) {
 }
 
 // Split a line into tokens at the spaces.
-static void readTokens(char *line, char **tokens) {
+void readTokens(char *line, char **tokens) {
     while (line[0] == ' ') line++;
     int n = strlen(line) + 1;
     int cn = 0, tn = 0;
@@ -145,7 +145,7 @@ char ***readRules(char *text) {
     while (lines[i] != NULL) {
         rules[i] = malloc(TOKENS * sizeof(char *));
         readTokens(lines[i], rules[i]);
-        i++;
+        if (rules[i][0] != NULL) i++;
     }
     rules[i] = NULL;
     free(lines);
@@ -158,6 +158,22 @@ int search(char **xs, char *s) {
         if (strcmp(xs[i], s) == 0) return i;
     }
     return -1;
+}
+
+// Add a string to a list, returning its position.
+int add(char **xs, char *s) {
+    int i = 0;
+    while (xs[i] != NULL) i++;
+    xs[i] = s;
+    xs[i+1] = NULL;
+    return i;
+}
+
+// Find a string in a list, adding it if necessary.
+int find(char **xs, char *x) {
+    int i = search(xs, x);
+    if (i >= 0) return i;
+    return add(xs, x);
 }
 
 void testReadLines() {
@@ -191,6 +207,9 @@ void testReadTokens() {
     assert(strcmp(tokens[2], "ccc") == 0);
     assert(strcmp(tokens[3], "dddd") == 0);
     assert(tokens[4] == NULL);
+    char text3[] = "";
+    readTokens(text3, tokens);
+    assert(tokens[0] == NULL);
     free(tokens);
 }
 
@@ -225,65 +244,7 @@ int main() {
 }
 
 /*
--------------------------------------------------------------------------------
-// Add a string to a list.
-static void add(strings *xs, char *s) {
-    int n = length(xs);
-    resize(xs, n + 1);
-    S(xs)[n] = s;
-}
-
-// Expand a range x..y into an explicit series of one-character tokens.
-static void expandRange(strings *tokens, char *range) {
-    if (singles[0] == NULL) {
-        for (int i = 0; i < 128; i++) {
-            singleSpace[2*i] = (char) i;
-            singles[i] = &singleSpace[2*i];
-        }
-    }
-    for (int ch = range[0]; ch <= range[3]; ch++) {
-        add(tokens, singles[ch]);
-    }
-}
-
-// Replace __ by _ and _ by space, in place.
-static void unescape(char *token) {
-    int n = strlen(token);
-    int j = 0;
-    for (int i = 0; i < n; i++) {
-        if (token[i] == '_' && token[i+1] == '_') { i++; token[j++] = '_'; }
-        else if (token[i] == '_') token[j++] = ' ';
-        else token[j++] = token[i];
-    }
-    token[j] = '\0';
-}
-
-// Split a line into a sequence of tokens, dealing with underscores,
-// expanding ranges and adding "" for missing actions.
-static void readLine(char *line, strings *tokens) {
-    strings *words = splitWords(line);
-    int n = length(words);
-    for (int i = 0; i < n; i++) {
-        char *word = S(words)[i];
-        unescape(word);
-        if (strlen(word) == 4 && word[1] == '.' && word[2] == '.') {
-            expandRange(tokens, word);
-        }
-        else add(tokens, word);
-    }
-    char *last = S(tokens)[length(tokens) - 1];
-    if (isalpha(last[0])) add(tokens, empty);
-    freeList(words);
-}
-
 // -----------------------------------------------------------------------------
-// Find a string in a list, adding it if necessary.
-int find(strings *xs, char *x) {
-    int i = search(xs, x);
-    if (i >= 0) return i;
-    add(xs, x);
-    return length(xs) - 1;
-}
 
 // Find the state names in a rule.
 static void findStates(strings *tokens, strings *states) {
