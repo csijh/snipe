@@ -4,9 +4,11 @@ start bool break case char const continue default do double else key
 start enum extern false float for goto if inline int long key
 start register restrict return short signed sizeof static struct key
 start switch true typedef union unsigned void volatile while key
-start ## %: %= %> ( ) , -> ... . :> : ; <% <: = ?? ? [ ] { } Sign
-start != ! % && &= & *= * ++ += + -- -= - /= / <<= << <= < == Op
-start >= >>= >> > ^= ^ |= || | ~ Op
+start ( [ { $OPEN start
+start ) ] } $CLOSE start
+start ## %: %= %> , -> ... . :> : ; <% <: = ?? ? $SIGN start
+start != ! % && &= & *= * ++ += + -- -= - /= / <<= << <= < == $OP start
+start >= >>= >> > ^= ^ |= || | ~ $OP start
 start a..z A..Z __ \U \u id
 start /* comment
 start // note
@@ -16,88 +18,67 @@ start ' char
 start " string
 start # hash
 start _ gap
-start _..~ BadText
-start BadText
-
-Comment _ commentGap
-Comment comment
-
-CommentGap comment
-
-Note _ noteGap
-Note note
-
-NoteGap note
-
-IncludeReserved fileGap
-
-FileGap fileStart
+start _..~ $BAD start
+start $BAD start
 
 key a..z A..Z 0..9 id
 key __ \U \u id
-key KEY
+key $KEY start
 
 id a..z A..Z 0..9 id
 id __ \U \u id
-id (                     <FUNCTION ?
-id ID
+id $FUNCTION ( $SIGN start
+id $ID start
 
-comment */ Comment
-comment !..~ comment
-comment Comment
+comment */ $COMMENT start
+comment _..~ comment
+comment $COMMENT comment
 
-commentGap _ commentGap
-commentGap CommentGap
-
-note !..~ note
-note Note
-
-noteGap _ noteGap
-noteGap NoteGap
+note _..~ note
+note $NOTE start
 
 dot 0..9 num
-dot SIGN
+dot $SIGN start
 
 num . 0..9 num
 num e+ e- E+ E- num
 num p+ p- P+ P- num
-num Number
+num $NUMBER start
 
-char ' Char
+char ' $CHAR start
 char \\ char
 char \' char
 char _..~ char
-char BadChar
+char $BAD start
 
-string " String
+string " $STRING start
 string \\ string
 string \" string
 string _..~ string
-string BadString
+string $BAD start
 
 hash _ hash
-hash include IncludeReserved
-hash define elif Reserved
-hash else endif Reserved
-hash error if Reserved
-hash ifdef ifndef Reserved
-hash line pragma Reserved
-hash undef Reserved
-hash Reserved
+hash include $RESERVED fileGap
+hash define elif $RESERVED start
+hash else endif $RESERVED start
+hash error if $RESERVED start
+hash ifdef ifndef $RESERVED start
+hash line pragma $RESERVED start
+hash undef $RESERVED start
+hash $RESERVED start
 
 fileGap _ fileGap
-fileGap FileGap
+fileGap $GAP fileStart
 
 fileStart < file
-fileStart " string
-fileStart BadSring
+fileStart start
 
-file > String
+file > $STRING start
 file _..~ file
-file BadString
+file $BAD start
 
 gap _ gap
-gap Gap
+gap $GAP start
 
 ----------
 x
