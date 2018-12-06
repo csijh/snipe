@@ -58,6 +58,17 @@ void freeScanner(scanner *sc) {
     free(sc);
 }
 
+// ----------------------------------------------------------------------------
+// Read in, tokenize, and normalize a language file into rules.
+
+// Find the length of a NULL-terminated list of pointers.
+int length(void *list) {
+    void **array = (void **) list;
+    int n = 0;
+    while (array[n] != NULL) n++;
+    return n;
+}
+
 // Read a file as a string. Ignore errors.
 char *readFile(char const *path) {
     FILE *file = fopen(path, "rb");
@@ -127,13 +138,37 @@ void makeSingles() {
 
 // Expand a range x..y into an explicit series of one-character tokens.
 void expandRange(char **tokens, int t) {
+    makeSingles();
     char *range = tokens[t];
     int extra = range[3] - range[0];
-    int n = 0;
-    while (tokens[n] != NULL) n++;
+    int n = length(tokens);
     for (int i = n; i > t; i--) tokens[i + extra] = tokens[i];
     for (int ch = range[0]; ch <= range[3]; ch++) {
         tokens[t++] = &singles[2*ch];
+    }
+}
+
+// Deal with attached styles, state:STYLE at the start of a rule and STYLE:state
+// at the end. Expand into two tokens, adding a default style if necessary.
+void detach(char **tokens) {
+    int n = length(tokens);
+    tokens[n+1] = NULL;
+    tokens[n] = tokens[n-1];
+    tokens[n-1] = "?";
+    n++;
+    for (int i = n; i >= 1; i--) tokens[i+1] = tokens[i];
+    tokens[1] = "?";
+    n++;
+    char *p = strchr(tokens[0], ':');
+    if (p != NULL) {
+        tokens[1] = p + 1;
+        *p = '\0';
+    }
+    p = strchr(tokens[n-1], ':');
+    if (p != NULL) {
+        tokens[n-2] = tokens[n-1];
+        tokens[n-1] = p + 1;
+        *p = '\0';
     }
 }
 
@@ -152,21 +187,23 @@ char ***readRules(char *text) {
     return rules;
 }
 
+// ----------------------------------------------------------------------------
+// Collect up all the distinct state names, and distinct pattern strings.
+
 // Search for a string in a list.
-int search(char **xs, char *s) {
-    for (int i = 0; xs[i] != NULL; i++) {
-        if (strcmp(xs[i], s) == 0) return i;
+int search(char **xs, char *x) {
+    for (int i = 0; i < length(xs); i++) {
+        if (strcmp(xs[i], x) == 0) return i;
     }
     return -1;
 }
 
 // Add a string to a list, returning its position.
-int add(char **xs, char *s) {
-    int i = 0;
-    while (xs[i] != NULL) i++;
-    xs[i] = s;
-    xs[i+1] = NULL;
-    return i;
+int add(char **xs, char *x) {
+    int n = length(xs);
+    xs[n] = x;
+    xs[n+1] = NULL;
+    return n;
 }
 
 // Find a string in a list, adding it if necessary.
@@ -176,25 +213,112 @@ int find(char **xs, char *x) {
     return add(xs, x);
 }
 
+// Find all the state names in the rules.
+static void findStates(char ***rules, char **states) {
+    for (int i = 0; i < length(rules); i++) {
+        char **tokens = rules[i];
+        int n = length(tokens);
+        find(states, tokens[0]);
+        find(states, tokens[n-1]);
+    }
+}
+
+// Find all the patterns in the rules.
+static void findPatterns(char ***rules, char **patterns) {
+    for (int i = 0; i < length(rules); i++) {
+        char **tokens = rules[i];
+        int n = length(tokens);
+        for (int j = 2; j < n-2; j++) find(patterns, tokens[i]);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Sort the patterns, with prefixes coming after their parents. Expand the list
+// so that there is an empty string after each run of strings with the same
+// first character.
+
+// Check if string s is a prefix of string t.
+static inline bool prefix(char const *s, char const *t) {
+    return strncmp(s, t, strlen(s)) == 0;
+}
+
+// Compare two strings in ascii order, except prefer longer strings to prefixes.
+static int compare(char *s, char *t) {
+    int c = strcmp(s, t);
+    if (c < 0 && prefix(s, t)) return 1;
+    if (c > 0 && prefix(t, s)) return -1;
+    return c;
+}
+
+// Sort the list of patterns, with the prefix rule.
+void sort(char **patterns) {
+    int n = length(patterns);
+    for (int i = 1; i < n; i++) {
+        char *s = patterns[i];
+        int j = i - 1;
+        while (j >= 0 && compare(patterns[j], s) > 0) {
+            patterns[j + 1] = patterns[j];
+            j--;
+        }
+        patterns[j + 1] = s;
+    }
+}
+
+// Insert an empty pattern string at a given position.
+void insert(char **patterns, int p) {
+    int n = length(patterns);
+    for (int i = n; i >= p; i++) patterns[i+1] = patterns[i];
+    patterns[p] = "";
+}
+
+// Add an empty string after each run of patterns.
+void expand(char **patterns) {
+    int i = 0;
+    while (patterns[i] != NULL) {
+        char start = patterns[i][0];
+        while (patterns[i] != NULL && patterns[i][0] == start) i++;
+        insert(patterns, i);
+        i++;
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Build a scanner from the data gathered so far.
+
+// ----------------------------------------------------------------------------
+// Test.
+
+// Check that a list of strings matches a space separated string.
+bool check(char **list, char *s) {
+    char **strings = malloc(PATTERNS * sizeof(char *));
+    char s2[strlen(s)+1];
+    strcpy(s2, s);
+    readTokens(s2, strings);
+    if (length(list) != length(strings)) return false;
+    for (int i = 0; i < length(list); i++) {
+        if (strcmp(list[i], strings[i]) != 0) return false;
+    }
+    return true;
+}
+
 void testReadLines() {
     char **lines = malloc(LINES * sizeof(char *));
     char text[] = "abc\ndef\n";
     readLines(text, lines);
-    assert(strcmp(lines[0], "abc") == 0);
-    assert(strcmp(lines[1], "def") == 0);
-    assert(lines[2] == NULL);
+    check(lines, "abc def");
     char text2[] = "abc\r\ndef\r\n";
     readLines(text2, lines);
-    assert(strcmp(lines[0], "abc") == 0);
-    assert(strcmp(lines[1], "def") == 0);
-    assert(lines[2] == NULL);
+    check(lines, "abc def");
     free(lines);
 }
 
 void testReadTokens() {
     char **tokens = malloc(TOKENS * sizeof(char *));
-    char text[] = "a bb ccc dddd";
+    char text[] = "";
     readTokens(text, tokens);
+    assert(tokens[0] == NULL);
+    char text1[] = "a bb ccc dddd";
+    readTokens(text1, tokens);
     assert(strcmp(tokens[0], "a") == 0);
     assert(strcmp(tokens[1], "bb") == 0);
     assert(strcmp(tokens[2], "ccc") == 0);
@@ -202,14 +326,7 @@ void testReadTokens() {
     assert(tokens[4] == NULL);
     char text2[] = " a   bb  ccc      dddd   ";
     readTokens(text2, tokens);
-    assert(strcmp(tokens[0], "a") == 0);
-    assert(strcmp(tokens[1], "bb") == 0);
-    assert(strcmp(tokens[2], "ccc") == 0);
-    assert(strcmp(tokens[3], "dddd") == 0);
-    assert(tokens[4] == NULL);
-    char text3[] = "";
-    readTokens(text3, tokens);
-    assert(tokens[0] == NULL);
+    check(tokens, "a bb ccc dddd");
     free(tokens);
 }
 
@@ -226,66 +343,52 @@ void testExpandRange() {
     assert(! isRange(tokens[0]));
     assert(isRange(tokens[1]));
     expandRange(tokens, 1);
-    assert(strcmp(tokens[0], "s") == 0);
-    assert(strcmp(tokens[1], "a") == 0);
-    assert(strcmp(tokens[2], "b") == 0);
-    assert(strcmp(tokens[3], "c") == 0);
-    assert(strcmp(tokens[4], "t") == 0);
-    assert(tokens[5] == NULL);
+    check(tokens, "s a b c t");
     free(tokens);
 }
 
+void testDetach() {
+    char **tokens = malloc(TOKENS * sizeof(char *));
+    char line[] = "s t";
+    readTokens(line, tokens);
+    detach(tokens);
+    check(tokens, "s ? ? t");
+    char line2[] = "s:X t";
+    readTokens(line2, tokens);
+    detach(tokens);
+    assert(strcmp(tokens[0], "s") == 0);
+    assert(strcmp(tokens[1], "X") == 0);
+    assert(strcmp(tokens[2], "?") == 0);
+    assert(strcmp(tokens[3], "t") == 0);
+    assert(tokens[4] == NULL);
+    char line3[] = "s X:t";
+    readTokens(line3, tokens);
+    detach(tokens);
+    assert(strcmp(tokens[0], "s") == 0);
+    assert(strcmp(tokens[1], "?") == 0);
+    assert(strcmp(tokens[2], "X") == 0);
+    assert(strcmp(tokens[3], "t") == 0);
+    assert(tokens[4] == NULL);
+    free(tokens);
+}
+
+void testSort() {
+    char **patterns = malloc(PATTERNS * sizeof(char *));
+    char line[] = "s a..c t";
+    readTokens(line, patterns);
+
+    free(patterns);
+}
 int main() {
-    makeSingles();
     testReadLines();
     testReadTokens();
     testUnescape();
     testExpandRange();
+    testDetach();
+    testSort();
 }
 
 /*
-// -----------------------------------------------------------------------------
-
-// Find the state names in a rule.
-static void findStates(strings *tokens, strings *states) {
-    find(states, S(tokens)[0]);
-    find(states, S(tokens)[length(tokens) - 2]);
-}
-
-// Find the patterns in a rule.
-static void findPatterns(strings *tokens, strings *patterns) {
-    int n = length(tokens);
-    for (int i = 1; i < n - 2; i++) find(patterns, S(tokens)[i]);
-}
-
-// -----------------------------------------------------------------------------
-// Check if string s is a prefix of string t.
-static inline bool prefix(char const *s, char const *t) {
-    return strncmp(s, t, strlen(s)) == 0;
-}
-
-// Compare two strings in ascii order, except prefer longer strings.
-static int compare(char *s, char *t) {
-    int c = strcmp(s, t);
-    if (c < 0 && prefix(s, t)) return 1;
-    if (c > 0 && prefix(t, s)) return -1;
-    return c;
-}
-
-// Sort the list of patterns, with longer patterns preferred.
-static void sort(strings *patterns) {
-    int n = length(patterns);
-    for (int i = 1; i < n; i++) {
-        char *s = S(patterns)[i];
-        int j = i - 1;
-        while (j >= 0 && compare(S(patterns)[j], s) > 0) {
-            S(patterns)[j + 1] = S(patterns)[j];
-            j--;
-        }
-        S(patterns)[j + 1] = s;
-    }
-}
-
 // -----------------------------------------------------------------------------
 // Create the list of style names.
 static strings *makeStyles() {

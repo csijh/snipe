@@ -4,11 +4,11 @@ start bool break case char const continue default do double else key
 start enum extern false float for goto if inline int long key
 start register restrict return short signed sizeof static struct key
 start switch true typedef union unsigned void volatile while key
-start ( [ { $OPEN start
-start ) ] } $CLOSE start
-start ## %: %= %> , -> ... . :> : ; <% <: = ?? ? $SIGN start
-start != ! % && &= & *= * ++ += + -- -= - /= / <<= << <= < == $OP start
-start >= >>= >> > ^= ^ |= || | ~ $OP start
+start ( [ { OPEN:start
+start ) ] } CLOSE:start
+start ## %: %= %> , -> ... . :> : ; <% <: = ?? ? SIGN:start
+start != ! % && &= & *= * ++ += + -- -= - /= / <<= << <= < == OP:start
+start >= >>= >> > ^= ^ |= || | ~ OP:start
 start a..z A..Z __ \U \u id
 start /* comment
 start // note
@@ -18,67 +18,67 @@ start ' char
 start " string
 start # hash
 start _ gap
-start _..~ $BAD start
-start $BAD start
+start _..~ BAD:start
+start BAD:start
 
 key a..z A..Z 0..9 id
 key __ \U \u id
-key $KEY start
+key KEY:start
 
 id a..z A..Z 0..9 id
 id __ \U \u id
-id $FUNCTION ( $SIGN start
-id $ID start
+id:FUNCTION ( SIGN:start
+id ID:start
 
-comment */ $COMMENT start
+comment */ COMMENT:start
 comment _..~ comment
-comment $COMMENT comment
+comment COMMENT:comment
 
 note _..~ note
-note $NOTE start
+note NOTE:start
 
 dot 0..9 num
-dot $SIGN start
+dot SIGN:start
 
 num . 0..9 num
 num e+ e- E+ E- num
 num p+ p- P+ P- num
-num $NUMBER start
+num NUMBER:start
 
-char ' $CHAR start
+char ' CHAR:start
 char \\ char
 char \' char
 char _..~ char
-char $BAD start
+char BAD:start
 
-string " $STRING start
+string " STRING:start
 string \\ string
 string \" string
 string _..~ string
-string $BAD start
+string BAD:start
 
 hash _ hash
-hash include $RESERVED fileGap
-hash define elif $RESERVED start
-hash else endif $RESERVED start
-hash error if $RESERVED start
-hash ifdef ifndef $RESERVED start
-hash line pragma $RESERVED start
-hash undef $RESERVED start
-hash $RESERVED start
+hash include RESERVED:fileGap
+hash define elif RESERVED:start
+hash else endif RESERVED:start
+hash error if RESERVED:start
+hash ifdef ifndef RESERVED:start
+hash line pragma RESERVED:start
+hash undef RESERVED:start
+hash RESERVED:start
 
 fileGap _ fileGap
-fileGap $GAP fileStart
+fileGap GAP:fileStart
 
 fileStart < file
 fileStart start
 
-file > $STRING start
+file > STRING:start
 file _..~ file
-file $BAD start
+file BAD:start
 
 gap _ gap
-gap $GAP start
+gap GAP:start
 
 ----------
 x
