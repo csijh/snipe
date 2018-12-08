@@ -3,6 +3,23 @@ Scan
 POSSIBLE: pre-compute the tables from the file we have now, making a dynamically
 loadable binary data file.
 
+CONTEXT-FREE: Don't create long tokens. For example a line '// One two' becomes
+Note '//', Id 'One', Id 'two'. A multi-line comment becomes Comment '/*' Id
+'One', and so on. A string '"*/"' becomes String '"', Comment '*/', String '"'.
+There are separate token types for one-line constructs (Note, String) and
+multi-line constructs (Comment, Para). Multi-line constructs become part of the
+bracket matching phase. First, multi-line comment openers and closers are
+matched. That's used to mark each line as starting or ending in an unclosed
+multi-line comment. And that can be used to interpret tokens 'within' a comment
+as comment-coloured, or within a string as string-coloured, as each line is sent
+to be displayed. Need to make sure that monstrosities such as this cause no
+problems:
+
+/* x
+// */ y /*
+" */ // "
+...{ */ }...    What does this do to openers and closers? Treat as 2 lines.
+
 PROPOSE
 a) Store line-boundary scan state in lines
 b) Simplify comments by basing "word-based" ops on tokens OR spaces

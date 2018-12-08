@@ -1,17 +1,11 @@
 // The Snipe editor is free and open source, see licence.txt.
-// Standalone scanner to test language definitions.
+// Standalone scanner to test and compile language definitions.
 #include "../src/style.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
-//#include <stdint.h>
-//#include <stddef.h>
 #include <string.h>
-//#include <ctype.h>
 #include <assert.h>
-
-// Maximum sizes supported. Increase as necessary.
-enum { STATES = 500, PATTERNS = 1024, TEXT = 32768, TOKENS = 400, LINES = 200 };
 
 // An action has a target state and two token styles, one to terminate the
 // current token before the pattern currently being matched, and one after. A
@@ -41,11 +35,13 @@ typedef struct scanner scanner;
 
 scanner *newScanner() {
     scanner *sc = calloc(sizeof(scanner), 1);
+    /*
     sc->table = malloc(STATES * PATTERNS *sizeof(action));
     sc->patterns = malloc(128 * sizeof(short));
     sc->offsets = malloc(128 * sizeof(short));
     sc->text = malloc(TEXT);
     sc->states = malloc(STATES * sizeof(char *));
+    */
     return sc;
 }
 
@@ -59,15 +55,56 @@ void freeScanner(scanner *sc) {
 }
 
 // ----------------------------------------------------------------------------
-// Read in, tokenize, and normalize a language file into rules.
+// Implement lists as variable length arrays, preceded by size info.
 
-// Find the length of a NULL-terminated list of pointers.
-int length(void *list) {
-    void **array = (void **) list;
-    int n = 0;
-    while (array[n] != NULL) n++;
-    return n;
+// Ths stride is the size of each item, and pad makes the structure 16 bytes.
+struct list { int stride, capacity, length, pad; };
+typedef struct list list;
+
+void *newList(int stride) {
+    assert(sizeof(list) % sizeof(void *) == 0);
+    list *l = malloc(sizeof(list) + 24 * stride);
+    *l = (list) { stride, 24, 0 };
+    return l + 1;
 }
+
+void freeList(void *xs) { free(((list *)xs - 1)); }
+
+// Ensure space for n more items.
+void *ensure(void *xs, int n) {
+    list *l = ((list *)xs - 1);
+    if (l->length + n <= l->capacity) return xs;
+    while (l->length + n > l->capacity) l->capacity *= 2;
+    l = realloc(l, sizeof(list) + l->capacity * l->stride);
+    return l + 1;
+}
+
+int capacity(void *xs) { return ((list *)xs - 1)->capacity; }
+
+int length(void *xs) { return ((list *)xs - 1)->length; }
+
+void *addLength(void *xs, int n) {
+    xs = ensure(xs, n);
+    ((list *)xs - 1)->length += n;
+    return xs;
+}
+
+char **addString(char **xs, char *x) {
+    xs = ensure(xs, 1);
+    xs[length(xs)] = x;
+    addLength(xs, 1);
+    return xs;
+}
+
+char ***addRule(char ***xs, char **x) {
+    xs = ensure(xs, 1);
+    xs[length(xs)] = x;
+    addLength(xs, 1);
+    return xs;
+}
+
+// ----------------------------------------------------------------------------
+// Read in, tokenize, and normalize a language file into rules.
 
 // Read a file as a string. Ignore errors.
 char *readFile(char const *path) {
@@ -83,31 +120,33 @@ char *readFile(char const *path) {
 }
 
 // Split the text into lines.
-void readLines(char *text, char **lines) {
-    int cn = 0, ln = 0;
+char **readLines(char *text) {
+    char **lines = newList(sizeof(char *));
+    int cn = 0;
     for (int i = 0; text[i] != '\0'; i++) {
         if (text[i] != '\r' && text[i] != '\n') continue;
         text[i] = '\0';
         if (text[i+1] == '\n') i++;
-        lines[ln++] = &text[cn];
+        addString(lines, &text[cn]);
         cn = i + 1;
     }
-    lines[ln] = NULL;
+    return lines;
 }
 
 // Split a line into tokens at the spaces.
-void readTokens(char *line, char **tokens) {
+char **readTokens(char *line) {
+    char **tokens = newList(sizeof(char *));
     while (line[0] == ' ') line++;
     int n = strlen(line) + 1;
-    int cn = 0, tn = 0;
+    int cn = 0;
     for (int i = 0; i < n; i++) {
         if (line[i] != ' ' && line[i] != '\0') continue;
         line[i] = '\0';
-        if (line[cn] != '\0') tokens[tn++] = &line[cn];
-        while (line[i+1] == ' ') i++;
+        if (line[cn] != '\0') tokens = addString(tokens, &line[cn]);
+        while (i < n-1 && line[i+1] == ' ') i++;
         cn = i + 1;
     }
-    tokens[tn] = NULL;
+    return tokens;
 }
 
 // Replace __ by _ and _ by space in a token, in place.
@@ -142,7 +181,8 @@ void expandRange(char **tokens, int t) {
     char *range = tokens[t];
     int extra = range[3] - range[0];
     int n = length(tokens);
-    for (int i = n; i > t; i--) tokens[i + extra] = tokens[i];
+    tokens = addLength(tokens, extra);
+    for (int i = n-1; i > t; i--) tokens[i + extra] = tokens[i];
     for (int ch = range[0]; ch <= range[3]; ch++) {
         tokens[t++] = &singles[2*ch];
     }
@@ -152,38 +192,33 @@ void expandRange(char **tokens, int t) {
 // at the end. Expand into two tokens, adding a default style if necessary.
 void detach(char **tokens) {
     int n = length(tokens);
-    tokens[n+1] = NULL;
-    tokens[n] = tokens[n-1];
-    tokens[n-1] = "?";
-    n++;
-    for (int i = n; i >= 1; i--) tokens[i+1] = tokens[i];
+    tokens = addLength(tokens, 2);
+    tokens[n+1] = tokens[n-1];
+    tokens[n] = "?";
+    for (int i = n-2; i >= 1; i--) tokens[i+1] = tokens[i];
     tokens[1] = "?";
-    n++;
     char *p = strchr(tokens[0], ':');
     if (p != NULL) {
         tokens[1] = p + 1;
         *p = '\0';
     }
-    p = strchr(tokens[n-1], ':');
+    p = strchr(tokens[n+1], ':');
     if (p != NULL) {
-        tokens[n-2] = tokens[n-1];
-        tokens[n-1] = p + 1;
+        tokens[n] = tokens[n-1];
+        tokens[n+1] = p + 1;
         *p = '\0';
     }
 }
 
 char ***readRules(char *text) {
-    char **lines = malloc(LINES * sizeof(char *));
-    readLines(text, lines);
-    char ***rules = malloc(LINES * sizeof(char **));
-    int i = 0;
-    while (lines[i] != NULL) {
-        rules[i] = malloc(TOKENS * sizeof(char *));
-        readTokens(lines[i], rules[i]);
-        if (rules[i][0] != NULL) i++;
+    char **lines = readLines(text);
+    char ***rules = newList(sizeof(char **));
+    for (int i=0; i<length(lines); i++) {
+        char **tokens = readTokens(lines[i]);
+        if (length(tokens) == 0) continue;
+        rules = addRule(rules, tokens);
     }
-    rules[i] = NULL;
-    free(lines);
+    freeList(lines);
     return rules;
 }
 
@@ -198,19 +233,13 @@ int search(char **xs, char *x) {
     return -1;
 }
 
-// Add a string to a list, returning its position.
-int add(char **xs, char *x) {
-    int n = length(xs);
-    xs[n] = x;
-    xs[n+1] = NULL;
-    return n;
-}
-
 // Find a string in a list, adding it if necessary.
-int find(char **xs, char *x) {
+char **find(char **xs, char *x) {
     int i = search(xs, x);
-    if (i >= 0) return i;
-    return add(xs, x);
+    if (i >= 0) return xs;
+    xs = addLength(xs, 1);
+    xs[length(xs) - 1] = x;
+    return xs;
 }
 
 // Find all the state names in the rules.
@@ -265,20 +294,22 @@ void sort(char **patterns) {
 }
 
 // Insert an empty pattern string at a given position.
-void insert(char **patterns, int p) {
+char **insertEmpty(char **patterns, int p) {
     int n = length(patterns);
-    for (int i = n; i >= p; i++) patterns[i+1] = patterns[i];
+    patterns = addLength(patterns, 1);
+    for (int i = n; i >= p; i--) patterns[i+1] = patterns[i];
     patterns[p] = "";
+    return patterns;
 }
 
 // Add an empty string after each run of patterns.
 void expand(char **patterns) {
-    int i = 0;
-    while (patterns[i] != NULL) {
+    int n = length(patterns);
+    for (int i = 0; i < n; i++) {
         char start = patterns[i][0];
-        while (patterns[i] != NULL && patterns[i][0] == start) i++;
-        insert(patterns, i);
+        patterns = insertEmpty(patterns, i);
         i++;
+        while (i < n && patterns[i][0] == start) i++;
     }
 }
 
@@ -290,44 +321,46 @@ void expand(char **patterns) {
 
 // Check that a list of strings matches a space separated string.
 bool check(char **list, char *s) {
-    char **strings = malloc(PATTERNS * sizeof(char *));
     char s2[strlen(s)+1];
     strcpy(s2, s);
-    readTokens(s2, strings);
-    if (length(list) != length(strings)) return false;
-    for (int i = 0; i < length(list); i++) {
-        if (strcmp(list[i], strings[i]) != 0) return false;
+    char **strings = readTokens(s2);
+    bool ok = true;
+    if (length(list) != length(strings)) ok = false;
+    else for (int i = 0; i < length(list); i++) {
+        if (strcmp(list[i], strings[i]) != 0) ok = false;
     }
-    return true;
+    freeList(strings);
+    return ok;
 }
 
 void testReadLines() {
-    char **lines = malloc(LINES * sizeof(char *));
     char text[] = "abc\ndef\n";
-    readLines(text, lines);
+    char **lines = readLines(text);
     check(lines, "abc def");
+    freeList(lines);
     char text2[] = "abc\r\ndef\r\n";
-    readLines(text2, lines);
+    lines = readLines(text2);
     check(lines, "abc def");
-    free(lines);
+    freeList(lines);
 }
 
 void testReadTokens() {
-    char **tokens = malloc(TOKENS * sizeof(char *));
     char text[] = "";
-    readTokens(text, tokens);
-    assert(tokens[0] == NULL);
+    char **tokens = readTokens(text);
+    assert(length(tokens) == 0);
+    freeList(tokens);
     char text1[] = "a bb ccc dddd";
-    readTokens(text1, tokens);
+    tokens = readTokens(text1);
+    assert(length(tokens) == 4);
     assert(strcmp(tokens[0], "a") == 0);
     assert(strcmp(tokens[1], "bb") == 0);
     assert(strcmp(tokens[2], "ccc") == 0);
     assert(strcmp(tokens[3], "dddd") == 0);
-    assert(tokens[4] == NULL);
+    freeList(tokens);
     char text2[] = " a   bb  ccc      dddd   ";
-    readTokens(text2, tokens);
+    tokens = readTokens(text2);
     check(tokens, "a bb ccc dddd");
-    free(tokens);
+    freeList(tokens);
 }
 
 void testUnescape() {
@@ -337,48 +370,42 @@ void testUnescape() {
 }
 
 void testExpandRange() {
-    char **tokens = malloc(TOKENS * sizeof(char *));
     char line[] = "s a..c t";
-    readTokens(line, tokens);
+    char **tokens = readTokens(line);
     assert(! isRange(tokens[0]));
     assert(isRange(tokens[1]));
     expandRange(tokens, 1);
     check(tokens, "s a b c t");
-    free(tokens);
+    freeList(tokens);
 }
 
 void testDetach() {
-    char **tokens = malloc(TOKENS * sizeof(char *));
     char line[] = "s t";
-    readTokens(line, tokens);
+    char **tokens = readTokens(line);
     detach(tokens);
     check(tokens, "s ? ? t");
     char line2[] = "s:X t";
-    readTokens(line2, tokens);
+    freeList(tokens);
+    tokens = readTokens(line2);
     detach(tokens);
-    assert(strcmp(tokens[0], "s") == 0);
-    assert(strcmp(tokens[1], "X") == 0);
-    assert(strcmp(tokens[2], "?") == 0);
-    assert(strcmp(tokens[3], "t") == 0);
-    assert(tokens[4] == NULL);
+    check(tokens, "s X ? t");
+    freeList(tokens);
     char line3[] = "s X:t";
-    readTokens(line3, tokens);
+    tokens = readTokens(line3);
     detach(tokens);
-    assert(strcmp(tokens[0], "s") == 0);
-    assert(strcmp(tokens[1], "?") == 0);
-    assert(strcmp(tokens[2], "X") == 0);
-    assert(strcmp(tokens[3], "t") == 0);
-    assert(tokens[4] == NULL);
-    free(tokens);
+    check(tokens, "s ? X t");
+    freeList(tokens);
 }
 
 void testSort() {
-    char **patterns = malloc(PATTERNS * sizeof(char *));
-    char line[] = "s a..c t";
-    readTokens(line, patterns);
-
-    free(patterns);
+    char line[] = "s a b aa c ba ccc sx";
+    char **patterns = readTokens(line);
+    sort(patterns);
+    check(patterns, "aa a ba b ccc c sx s");
+    expand(patterns);
+    freeList(patterns);
 }
+
 int main() {
     testReadLines();
     testReadTokens();

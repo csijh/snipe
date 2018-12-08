@@ -10,12 +10,13 @@ start ## %: %= %> , -> ... . :> : ; <% <: = ?? ? SIGN:start
 start != ! % && &= & *= * ++ += + -- -= - /= / <<= << <= < == OP:start
 start >= >>= >> > ^= ^ |= || | ~ OP:start
 start a..z A..Z __ \U \u id
-start /* comment
-start // note
+start /* */ COMMENT:start
+start // NOTE:start
 start . dot
 start 0..9 num
 start ' char
-start " string
+start " STRING:start
+start \ escape
 start # hash
 start _ gap
 start _..~ BAD:start
@@ -27,15 +28,7 @@ key KEY:start
 
 id a..z A..Z 0..9 id
 id __ \U \u id
-id:FUNCTION ( SIGN:start
 id ID:start
-
-comment */ COMMENT:start
-comment _..~ comment
-comment COMMENT:comment
-
-note _..~ note
-note NOTE:start
 
 dot 0..9 num
 dot SIGN:start
@@ -51,14 +44,10 @@ char \' char
 char _..~ char
 char BAD:start
 
-string " STRING:start
-string \\ string
-string \" string
-string _..~ string
-string BAD:start
+escape _..~ ESCAPE:start
 
 hash _ hash
-hash include RESERVED:fileGap
+hash include RESERVED:includeGap
 hash define elif RESERVED:start
 hash else endif RESERVED:start
 hash error if RESERVED:start
@@ -67,8 +56,8 @@ hash line pragma RESERVED:start
 hash undef RESERVED:start
 hash RESERVED:start
 
-fileGap _ fileGap
-fileGap GAP:fileStart
+includeGap _ includeGap
+includeGap GAP:fileStart
 
 fileStart < file
 fileStart start
@@ -79,19 +68,3 @@ file BAD:start
 
 gap _ gap
 gap GAP:start
-
-----------
-x
-I
-xy, z
-IiSGI
-int x;
-KkkGIS
-intx;
-IiiiS
-// A note
-NnGNGNnnn
-/* A multi-line
-CcGCGCccccccccc
-comment */
-CccccccGCc
