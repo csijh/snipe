@@ -4,67 +4,67 @@ start bool break case char const continue default do double else key
 start enum extern false float for goto if inline int long key
 start register restrict return short signed sizeof static struct key
 start switch true typedef union unsigned void volatile while key
-start ( [ { OPEN:start
-start ) ] } CLOSE:start
-start ## %: %= %> , -> ... . :> : ; <% <: = ?? ? SIGN:start
-start != ! % && &= & *= * ++ += + -- -= - /= / <<= << <= < == OP:start
-start >= >>= >> > ^= ^ |= || | ~ OP:start
+start ( [ { Open:start
+start ) ] } Close:start
+start ## %: %= %> , -> ... . :> : ; <% <: = ?? ? Sign:start
+start != ! % && &= & *= * ++ += + -- -= - /= / <<= << <= < == Op:start
+start >= >>= >> > ^= ^ |= || | ~ Op:start
 start a..z A..Z __ \U \u id
-start /* */ COMMENT:start
-start // NOTE:start
+start /* */ Comment:start
+start // Note:start
 start . dot
 start 0..9 num
 start ' char
-start " STRING:start
+start " String:start
 start \ escape
 start # hash
 start _ gap
-start _..~ BAD:start
-start BAD:start
+start _..~ BadText:start
+start BadText:start
 
 key a..z A..Z 0..9 id
 key __ \U \u id
-key KEY:start
+key Key:start
 
 id a..z A..Z 0..9 id
 id __ \U \u id
-id ID:start
+id Id:start
 
 dot 0..9 num
-dot SIGN:start
+dot Sign:start
 
 num . 0..9 num
 num e+ e- E+ E- num
 num p+ p- P+ P- num
-num NUMBER:start
+num Number:start
 
-char ' CHAR:start
+char ' Char:start
 char \\ char
 char \' char
 char _..~ char
-char BAD:start
+char BadChar:start
 
-escape _..~ ESCAPE:start
+escape _..~ Escape:start
 
 hash _ hash
-hash include RESERVED:includeGap
-hash define elif RESERVED:start
-hash else endif RESERVED:start
-hash error if RESERVED:start
-hash ifdef ifndef RESERVED:start
-hash line pragma RESERVED:start
-hash undef RESERVED:start
-hash RESERVED:start
+hash include Reserved:includeGap
+hash define elif Reserved:start
+hash else endif Reserved:start
+hash error if Reserved:start
+hash ifdef ifndef Reserved:start
+hash line pragma Reserved:start
+hash undef Reserved:start
+hash Reserved:start
 
 includeGap _ includeGap
-includeGap GAP:fileStart
+includeGap Gap:fileStart
 
 fileStart < file
 fileStart start
 
-file > STRING:start
+file > String:start
 file _..~ file
-file BAD:start
+file BadString:start
 
 gap _ gap
-gap GAP:start
+gap Gap:start

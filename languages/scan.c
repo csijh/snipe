@@ -18,17 +18,18 @@ typedef struct action action;
 // A scanner has a table of actions indexed by state and pattern number. It has
 // a patterns array of length 128 containing the pattern number of the patterns
 // which start with a particular ASCII character. It has an offsets array of
-// length 128 containing the corresponding offsets into the text. It has a text
-// array containing the patterns, each preceded by its length in one byte. The
-// patterns are sorted, longest first where one is prefix of the other, and the
-// patterns starting with each character are followed by an empty pattern to act
-// as a default. For tracing, there is also an array of state names.
+// length 128 containing the corresponding offsets into the symbols. It has a
+// symbols array containing the text of the patterns, each preceded by its
+// length in one byte. The patterns are sorted, longest first where one is a
+// prefix of the other, and the patterns starting with each character are
+// followed by an empty pattern to act as a default. For tracing, there is also
+// an array of state names.
 struct scanner {
     int nStates, nPatterns;
     action *table;
     short *patterns;
     short *offsets;
-    char *text;
+    char *symbols;
     char **states;
 };
 typedef struct scanner scanner;
@@ -39,7 +40,7 @@ scanner *newScanner() {
     sc->table = malloc(STATES * PATTERNS *sizeof(action));
     sc->patterns = malloc(128 * sizeof(short));
     sc->offsets = malloc(128 * sizeof(short));
-    sc->text = malloc(TEXT);
+    sc->symbols = malloc(TEXT);
     sc->states = malloc(STATES * sizeof(char *));
     */
     return sc;
@@ -49,7 +50,7 @@ void freeScanner(scanner *sc) {
     free(sc->table);
     free(sc->patterns);
     free(sc->offsets);
-    free(sc->text);
+    free(sc->symbols);
     free(sc->states);
     free(sc);
 }
@@ -57,7 +58,7 @@ void freeScanner(scanner *sc) {
 // ----------------------------------------------------------------------------
 // Implement lists as variable length arrays, preceded by size info.
 
-// Ths stride is the size of each item, and pad makes the structure 16 bytes.
+// Ths stride is the item size. Pad makes the structure a multiple of 8 bytes.
 struct list { int stride, capacity, length, pad; };
 typedef struct list list;
 
@@ -243,13 +244,15 @@ char **find(char **xs, char *x) {
 }
 
 // Find all the state names in the rules.
-static void findStates(char ***rules, char **states) {
+static char **findStates(char ***rules) {
+    char **states = newList(sizeof(char *));
     for (int i = 0; i < length(rules); i++) {
         char **tokens = rules[i];
         int n = length(tokens);
         find(states, tokens[0]);
         find(states, tokens[n-1]);
     }
+    return states;
 }
 
 // Find all the patterns in the rules.
@@ -313,13 +316,40 @@ void expand(char **patterns) {
     }
 }
 
+// Convert the patterns into a symbols array.
+char *symbolize(char **patterns) {
+    char *symbols = newList(sizeof(char));
+    int n = length(patterns);
+    for (int i = 0; i < n; i++) {
+        char *pattern = patterns[i];
+        int len = strlen(pattern);
+        assert(len < 128);
+        int k = length(symbols);
+        addLength(symbols, len + 1);
+        symbols[len++] = len;
+        for (int i = 0; i < len; i++) symbols[len++] = pattern[i];
+    }
+}
+
 // ----------------------------------------------------------------------------
 // Build a scanner from the data gathered so far.
+
+scanner *build(char const *path) {
+    char *text = readFile(path);
+    char ***rules = readRules(text);
+    char **states = findStates(rules);
+    char **patterns = findPatterns(rules);
+    sort(patterns);
+    expand(patterns);
+    sc->nStates = length(states);
+    sc->nPatterns = length(patterns);
+}
 
 // ----------------------------------------------------------------------------
 // Test.
 
-// Check that a list of strings matches a space separated string.
+// Check that a list of strings matches a space separated string. An empty
+// string in the list is represented as a question mark in the string.
 bool check(char **list, char *s) {
     char s2[strlen(s)+1];
     strcpy(s2, s);
@@ -327,7 +357,8 @@ bool check(char **list, char *s) {
     bool ok = true;
     if (length(list) != length(strings)) ok = false;
     else for (int i = 0; i < length(list); i++) {
-        if (strcmp(list[i], strings[i]) != 0) ok = false;
+        if (list[i][0] == '\0' && strings[i][0] == '?') { }
+        else if (strcmp(list[i], strings[i]) != 0) ok = false;
     }
     freeList(strings);
     return ok;
@@ -403,6 +434,7 @@ void testSort() {
     sort(patterns);
     check(patterns, "aa a ba b ccc c sx s");
     expand(patterns);
+    check(patterns, "aa a ? ba b ? ccc c ? sx s ?");
     freeList(patterns);
 }
 

@@ -1,3 +1,47 @@
+Styles
+
+    More,         // continuation of same token
+    Point,        // text caret
+    Select,       // selection (toggle?)
+    Gap,          // spaces
+    Word,         // default text
+    Name,         // word forming a name
+    Id,           // identifier
+    Variable,     // variable name
+    Field,        // field name, e.g. following '.'
+    Function,     // function name, e.g. followed by '('
+    Key,          // keyword
+    Reserved,     // reserved word
+    Property,     // property
+    Type,         // type name
+    Sign,         // key symbol or punctuation
+    BadSign,
+    Open,
+    BadOpen,
+    Close,
+    BadClose,
+    Label,        // colon or other indication of a label
+    Op,           // operator
+    BadOp,
+    Number,       // numerical literal
+    BadNumber,
+    String,       // quoted string literal
+    BadString,
+    Paragraph,
+    BadParagraph,
+    Char,         // quoted character literal, default colour STRING
+    BadChar,
+    Escape,
+    BadEscape,
+    Comment,      // multi-line comment (not nested)
+    BadComment,
+    NestComment,
+    BadNextComment,
+    Note,         // one-line comment, default colour COMMENT
+    BadText,
+    CountStyles
+
+
 Scan
 ----
 POSSIBLE: pre-compute the tables from the file we have now, making a dynamically
