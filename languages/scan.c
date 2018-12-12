@@ -16,7 +16,7 @@ struct action { short target; style before, after; };
 typedef struct action action;
 
 // A scanner has a table of actions indexed by state and pattern number. It has
-// a patterns array of length 128 containing the pattern number of the patterns
+// an indexes array of length 128 containing the pattern number of the patterns
 // which start with a particular ASCII character. It has an offsets array of
 // length 128 containing the corresponding offsets into the symbols. It has a
 // symbols array containing the text of the patterns, each preceded by its
@@ -27,7 +27,7 @@ typedef struct action action;
 struct scanner {
     int nStates, nPatterns;
     action *table;
-    short *patterns;
+    short *indexes;
     short *offsets;
     char *symbols;
     char **states;
@@ -38,7 +38,7 @@ scanner *newScanner() {
     scanner *sc = calloc(sizeof(scanner), 1);
     /*
     sc->table = malloc(STATES * PATTERNS *sizeof(action));
-    sc->patterns = malloc(128 * sizeof(short));
+    sc->indexes = malloc(128 * sizeof(short));
     sc->offsets = malloc(128 * sizeof(short));
     sc->symbols = malloc(TEXT);
     sc->states = malloc(STATES * sizeof(char *));
@@ -48,7 +48,7 @@ scanner *newScanner() {
 
 void freeScanner(scanner *sc) {
     free(sc->table);
-    free(sc->patterns);
+    free(sc->indexes);
     free(sc->offsets);
     free(sc->symbols);
     free(sc->states);
@@ -195,9 +195,9 @@ void detach(char **tokens) {
     int n = length(tokens);
     tokens = addLength(tokens, 2);
     tokens[n+1] = tokens[n-1];
-    tokens[n] = "?";
+    tokens[n] = "";
     for (int i = n-2; i >= 1; i--) tokens[i+1] = tokens[i];
-    tokens[1] = "?";
+    tokens[1] = "";
     char *p = strchr(tokens[0], ':');
     if (p != NULL) {
         tokens[1] = p + 1;
@@ -205,7 +205,7 @@ void detach(char **tokens) {
     }
     p = strchr(tokens[n+1], ':');
     if (p != NULL) {
-        tokens[n] = tokens[n-1];
+        tokens[n] = tokens[n+1];
         tokens[n+1] = p + 1;
         *p = '\0';
     }
@@ -256,12 +256,14 @@ static char **findStates(char ***rules) {
 }
 
 // Find all the patterns in the rules.
-static void findPatterns(char ***rules, char **patterns) {
+static char **findPatterns(char ***rules) {
+    char **patterns = newList(sizeof(char *));
     for (int i = 0; i < length(rules); i++) {
         char **tokens = rules[i];
         int n = length(tokens);
         for (int j = 2; j < n-2; j++) find(patterns, tokens[i]);
     }
+    return patterns;
 }
 
 // -----------------------------------------------------------------------------
@@ -305,17 +307,22 @@ char **insertEmpty(char **patterns, int p) {
     return patterns;
 }
 
-// Add an empty string after each run of patterns.
+// Add an empty string when the first character of the patterns changes.
 void expand(char **patterns) {
-    int n = length(patterns);
-    for (int i = 0; i < n; i++) {
+    int i = 0;
+    while (i < length(patterns)) {
         char start = patterns[i][0];
         patterns = insertEmpty(patterns, i);
         i++;
-        while (i < n && patterns[i][0] == start) i++;
+        while (i < length(patterns) && patterns[i][0] == start) i++;
     }
+    patterns = addString(patterns, "");
 }
 
+// ----------------------------------------------------------------------------
+// Build an action table from the rules and patterns.
+
+/*
 // Convert the patterns into a symbols array.
 char *symbolize(char **patterns) {
     char *symbols = newList(sizeof(char));
@@ -330,7 +337,7 @@ char *symbolize(char **patterns) {
         for (int i = 0; i < len; i++) symbols[len++] = pattern[i];
     }
 }
-
+*/
 // ----------------------------------------------------------------------------
 // Build a scanner from the data gathered so far.
 
@@ -341,8 +348,10 @@ scanner *build(char const *path) {
     char **patterns = findPatterns(rules);
     sort(patterns);
     expand(patterns);
+    scanner *sc = newScanner();
     sc->nStates = length(states);
     sc->nPatterns = length(patterns);
+    return sc;
 }
 
 // ----------------------------------------------------------------------------
@@ -367,11 +376,11 @@ bool check(char **list, char *s) {
 void testReadLines() {
     char text[] = "abc\ndef\n";
     char **lines = readLines(text);
-    check(lines, "abc def");
+    assert(check(lines, "abc def"));
     freeList(lines);
     char text2[] = "abc\r\ndef\r\n";
     lines = readLines(text2);
-    check(lines, "abc def");
+    assert(check(lines, "abc def"));
     freeList(lines);
 }
 
@@ -390,7 +399,7 @@ void testReadTokens() {
     freeList(tokens);
     char text2[] = " a   bb  ccc      dddd   ";
     tokens = readTokens(text2);
-    check(tokens, "a bb ccc dddd");
+    assert(check(tokens, "a bb ccc dddd"));
     freeList(tokens);
 }
 
@@ -406,7 +415,7 @@ void testExpandRange() {
     assert(! isRange(tokens[0]));
     assert(isRange(tokens[1]));
     expandRange(tokens, 1);
-    check(tokens, "s a b c t");
+    assert(check(tokens, "s a b c t"));
     freeList(tokens);
 }
 
@@ -414,17 +423,17 @@ void testDetach() {
     char line[] = "s t";
     char **tokens = readTokens(line);
     detach(tokens);
-    check(tokens, "s ? ? t");
+    assert(check(tokens, "s ? ? t"));
     char line2[] = "s:X t";
     freeList(tokens);
     tokens = readTokens(line2);
     detach(tokens);
-    check(tokens, "s X ? t");
+    assert(check(tokens, "s X ? t"));
     freeList(tokens);
     char line3[] = "s X:t";
     tokens = readTokens(line3);
     detach(tokens);
-    check(tokens, "s ? X t");
+    assert(check(tokens, "s ? X t"));
     freeList(tokens);
 }
 
@@ -432,9 +441,9 @@ void testSort() {
     char line[] = "s a b aa c ba ccc sx";
     char **patterns = readTokens(line);
     sort(patterns);
-    check(patterns, "aa a ba b ccc c sx s");
+    assert(check(patterns, "aa a ba b ccc c sx s"));
     expand(patterns);
-    check(patterns, "aa a ? ba b ? ccc c ? sx s ?");
+    assert(check(patterns, "? aa a ? ba b ? ccc c ? sx s ?"));
     freeList(patterns);
 }
 
