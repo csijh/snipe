@@ -342,7 +342,7 @@ char *symbolize(char **patterns) {
 // Build a scanner from the data gathered so far.
 
 short *makeIndexes(char **patterns) {
-    
+    printf("%s\n", );
 }
 
 scanner *build(char const *path) {
