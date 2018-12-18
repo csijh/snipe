@@ -341,6 +341,10 @@ char *symbolize(char **patterns) {
 // ----------------------------------------------------------------------------
 // Build a scanner from the data gathered so far.
 
+short *makeIndexes(char **patterns) {
+    
+}
+
 scanner *build(char const *path) {
     char *text = readFile(path);
     char ***rules = readRules(text);
