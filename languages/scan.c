@@ -1,17 +1,18 @@
 // The Snipe editor is free and open source, see licence.txt.
-// Standalone scanner to test and compile language definitions.
+// Provide a standalone scanner to test and compile language definitions.
 #include "../src/style.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
 #include <assert.h>
 
 // An action has a target state and two token styles, one to terminate the
 // current token before the pattern currently being matched, and one after. A
-// style SKIP means 'this action is not relevant in the current state', and a
-// style MORE means 'continue the current token without terminating it'.
-enum { SKIP = POINT, MORE = SELECT };
+// style Skip means 'this action is not relevant in the current state', and a
+// style More means 'continue the current token without terminating it'.
+enum { Skip = POINT, More = SELECT };
 struct action { short target; style before, after; };
 typedef struct action action;
 
@@ -56,52 +57,37 @@ void freeScanner(scanner *sc) {
 }
 
 // ----------------------------------------------------------------------------
-// Implement lists as variable length arrays, preceded by size info.
+// Implement lists of pointers as arrays, preceded by the length.
 
-// Ths stride is the item size. Pad makes the structure a multiple of 8 bytes.
-struct list { int stride, capacity, length, pad; };
-typedef struct list list;
+// The maximum length of any list. Increase as necessary.
+enum { MAX = 1000 };
 
-void *newList(int stride) {
-    assert(sizeof(list) % sizeof(void *) == 0);
-    list *l = malloc(sizeof(list) + 24 * stride);
-    *l = (list) { stride, 24, 0 };
-    return l + 1;
+void *newList() {
+    void **xs = malloc((MAX+1) * sizeof(void *));
+    xs[0] = (void *) 0;
+    return xs + 1;
 }
 
-void freeList(void *xs) { free(((list *)xs - 1)); }
-
-// Ensure space for n more items.
-void *ensure(void *xs, int n) {
-    list *l = ((list *)xs - 1);
-    if (l->length + n <= l->capacity) return xs;
-    while (l->length + n > l->capacity) l->capacity *= 2;
-    l = realloc(l, sizeof(list) + l->capacity * l->stride);
-    return l + 1;
+void freeList(void *xs) {
+    void **ys = (void **) xs;
+    free(ys - 1);
 }
 
-int capacity(void *xs) { return ((list *)xs - 1)->capacity; }
-
-int length(void *xs) { return ((list *)xs - 1)->length; }
-
-void *addLength(void *xs, int n) {
-    xs = ensure(xs, n);
-    ((list *)xs - 1)->length += n;
-    return xs;
+int length(void *xs) {
+    void **ys = (void **) xs;
+    return (intptr_t) ys[-1];
 }
 
-char **addString(char **xs, char *x) {
-    xs = ensure(xs, 1);
-    xs[length(xs)] = x;
-    addLength(xs, 1);
-    return xs;
+void setLength(void *xs, int n) {
+    assert(n <= MAX);
+    void **ys = (void **) xs;
+    ys[-1] = (void *) (intptr_t) n;
 }
 
-char ***addRule(char ***xs, char **x) {
-    xs = ensure(xs, 1);
-    xs[length(xs)] = x;
-    addLength(xs, 1);
-    return xs;
+void add(void *xs, void *x) {
+    void **ys = (void **) xs;
+    ys[length(ys)] = x;
+    setLength(ys, length(ys) + 1);
 }
 
 // ----------------------------------------------------------------------------
@@ -128,7 +114,7 @@ char **readLines(char *text) {
         if (text[i] != '\r' && text[i] != '\n') continue;
         text[i] = '\0';
         if (text[i+1] == '\n') i++;
-        addString(lines, &text[cn]);
+        add(lines, &text[cn]);
         cn = i + 1;
     }
     return lines;
@@ -143,23 +129,26 @@ char **readTokens(char *line) {
     for (int i = 0; i < n; i++) {
         if (line[i] != ' ' && line[i] != '\0') continue;
         line[i] = '\0';
-        if (line[cn] != '\0') tokens = addString(tokens, &line[cn]);
+        if (line[cn] != '\0') add(tokens, &line[cn]);
         while (i < n-1 && line[i+1] == ' ') i++;
         cn = i + 1;
     }
     return tokens;
 }
 
-// Replace __ by _ and _ by space in a token, in place.
-void unescape(char *token) {
-    int n = strlen(token);
-    int j = 0;
-    for (int i = 0; i < n; i++) {
-        if (token[i] == '_' && token[i+1] == '_') { i++; token[j++] = '_'; }
-        else if (token[i] == '_') token[j++] = ' ';
-        else token[j++] = token[i];
+// Replace __ by _ and _ by space in a list of tokens, in place.
+void unescape(char **tokens) {
+    for (int i = 0; i < length(tokens); i++) {
+        char *token = tokens[i];
+        int n = strlen(token);
+        int j = 0;
+        for (int i = 0; i < n; i++) {
+            if (token[i] == '_' && token[i+1] == '_') { i++; token[j++] = '_'; }
+            else if (token[i] == '_') token[j++] = ' ';
+            else token[j++] = token[i];
+        }
+        token[j] = '\0';
     }
-    token[j] = '\0';
 }
 
 // Check if a token is a range.
@@ -176,48 +165,62 @@ void makeSingles() {
     }
 }
 
-// Expand a range x..y into an explicit series of one-character tokens.
-void expandRange(char **tokens, int t) {
+// Expand each range x..y into an explicit series of one-character tokens.
+void expandRanges(char **tokens) {
     makeSingles();
-    char *range = tokens[t];
-    int extra = range[3] - range[0];
-    int n = length(tokens);
-    tokens = addLength(tokens, extra);
-    for (int i = n-1; i > t; i--) tokens[i + extra] = tokens[i];
-    for (int ch = range[0]; ch <= range[3]; ch++) {
-        tokens[t++] = &singles[2*ch];
+    char **work = newList();
+    for (int i = 0; i < length(tokens); i++) {
+        char *token = tokens[i];
+        if (! isRange(token)) add(work, token);
+        else {
+            for (int ch = token[0]; ch <= token[3]; ch++) {
+                add(work, &singles[2*ch]);
+            }
+        }
     }
+    setLength(tokens, 0);
+    for (int i = 0; i < length(work); i++) add(tokens, work[i]);
+    freeList(work);
 }
 
-// Deal with attached styles, state:STYLE at the start of a rule and STYLE:state
-// at the end. Expand into two tokens, adding a default style if necessary.
-void detach(char **tokens) {
-    int n = length(tokens);
-    tokens = addLength(tokens, 2);
-    tokens[n+1] = tokens[n-1];
-    tokens[n] = "";
-    for (int i = n-2; i >= 1; i--) tokens[i+1] = tokens[i];
-    tokens[1] = "";
+// Expand s:X at the start to s X and Y:t at the end to Y t, with More as the
+// defaults for X and Y.
+void expandStyles(char **tokens) {
+    char **work = newList();
+    add(work, tokens[0]);
     char *p = strchr(tokens[0], ':');
-    if (p != NULL) {
-        tokens[1] = p + 1;
+    if (p == NULL) add(work, "More");
+    else {
         *p = '\0';
+        add(work, p + 1);
     }
-    p = strchr(tokens[n+1], ':');
-    if (p != NULL) {
-        tokens[n] = tokens[n+1];
-        tokens[n+1] = p + 1;
+    int n = length(tokens);
+    for (int i = 1; i < n - 1; i++) add(work, tokens[i]);
+    p = strchr(tokens[n-1], ':');
+    if (p == NULL) {
+        add(work, "More");
+        add(work, tokens[n-1]);
+    }
+    else {
         *p = '\0';
+        add(work, tokens[n-1]);
+        add(work, p + 1);
     }
+    setLength(tokens, 0);
+    for (int i = 0; i < length(work); i++) add(tokens, work[i]);
+    freeList(work);
 }
 
 char ***readRules(char *text) {
     char **lines = readLines(text);
-    char ***rules = newList(sizeof(char **));
+    char ***rules = newList();
     for (int i=0; i<length(lines); i++) {
         char **tokens = readTokens(lines[i]);
         if (length(tokens) == 0) continue;
-        rules = addRule(rules, tokens);
+        unescape(tokens);
+        expandRanges(tokens);
+        expandStyles(tokens);
+        add(rules, tokens);
     }
     freeList(lines);
     return rules;
@@ -235,12 +238,9 @@ int search(char **xs, char *x) {
 }
 
 // Find a string in a list, adding it if necessary.
-char **find(char **xs, char *x) {
+void find(char **xs, char *x) {
     int i = search(xs, x);
-    if (i >= 0) return xs;
-    xs = addLength(xs, 1);
-    xs[length(xs) - 1] = x;
-    return xs;
+    if (i < 0) add(xs, x);
 }
 
 // Find all the state names in the rules.
@@ -257,19 +257,20 @@ static char **findStates(char ***rules) {
 
 // Find all the patterns in the rules.
 static char **findPatterns(char ***rules) {
-    char **patterns = newList(sizeof(char *));
+    char **patterns = newList();
     for (int i = 0; i < length(rules); i++) {
         char **tokens = rules[i];
         int n = length(tokens);
-        for (int j = 2; j < n-2; j++) find(patterns, tokens[i]);
+        for (int j = 2; j < n-2; j++) find(patterns, tokens[j]);
     }
     return patterns;
 }
 
 // -----------------------------------------------------------------------------
 // Sort the patterns, with prefixes coming after their parents. Expand the list
-// so that there is an empty string after each run of strings with the same
-// first character.
+// of patterns so that there is an empty string after each run of strings with
+// the same first character. Find the indexes into the patterns of the runs
+// starting with each ASCII character.
 
 // Check if string s is a prefix of string t.
 static inline bool prefix(char const *s, char const *t) {
@@ -299,12 +300,11 @@ void sort(char **patterns) {
 }
 
 // Insert an empty pattern string at a given position.
-char **insertEmpty(char **patterns, int p) {
+void insertEmpty(char **patterns, int p) {
     int n = length(patterns);
-    patterns = addLength(patterns, 1);
+    setLength(patterns, n+1);
     for (int i = n; i >= p; i--) patterns[i+1] = patterns[i];
     patterns[p] = "";
-    return patterns;
 }
 
 // Add an empty string when the first character of the patterns changes.
@@ -312,14 +312,36 @@ void expand(char **patterns) {
     int i = 0;
     while (i < length(patterns)) {
         char start = patterns[i][0];
-        patterns = insertEmpty(patterns, i);
+        insertEmpty(patterns, i);
         i++;
         while (i < length(patterns) && patterns[i][0] == start) i++;
     }
-    patterns = addString(patterns, "");
+    add(patterns, "");
 }
 
+// Find the index in the patterns of the run starting with each ASCII character.
+short *findIndexes(char **patterns) {
+    short *indexes = malloc(128 * sizeof(short));
+    int here = 0;
+    int nextCh = patterns[here + 1][0];
+    for (int ch = 0; ch < 128; ch++) {
+        if (ch < nextCh) indexes[ch] = here;
+        else {
+            here++;
+            indexes[ch] = here;
+            while (patterns[here][0] != '\0') here++;
+            if (here >= length(patterns) - 1) nextCh = 128;
+            else nextCh = patterns[here + 1][0];
+        }
+    }
+    return indexes;
+}
+
+// Compress the patterns into a symbols array, in which each string is stored
+// as a one-byte length, then the characters, and no null terminator.
+
 // ----------------------------------------------------------------------------
+// Build a scanner from the data gathered so far.
 // Build an action table from the rules and patterns.
 
 /*
@@ -338,13 +360,6 @@ char *symbolize(char **patterns) {
     }
 }
 */
-// ----------------------------------------------------------------------------
-// Build a scanner from the data gathered so far.
-
-short *makeIndexes(char **patterns) {
-    printf("%s\n", );
-}
-
 scanner *build(char const *path) {
     char *text = readFile(path);
     char ***rules = readRules(text);
@@ -355,6 +370,7 @@ scanner *build(char const *path) {
     scanner *sc = newScanner();
     sc->nStates = length(states);
     sc->nPatterns = length(patterns);
+    sc->indexes = findIndexes(patterns);
     return sc;
 }
 
@@ -408,36 +424,36 @@ void testReadTokens() {
 }
 
 void testUnescape() {
-    char token[] = "__x_y__z_";
-    unescape(token);
-    assert(strcmp(token, "_x y_z ") == 0);
+    char line[] = "__x_y__z_";
+    char **tokens = readTokens(line);
+    unescape(tokens);
+    assert(strcmp(tokens[0], "_x y_z ") == 0);
+    freeList(tokens);
 }
 
-void testExpandRange() {
+void testExpandRanges() {
     char line[] = "s a..c t";
     char **tokens = readTokens(line);
-    assert(! isRange(tokens[0]));
-    assert(isRange(tokens[1]));
-    expandRange(tokens, 1);
+    expandRanges(tokens);
     assert(check(tokens, "s a b c t"));
     freeList(tokens);
 }
 
-void testDetach() {
+void testExpandStyles() {
     char line[] = "s t";
     char **tokens = readTokens(line);
-    detach(tokens);
-    assert(check(tokens, "s ? ? t"));
-    char line2[] = "s:X t";
+    expandStyles(tokens);
+    assert(check(tokens, "s More More t"));
     freeList(tokens);
+    char line2[] = "s:X t";
     tokens = readTokens(line2);
-    detach(tokens);
-    assert(check(tokens, "s X ? t"));
+    expandStyles(tokens);
+    assert(check(tokens, "s X More t"));
     freeList(tokens);
     char line3[] = "s X:t";
     tokens = readTokens(line3);
-    detach(tokens);
-    assert(check(tokens, "s ? X t"));
+    expandStyles(tokens);
+    assert(check(tokens, "s More X t"));
     freeList(tokens);
 }
 
@@ -446,20 +462,36 @@ void testSort() {
     char **patterns = readTokens(line);
     sort(patterns);
     assert(check(patterns, "aa a ba b ccc c sx s"));
-    expand(patterns);
-    assert(check(patterns, "? aa a ? ba b ? ccc c ? sx s ?"));
     freeList(patterns);
 }
 
+void testIndexes() {
+    char line[] = "b bc d de";
+    char **patterns = readTokens(line);
+    expand(patterns);
+    assert(check(patterns, "? b bc ? d de ?"));
+    short *indexes = findIndexes(patterns);
+    assert(indexes[0] == 0);
+    assert(indexes['a'] == 0);
+    assert(indexes['b'] == 1);
+    assert(indexes['c'] == 3);
+    assert(indexes['d'] == 4);
+    assert(indexes['e'] == 6);
+    assert(indexes[127] == 6);
+}
+
 int main() {
+    setbuf(stdout, NULL);
     testReadLines();
     testReadTokens();
     testUnescape();
-    testExpandRange();
-    testDetach();
+    testExpandRanges();
+    testExpandStyles();
     testSort();
+    testIndexes();
+    build("c.txt");
+    printf("Tests pass\n");
 }
-
 /*
 // -----------------------------------------------------------------------------
 // Create the list of style names.
@@ -503,14 +535,14 @@ static void addRule(strings *line, action **table, strings *states,
         style = search(styles, styleName);
         if (style < 0) printf("Unknown style %s\n", styleName);
     }
-    if (act[0] == '\0') style = MORE;
+    if (act[0] == '\0') style = More;
     else if (act[0] == '<') style |= BEFORE;
     else if (act[0] != '>') printf("Unknown action %s\n", act);
     action *actions = table[row];
     if (n == 3) {
         int col = search(patterns, "");
         assert(col >= 0);
-        if (actions[col].style == SKIP) {
+        if (actions[col].style == Skip) {
             actions[col].style = style;
             actions[col].target = target;
         }
@@ -519,7 +551,7 @@ static void addRule(strings *line, action **table, strings *states,
         char *s = S(line)[i];
         int col = search(patterns, s);
         assert(col >= 0);
-        if (actions[col].style != SKIP) continue;
+        if (actions[col].style != Skip) continue;
         actions[col].style = style;
         actions[col].target = target;
     }
@@ -559,7 +591,7 @@ static action **makeTable(strings *states, strings *patterns)
     action **table = malloc(height * sizeof(action *));
     for (int r = 0; r < height; r++) {
         table[r] = malloc(width * sizeof(action));
-        for (int c = 0; c < width; c++) table[r][c].style = SKIP;
+        for (int c = 0; c < width; c++) table[r][c].style = Skip;
     }
     return table;
 }
@@ -631,7 +663,7 @@ void scan(scanner *sc, int row, chars *line, chars *styles) {
         int old = i;
         for (int p = start; p < end; p++) {
             action act = sc->table[state][p];
-            if (act.style == SKIP) continue;
+            if (act.style == Skip) continue;
             char *pattern = sc->patterns[p];
             int len = strlen(pattern);
             if (! match(line, i, len, pattern)) continue;
@@ -647,11 +679,11 @@ void scan(scanner *sc, int row, chars *line, chars *styles) {
         state = act.target;
         if (TRACE) {
             printf(" %s", sc->states[state]);
-            if (st == MORE) printf("\n");
+            if (st == More) printf("\n");
             else if ((st & BEFORE) != 0) printf("    <%s\n", styleName(base));
             else printf("    >%s\n", styleName(base));
         }
-        if (st == MORE || s == i) continue;
+        if (st == More || s == i) continue;
         C(styles)[s++] = addStyleFlag(base, START);
         if ((st & BEFORE) != 0) { while (s < old) C(styles)[s++] = base; }
         else while (s < i) C(styles)[s++] = base;
