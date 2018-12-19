@@ -11,9 +11,10 @@
 // An action has a target state and two token styles, one to terminate the
 // current token before the pattern currently being matched, and one after. A
 // style Skip means 'this action is not relevant in the current state', and a
-// style More means 'continue the current token without terminating it'.
+// style More means 'continue the current token without terminating it.
 enum { Skip = POINT, More = SELECT };
-struct action { short target; style before, after; };
+typedef unsigned short ushort;
+struct action { style before, after; ushort target; };
 typedef struct action action;
 
 // A scanner has a table of actions indexed by state and pattern number. It has
@@ -23,15 +24,17 @@ typedef struct action action;
 // symbols array containing the text of the patterns, each preceded by its
 // length in one byte. The patterns are sorted, longest first where one is a
 // prefix of the other, and the patterns starting with each character are
-// followed by an empty pattern to act as a default. For tracing, there is also
-// an array of state names.
+// followed by an empty pattern to act as a default. For tracing, there are also
+// arrays of style names, state names, and patterns.
 struct scanner {
     int nStates, nPatterns;
     action *table;
-    short *indexes;
-    short *offsets;
+    ushort *indexes;
+    ushort *offsets;
     char *symbols;
+    char **styles;
     char **states;
+    char **patterns;
 };
 typedef struct scanner scanner;
 
@@ -39,8 +42,8 @@ scanner *newScanner() {
     scanner *sc = calloc(sizeof(scanner), 1);
     /*
     sc->table = malloc(STATES * PATTERNS *sizeof(action));
-    sc->indexes = malloc(128 * sizeof(short));
-    sc->offsets = malloc(128 * sizeof(short));
+    sc->indexes = malloc(128 * sizeof(ushort));
+    sc->offsets = malloc(128 * sizeof(ushort));
     sc->symbols = malloc(TEXT);
     sc->states = malloc(STATES * sizeof(char *));
     */
@@ -267,10 +270,13 @@ static char **findPatterns(char ***rules) {
 }
 
 // -----------------------------------------------------------------------------
-// Sort the patterns, with prefixes coming after their parents. Expand the list
-// of patterns so that there is an empty string after each run of strings with
-// the same first character. Find the indexes into the patterns of the runs
-// starting with each ASCII character.
+// Sort the patterns, with longer strings coming before their prefixes. Expand
+// the list of patterns so that there is an empty string after each run of
+// strings with the same first character. Find the indexes into the patterns of
+// the runs starting with each ASCII character. Compress the patterns into a
+// single character array, with a leading lemgth byte rather than a null
+// terminaor for each pattern. Find the offsets in the symbols array for the run
+// starting with each character.
 
 // Check if string s is a prefix of string t.
 static inline bool prefix(char const *s, char const *t) {
@@ -278,7 +284,7 @@ static inline bool prefix(char const *s, char const *t) {
 }
 
 // Compare two strings in ascii order, except prefer longer strings to prefixes.
-static int compare(char *s, char *t) {
+int compare(char *s, char *t) {
     int c = strcmp(s, t);
     if (c < 0 && prefix(s, t)) return 1;
     if (c > 0 && prefix(t, s)) return -1;
@@ -320,8 +326,8 @@ void expand(char **patterns) {
 }
 
 // Find the index in the patterns of the run starting with each ASCII character.
-short *findIndexes(char **patterns) {
-    short *indexes = malloc(128 * sizeof(short));
+ushort *findIndexes(char **patterns) {
+    ushort *indexes = malloc(128 * sizeof(ushort));
     int here = 0;
     int nextCh = patterns[here + 1][0];
     for (int ch = 0; ch < 128; ch++) {
@@ -338,28 +344,78 @@ short *findIndexes(char **patterns) {
 }
 
 // Compress the patterns into a symbols array, in which each string is stored
-// as a one-byte length, then the characters, and no null terminator.
+// as a one-byte length, followed by the characters, with no null terminator.
+char *compress(char **patterns) {
+    int n = 0;
+    for (int i = 0; i < length(patterns); i++) {
+        assert(strlen(patterns[i]) <= 127);
+        n = n + strlen(patterns[i]) + 1;
+    }
+    assert(n <= 65535);
+    char *symbols = malloc(n);
+    n = 0;
+    for (int i = 0; i < length(patterns); i++) {
+        symbols[n++] = strlen(patterns[i]);
+        for (int j = 0; j < strlen(patterns[i]); j++) {
+            symbols[n++] = patterns[i][j];
+        }
+    }
+    return symbols;
+}
+
+ushort *findOffsets(char *symbols, ushort *indexes) {
+    ushort *offsets = malloc(128 * sizeof(ushort));
+    int index = 0, offset = 0;
+    for (int ch = 0; ch < 128; ch++) {
+        while (index < indexes[ch]) {
+            offset = offset + 1 + symbols[offset];
+            index++;
+        }
+        offsets[ch] = offset;
+    }
+    return offsets;
+}
 
 // ----------------------------------------------------------------------------
-// Build a scanner from the data gathered so far.
-// Build an action table from the rules and patterns.
+// Build a scanner from the data gathered so far. Build an array of style names,
+// create a blank action table, and fill each row from a rule.
 
-/*
-// Convert the patterns into a symbols array.
-char *symbolize(char **patterns) {
-    char *symbols = newList(sizeof(char));
-    int n = length(patterns);
-    for (int i = 0; i < n; i++) {
-        char *pattern = patterns[i];
-        int len = strlen(pattern);
-        assert(len < 128);
-        int k = length(symbols);
-        addLength(symbols, len + 1);
-        symbols[len++] = len;
-        for (int i = 0; i < len; i++) symbols[len++] = pattern[i];
+// Create the list of style names.
+char **makeStyles() {
+    char **styles = newList();
+    for (int i = 0; i < COUNT_STYLES; i++) {
+        char *name = styleName(i);
+        add(styles, name);
+    }
+    return styles;
+}
+
+// Enter a rule into the table.
+static void addRule(scanner *sc, char **patterns, char **tokens) {
+    int n = length(tokens);
+    action (*table)[sc->nPatterns] = (action(*)[sc->nPatterns]) sc->table;
+    int state = search(sc->states, tokens[0]);
+    int before = search(sc->styles, tokens[1]);
+    int after = search(sc->styles, tokens[n-2]);
+    int target = search(sc->states, tokens[n-1]);
+    assert(state >= 0 && before >= 0 && after >= 0 && target >= 0);
+    if (n == 4) {
+        for (int pattern = 0; pattern < length(sc->patterns); pattern++) {
+            if (sc->patterns[pattern][0] == '\0') {
+                action *p = &table[state][pattern];
+                *p = (action) { .before=before, .after=after, .target=target };
+            }
+        }
+    }
+    else for (int i = 2; i < n - 2; i++) {
+        int pattern = search(sc->patterns, tokens[i]);
+        assert(pattern >= 0);
+        action *p = &table[state][pattern];
+        if (p->before != Skip) continue;
+        *p = (action) { .before = before, .after = after, .target = target };
     }
 }
-*/
+
 scanner *build(char const *path) {
     char *text = readFile(path);
     char ***rules = readRules(text);
@@ -371,11 +427,13 @@ scanner *build(char const *path) {
     sc->nStates = length(states);
     sc->nPatterns = length(patterns);
     sc->indexes = findIndexes(patterns);
+    sc->symbols = compress(patterns);
+    sc->offsets = findOffsets(sc->symbols, sc->indexes);
     return sc;
 }
 
 // ----------------------------------------------------------------------------
-// Test.
+// Tests.
 
 // Check that a list of strings matches a space separated string. An empty
 // string in the list is represented as a question mark in the string.
@@ -470,7 +528,7 @@ void testIndexes() {
     char **patterns = readTokens(line);
     expand(patterns);
     assert(check(patterns, "? b bc ? d de ?"));
-    short *indexes = findIndexes(patterns);
+    ushort *indexes = findIndexes(patterns);
     assert(indexes[0] == 0);
     assert(indexes['a'] == 0);
     assert(indexes['b'] == 1);
@@ -478,6 +536,40 @@ void testIndexes() {
     assert(indexes['d'] == 4);
     assert(indexes['e'] == 6);
     assert(indexes[127] == 6);
+    freeList(patterns);
+    free(indexes);
+}
+
+void testCompress() {
+    char line[] = "b bc d de";
+    char **patterns = readTokens(line);
+    expand(patterns);
+    assert(check(patterns, "? b bc ? d de ?"));
+    char *symbols = compress(patterns);
+    assert(strncmp(symbols, "\0\1b\2bc\0\1d\2de\0", 13) == 0);
+    freeList(patterns);
+    free(symbols);
+}
+
+void testOffsets() {
+    char line[] = "b bc d de";
+    char **patterns = readTokens(line);
+    expand(patterns);
+    char *symbols = compress(patterns);
+    ushort *indexes = findIndexes(patterns);
+    ushort *offsets = findOffsets(symbols, indexes);
+    assert(strncmp(symbols, "\0\1b\2bc\0\1d\2de\0", 13) == 0);
+    assert(offsets[0] == 0);
+    assert(offsets['a'] == 0);
+    assert(offsets['b'] == 1);
+    assert(offsets['c'] == 6);
+    assert(offsets['d'] == 7);
+    assert(offsets['e'] == 12);
+    assert(offsets[127] == 12);
+    freeList(patterns);
+    free(indexes);
+    free(symbols);
+    free(offsets);
 }
 
 int main() {
@@ -489,7 +581,9 @@ int main() {
     testExpandStyles();
     testSort();
     testIndexes();
-    build("c.txt");
+    testCompress();
+    testOffsets();
+//    build("c.txt");
     printf("Tests pass\n");
 }
 /*
@@ -504,32 +598,16 @@ static strings *makeStyles() {
     return styles;
 }
 
-// Create an offsets array. For each ascii character c, offsets[c] to
-// offsets[c+1] gives the range of patterns starting with that character.
-static short *makeOffsets(strings *patterns) {
-    short *offsets = malloc(128 * sizeof(short));
-    int ch = 0, n = length(patterns);
-    for (int i = 0; i < n; i++) {
-        char *pattern = S(patterns)[i];
-        int first = pattern[0];
-        while (ch < first) offsets[ch++] = i - 1;
-        offsets[ch++] = i;
-        while (i < n - 1 && S(patterns)[i + 1][0] == first) i++;
-    }
-    while (ch < 128) offsets[ch++] = n - 1;
-    return offsets;
-}
-
 // Enter a rule into the table.
 static void addRule(strings *line, action **table, strings *states,
     strings *patterns, strings *styles)
 {
     int n = length(line);
-    short row = search(states, S(line)[0]);
-    short target = search(states, S(line)[n-2]);
+    ushort row = search(states, S(line)[0]);
+    ushort target = search(states, S(line)[n-2]);
     char *act = S(line)[n-1];
     assert(row >= 0 && target >= 0);
-    short style = 0;
+    ushort style = 0;
     if (strlen(act) > 0) {
         char *styleName = &act[1];
         style = search(styles, styleName);
@@ -554,32 +632,6 @@ static void addRule(strings *line, action **table, strings *states,
         if (actions[col].style != Skip) continue;
         actions[col].style = style;
         actions[col].target = target;
-    }
-}
-
-// Split each line into a list of tokens.
-static strings **splitTokens(strings *lines) {
-    strings **rules = malloc((length(lines) + 1) * sizeof(strings *));
-    int j = 0;
-    for (int i = 0; i < length(lines); i++) {
-        char *line = S(lines)[i];
-        if (line[0] == '-') break;
-        if (! isalpha(line[0])) continue;
-        rules[j] = newStrings();
-        readLine(line, rules[j]);
-        j++;
-    }
-    rules[j] = NULL;
-    return rules;
-}
-
-// Extract all the state names and patterns from the lines.
-static void findNames(strings *rules[], strings *states,
-    strings *patterns)
-{
-    for (int i = 0; rules[i] != NULL; i++) {
-        findStates(rules[i], states);
-        findPatterns(rules[i], patterns);
     }
 }
 
@@ -674,8 +726,8 @@ void scan(scanner *sc, int row, chars *line, chars *styles) {
         }
         if (TRACE && matched == empty) printf("scan %s", sc->states[state]);
         action act = sc->table[state][matched];
-        short st = act.style;
-        short base = st & NOFLAGS;
+        ushort st = act.style;
+        ushort base = st & NOFLAGS;
         state = act.target;
         if (TRACE) {
             printf(" %s", sc->states[state]);
