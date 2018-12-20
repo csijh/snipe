@@ -93,9 +93,9 @@ gap start               >GAP
 
 ----------
 x
-I
+1Id
 xy, z
-IiSGI
+2Id 1S 1G 1Id
 int x;
 KkkGIS
 intx;

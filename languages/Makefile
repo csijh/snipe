@@ -1,5 +1,5 @@
 scan: scan.c
-	gcc -std=c11 -Wall -g -fsanitize=undefined -fsanitize=address scan.c ../src/style.c -o scan
+	gcc -std=c11 -Wall -g -fsanitize=undefined -fsanitize=address scan.c style.c -o scan
 
 w: scan.c
-	gcc -std=c11 -Wall -g scan.c ../src/style.c -o scan
+	gcc -std=c11 -Wall -g scan.c style.c -o scan
