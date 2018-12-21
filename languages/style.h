@@ -8,6 +8,7 @@
 // styles represent zero-length tokens added to mark the text caret or to toggle
 // selection highlighting. For every style constant such as Key there is a style
 // Bad+Key with name "BadKey" to represent an incomplete or malformed token.
+// Any changes here must be matched by changes in the array of names in style.c
 enum style {
     Point,        // Text caret
     Select,       // Toggle selection; specifies background colour
@@ -39,7 +40,7 @@ enum style {
     OpenNote,     // One-line comment, start
     CloseNote,    // One-line comment, end
     Bad,          // Flag to add to a style
-    CountStyles = 2 * (BAD-1)
+    CountStyles = 2 * Bad
 };
 typedef unsigned char style;
 
