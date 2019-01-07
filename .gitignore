@@ -1,6 +1,7 @@
 *.o
 *.a
 *.exe
+.DS_Store
 glfw/lib
 freetype/objs
 help/Makefile
