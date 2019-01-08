@@ -91,7 +91,7 @@ char *readFile(char const *path) {
 
 // Split the text into lines.
 char **readLines(char *text) {
-    char **lines = newList(sizeof(char *));
+    char **lines = newList();
     int cn = 0;
     for (int i = 0; text[i] != '\0'; i++) {
         if (text[i] != '\r' && text[i] != '\n') continue;
@@ -105,7 +105,7 @@ char **readLines(char *text) {
 
 // Split a line into tokens at the spaces.
 char **readTokens(char *line) {
-    char **tokens = newList(sizeof(char *));
+    char **tokens = newList();
     while (line[0] == ' ') line++;
     int n = strlen(line) + 1;
     int cn = 0;
@@ -119,18 +119,16 @@ char **readTokens(char *line) {
     return tokens;
 }
 
-// Replace __ by _ and _ by space in a list of tokens, in place.
-void unescape(char **tokens) {
-    for (int i = 0; i < length(tokens); i++) {
-        char *token = tokens[i];
-        int n = strlen(token);
-        int j = 0;
-        for (int i = 0; i < n; i++) {
-            if (token[i] == '_' && token[i+1] == '_') { i++; token[j++] = '_'; }
-            else if (token[i] == '_') token[j++] = ' ';
-            else token[j++] = token[i];
-        }
-        token[j] = '\0';
+// Recognize "s _ t" as matching a space and "s t" as matching the empty string.
+void normalize(char **tokens) {
+    int n = length(tokens);
+    if (n == 3 && strcmp(tokens[1], "_") == 0) {
+        tokens[1] = " ";
+    }
+    else if (n == 2) {
+        setLength(tokens, 3);
+        tokens[2] = tokens[1];
+        tokens[1] =  "";
     }
 }
 
@@ -200,7 +198,7 @@ char ***readRules(char *text) {
     for (int i=0; i<length(lines); i++) {
         char **tokens = readTokens(lines[i]);
         if (length(tokens) == 0) continue;
-        unescape(tokens);
+        normalize(tokens);
         expandRanges(tokens);
         expandStyles(tokens);
         add(rules, tokens);
@@ -228,7 +226,7 @@ void find(char **xs, char *x) {
 
 // Find all the state names in the rules.
 static char **findStates(char ***rules) {
-    char **states = newList(sizeof(char *));
+    char **states = newList();
     for (int i = 0; i < length(rules); i++) {
         char **tokens = rules[i];
         int n = length(tokens);
@@ -368,9 +366,11 @@ ushort *findOffsets(char *patterns, ushort *indexes) {
 // create a blank action table, and fill each row from a rule.
 
 // Create the list of style names. Add "More" corresponding to CountStyles
+char **makeStyles() {
     char **styles = newList();
-    for (int i = 0; i < COUNT_STYLES; i++) {
+    for (int i = 0; i < CountStyles; i++) {
         char *name = styleName(i);
+        add(styles, name);
     }
     add(styles, "More");
     return styles;
@@ -510,13 +510,21 @@ void testReadLines() {
     freeList(lines);
 }
 
-// Test that unescape converts underscores to spaces and double underscores to
-// underscores.
-void testUnescape() {
-    char line[] = "__x_y__z_";
+// Test that the two special cases are handled.
+void testNormalize() {
+    char line[] = "s _ t";
     char **tokens = readTokens(line);
-    unescape(tokens);
-    assert(strcmp(tokens[0], "_x y_z ") == 0);
+    normalize(tokens);
+    assert(strcmp(tokens[0], "s") == 0);
+    assert(strcmp(tokens[1], " ") == 0);
+    assert(strcmp(tokens[2], "t") == 0);
+    freeList(tokens);
+    char line2[] = "s t";
+    tokens = readTokens(line2);
+    normalize(tokens);
+    assert(strcmp(tokens[0], "s") == 0);
+    assert(strcmp(tokens[1], "") == 0);
+    assert(strcmp(tokens[2], "t") == 0);
     freeList(tokens);
 }
 
@@ -532,20 +540,20 @@ void testExpandRanges() {
 // Test that the before and after styles for a rule are extracted, with More as
 // the default.
 void testExpandStyles() {
-    char line[] = "s t";
+    char line[] = "s p t";
     char **tokens = readTokens(line);
     expandStyles(tokens);
-    assert(check(tokens, "s More More t"));
+    assert(check(tokens, "s More p More t"));
     freeList(tokens);
-    char line2[] = "s:X t";
+    char line2[] = "s:X p t";
     tokens = readTokens(line2);
     expandStyles(tokens);
-    assert(check(tokens, "s X More t"));
+    assert(check(tokens, "s X p More t"));
     freeList(tokens);
-    char line3[] = "s X:t";
+    char line3[] = "s p X:t";
     tokens = readTokens(line3);
     expandStyles(tokens);
-    assert(check(tokens, "s More X t"));
+    assert(check(tokens, "s More p X t"));
     freeList(tokens);
 }
 
@@ -623,7 +631,7 @@ int main() {
     setbuf(stdout, NULL);
     testReadTokens();
     testReadLines();
-    testUnescape();
+    testNormalize();
     testExpandRanges();
     testExpandStyles();
     testSort();

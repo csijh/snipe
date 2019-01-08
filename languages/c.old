@@ -1,0 +1,108 @@
+start __Alignas __Atomic __Bool __Complex __Generic __Imaginary key
+start __Noreturn __Static__assert __Thread__Local alignof auto key
+start bool break case char const continue default do double else key
+start enum extern false float for goto if inline int long key
+start register restrict return short signed sizeof static struct key
+start switch true typedef union unsigned void volatile while key
+start ## %: %= %> ( ) , -> ... . :> : ; <% <: = ?? ? [ ] { } start      >SIGN
+start != ! % && &= & *= * ++ += + -- -= - /= / <<= << <= < == start     >OP
+start >= >>= >> > ^= ^ |= || | ~ start                                  >OP
+start a..z A..Z __ \U \u id
+start /* comment
+start // note
+start . dot
+start 0..9 num
+start ' char
+start " string
+start # hash
+start _ gap
+start _..~ start        >BAD
+start start             >BAD
+
+sign start              >SIGN
+
+op start                >OP
+
+key a..z A..Z 0..9 id
+key __ \U \u id
+key start               >KEY
+
+id a..z A..Z 0..9 id
+id __ \U \u id
+id ( sign               <FUNCTION
+id start                >ID
+
+comment */ start        >COMMENT
+comment !..~ comment
+comment _ commentGap    <COMMENT
+comment comment         >COMMENT
+
+commentGap _ commentGap
+commentGap comment      >GAP
+
+note !..~ note
+note _ noteGap          <NOTE
+note start              >NOTE
+
+noteGap _ noteGap
+noteGap !..~ note       <GAP
+noteGap start           >GAP
+
+dot 0..9 num
+dot start               >SIGN
+
+num . 0..9 num
+num e+ e- E+ E- num
+num p+ p- P+ P- num
+num start               >NUMBER
+
+char ' start            >CHAR
+char \\ char
+char \' char
+char _..~ char
+char start              >BAD
+
+string " start          >STRING
+string \\ string
+string \" string
+string _..~ string
+string start            >BAD
+
+hash _ hash
+hash include fileGap    >RESERVED
+hash define elif start  >RESERVED
+hash else endif start   >RESERVED
+hash error if start     >RESERVED
+hash ifdef ifndef start >RESERVED
+hash line pragma start  >RESERVED
+hash undef start        >RESERVED
+hash start              >RESERVED
+
+fileGap _ fileGap
+fileGap fileStart       >GAP
+
+fileStart < file
+fileStart start         >BAD
+
+file > start            >STRING
+file _..~ file
+file start              >BAD
+
+gap _ gap
+gap start               >GAP
+
+----------
+x
+1Id
+xy, z
+2Id 1S 1G 1Id
+int x;
+KkkGIS
+intx;
+IiiiS
+// A note
+NnGNGNnnn
+/* A multi-line
+CcGCGCccccccccc
+comment */
+CccccccGCc
