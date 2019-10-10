@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en-GB" xml:lang="en-GB">
+<head>
+<meta charset="UTF-8"/>
+<style>
+    body { font-size: 120%; }
+    pre, .indent { margin-left: 40px; }
+</style>
+<title>Snipe</title>
+</head>
+<body>
+
+<h1>Graphics libraries</h1>
+
+<p>Here are some things I have found out about cross-platform use of graphics
+libraries. This is both from the point of view of my own projects, and from the
+point of view of teaching C.</p>
+
+<h3>High level libraries</h3>
+
+<p>All the high level graphics libraries I have looked at suffer from the same
+problem. They are based on huge monolithic dynamic libraries or collections of
+libraries. That means, on every platform other than their native platform, they
+take a long time to load up (typically tens of seconds). On the native platform,
+there is a reasonable chance the dynamic libraries are already in memory, and
+that's what the monolithic designs rely on.</p>
+
+<p>So, for cross-platform work, I look for small, low level C libraries
+(possibly with higher level wrappers or language bindings).</p>
+
+<h3>Memory leaks</h3>
+
+<p>I get memory leaks from both SDL and Allegro programs. I doubt these are
+serious, i.e. they are probably to do with initial setup only, rather than to do
+with using up more and more memory over time. But they are annoying.</p>
+
+<p>On Linux, leaks are reported as coming from Mesa and DRI, both associated
+with OpenGL. I would guess that OpenGL's ancient design (including lots of
+global variables and other rubbish) means that low level libraries have to
+allocate memory to use it well, and that the memory is difficult to recover. On
+Windows, OpenGL also appears to be the main culprit, but I haven't looked into
+it as much. On macOS, it is difficult to tell, because the standard
+<code>-fsanitize-leak</code> option isn't implemented - there is a Mac-only
+memory leak detector instead, which I haven't learnt how to use.</p>
+
+<h3>Native libraries</h3>
+
+<p>For a while, I worked directly with the lowest level native graphics
+libraries possible, to try to get round the problems that way. These are
+effectively device drivers. That means they are hardware-dependent and so
+impossible to install as part of a distributed app. You just have to rely on
+them being available.</p>
+
+<p>OpenGL is the most widely available system, and it is currently the only
+system available, installed, and ready to go, on all three main platforms.</p>
+
+<p>Some higher-level libraries use OpenGl for Linux/macOS, but DirectX on
+Windows. That seems unnecessary for all but the most demanding games
+programming.</p>
+
+<p>I am trying to implement my own editor, snipe. I found a more-or-less
+workable scheme to make it small and fast loading on every platform. That's to
+use a combination of low level libraries, and to use static linking where
+possible. Static linking is not possible for the lowest level native system
+libraries like OpenGL, but you wouldn't want to anyway because they are shared
+by all programs. However, other support libraries, in my case glfw (for
+mouse/keyboard) and freetype (for text) are huge <b>unless</b> you statically
+link them to pick out the bits you need. This route produces an executable of
+about 1MB.</p>
+
+<p>However, (a) OpenGL is ancient and (b) Apple have announced that they won't
+support OpenGL on Macs much longer. When Macs don't have OpenGL any more, I can
+foresee only two possibilities. One is that Vulkan, OpenGL's successor, will
+become widely supported <b>and</b> installed and ready to go, so it can be used
+on all platforms. (It is not even installed by default on Linux yet, so I think
+it will be a while.)</p>
+
+<p>The other possibility I can see, the most likely one in the medium term, is
+that different drivers will have to be used on different systems, e.g. a mix of
+OpenGL/Vulkan, DirectX, Metal. That's a step back to the bad old days before
+OpenGL of having no cross-platform standard.</p>
+
+<h3>SDL</h3>
+
+<p>The advantage of a 'medium-level' library like SDL or Allegro is that it
+<b>might</b> solve the cross-platform problems while remaining small and fast
+loading.</p>
+
+<p>In my first survey of libraries for teaching C, SDL was the best of a bad set
+of choices. Over time, I have come to like it less and less.</p>
+
+<p>For my own purposes, SDL has two problems which now rule it out entirely. The
+first is that it is not very small and, as soon as you add SDL_ttf to handle
+text, it becomes huge. The second is that text drawn with a smallish font size
+is unpleasantly blurry. When I looked into this, I found (once, accidentally)
+that I could achieve the same blurry effect myself using freetype and OpenGL by
+using coordinates which are one pixel off. Then freetype carefully anti-aliases
+a character to fit your pixels, but OpenGL anti-aliases again because the image
+size doesn't quite match the rectangle you are asking it to draw in. My
+conclusion is that SDL_ttf misuses freetype.</p>
+
+<p>For teaching purposes, SDL has a whole host of complications. It sometimes
+gets installed with the headers in the wrong place which changes your includes.
+Or the library files may be installed in the wrong place, so you have to move
+them or jump through hoops to include them in compile commands. On Windows, you
+may have to set a flag to prevent SDL from mangling your main function to match
+MSVC (<code>SDL_MAIN_HANDLED</code>). You have to be careful not to try to
+initialize devices your computer doesn't have
+(<code>SDL_INIT_EVERYTHING</code>). It has both CPU and GPU ways of doing the
+same things, and their APIs are very different. And almost all functions are
+capable of returning errors, making it tedious to catch them all.</p>
+
+<h3>Allegro</h3>
+
+<p>When I did my survey, Allegro was in version 4. I found it too difficult to
+install on some platforms, and generally not very impressive. Now Allegro 5 is
+available. It is a complete redesign, with cleanliness in mind. I have very good
+first impressions - see:</p>
+
+<p class="indent"><a
+href="https://csijh.gitlab.io/c-bites/graphics/graphics.html">Chapter in C-Bites
+tutorial</a></p>
+
+<p>I have produced a graphics chapter about Allegro (without getting rid of the
+SDL info until after you've finished teaching it). Replacing the display module
+in the maze example program was incredibly easy.</p>
+
+<p>It takes one or two lines to install Allegro, on all three platforms. (On
+Windows, I use MSYS2 to produce lean native programs. I haven't tried other
+Windows configurations.)</p>
+
+<p>It has add-ons, like SDL, but they are all official, they are included in the
+standard installation, and they appear to be of the same high standard as the
+core.</p>
+
+<p>When I draw text in a small font, I get identical results to my own carefully
+customised low-level approach. In other words, Allegro is using freetype
+properly.</p>
+
+<p>There is a main dynamic library for allegro, and various add-ons. The size of
+the main library plus the font add-on plus the ttf add-on comes to not much over
+1MB. In other words (a) Allegro has correctly extracted from freetype just the
+necessary bits and (b) an app like my editor can be distributed with the dynamic
+libraries included, without bothering with static linking, and yet it will still
+be fast-loading on every platform.</p>
+
+<p>Allegro is entirely event queue driven. That suits me very well - I hate
+callbacks. (You can tell they are wrong, because it is very easy to implement a
+callback system on top of an event queue system, but not the other way round.)
+Also, Allegro timers cause tick events on the queue. That means you don't have
+to use a separate thread, or have a special kind of animation loop, in order to
+do animations - the same style of event loop works in every case.</p>
+
+<p>It is early days, but I have the distinct impression that the Allegro
+developers know what they are doing. Documentation is a bit sparse, as usual,
+and you have to avoid pre-version-5 info, but there is a video series on games
+programming with Allegro, for students who insist on that kind of thing. And
+typing the name of an Allegro function into Google works, making up for the lack
+of an index.</p>
+
+<p>One thing I don't know yet is whether Allegro has the problem where your
+program locks up because the operating system is using your main thread in a
+loop to control a long gesture such as moving or resizing a Window, or scrolling
+with a touch pad. This makes it awkward to keep an animation going in these
+circumstances, at least in a <em>well designed</em> program. Looking at
+Allegro's design, I am guessing that will still be a problem. However, the event
+queues are thread-safe, so it should be very easy to set up a separate thread
+for this.</p>
+
+</body>
+</html>
