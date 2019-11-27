@@ -1,0 +1,35 @@
+TODO Switch to using Allegro.
+Find out from allegro.cc how to package for different platforms.
+Check that the result is small on each platform.
+
+TODO Remove POINT, SELECT from style flags. Remove START in favour of a single
+CONTINUE value for token boundaries. Add CONTINUE_GRAPHEME for grapheme
+boundaries. Add BAD as a flag so it can be removed again or displayed as a box,
+say.
+
+TODO Break up comments, strings etc. as mini-tokens, so that scanning is context
+free. Treat and display in two ways, according to line state.
+
+TODO Consider storing lines as byte-for-byte, base 256 line count or something.
+Consider doing everything line-based instead of byte-based, with row+col points,
+making it much easier to store per-line info, & do per-line bracket matching.
+
+TODO Sort out bracket matching.
+A) Store all indenters/outdenters, i.e. out-of-line brackets, in a gap buffer.
+   Each entry has index into text, reference to mate.
+B) Do incremental bracket matching, forwards and backwards.
+   For example: delete-backwards closing-bracket B:
+   - check if B is last out-of-line bracket in array before gap
+   - if so, unmark mate and remove
+   - if not, must be inline, check colour byte to see if mismatched and delete
+   - if not, scan back through line to find mate
+================================================================================
+Current modules:
+
+unicode: used by file, handler, includes utf16 for win.
+list:  flex array with odd direct indexing.
+array: flex array with odd pre-length and resize conventions.
+string: split(lines/words), normalize.
+setting: read settings file
+style: constants.
+action: command/event

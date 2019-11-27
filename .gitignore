@@ -9,6 +9,9 @@ help/action.h
 help/event.h
 help/setting.h
 help/style.h
+languages/*.bin
+languages/src/compile
+languages/src/interpret
 try
 test.c
 snipe

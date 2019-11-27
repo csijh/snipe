@@ -1,0 +1,70 @@
+start __Alignas __Atomic __Bool __Complex __Generic __Imaginary key .
+start __Noreturn __Static__assert __Thread__Local alignof auto key .
+start bool break case char const continue default do double else key .
+start enum extern false float for goto if inline int long key .
+start register restrict return short signed sizeof static struct key .
+start switch true typedef union unsigned void volatile while key .
+start ( [ { start (
+start ) ] } start )
+start ## %: %= %> , -> ... . :> : ; <% <: = ?? ? start @
+start != ! % && &= & *= * ++ += + -- -= - /= / <<= << <= < == start +
+start >= >>= >> > ^= ^ |= || | ~ start +
+start a..z A..Z __ \U \u id .
+start /* start {
+start */ start }
+start // start /
+start ' start '
+start " start "
+start 0..9 num .
+start . dot .
+start \ escape .
+start # hash .
+start _.._ gap .
+start _..~ start ?
+start start ?
+
+key a..z A..Z 0..9 id .
+key __ \U \u id .
+key start .
+
+id a..z A..Z 0..9 id .
+id __ \U \u id .
+id start I
+
+dot 0..9 num .
+dot start @
+
+num . 0..9 num .
+num e+ e- E+ E- num .
+num p+ p- P+ P- num .
+num start #
+
+escape a..w y..z start \
+escape x escapex .
+escape .
+
+escapex 0..9 a..f A..F escapex .
+escapex start \
+
+hash _ hash .
+hash include includeGap R
+hash define elif start R
+hash else endif start R
+hash error if start R
+hash ifdef ifndef start R
+hash line pragma start R
+hash undef start R
+hash start R
+
+includeGap _.._ includeGap .
+includeGap fileStart _
+
+fileStart < file .
+fileStart start .
+
+file > start >
+file _..~ file .
+file start ?
+
+gap _.._ gap .
+gap start _

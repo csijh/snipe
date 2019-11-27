@@ -1,0 +1,75 @@
+Bracket marking
+---------------
+
+Bracket matching is well known, but marking the unmatched or mismatched
+brackets, e.g. by highlighting them, is a greater challenge.
+
+To check that brackets are matched, in a left to right pass, each close bracket
+is matched with the most recent unmatched open bracket. The algorithm can be
+extended to mark the unmatched brackets, e.g. by highlighting them. If a close
+bracket is encountered when there are no unmatched open brackets, it is marked
+and then ignored. At the end, any remaining unmatched open brackets are marked.
+
+Things get more interesting if there are different kinds of brackets. There are
+now mismatched brackets which need to be marked as well as unmatched brackets. A
+close bracket such as ] might not match the most recent unmatched open bracket
+such as ( and then it isn't clear which bracket should be marked.
+
+Minimizing the number of marked brackets might be thought desirable. For
+example, with [[[((]]])) it is better to mark the round brackets, and with
+[[(((]]))) it is better to mark the square brackets. But examples like these
+suggest that this would require a global analysis rather than a simple local
+algorithm. This could be both slow and counter-intuitive for the user.
+
+Perhaps the simplest way of handling the situation is to introduce priorities.
+Suppose brackets {} have a higher priority than [] and [] have a higher priority
+than (). Then when two brackets mismatch, the lower priority one is marked. For
+example, with {(} the open round bracket would be marked.
+
+Things get more interesting still if brackets are used to control indenting.
+Essentially, a line is indented according to the number of unmatched open
+brackets at that point in the text. Marked brackets don't take part in
+indenting. The algorithm developed so far doesn't produce natural results. For
+example, the normal algorithm produces this:
+
+    void g(int n) {    // marked
+    if (n > 0) {
+    }
+
+However, marking the second open curly bracket gives a more natural result:
+
+    void g(int n) {
+        if (n > 0) {    // marked
+    }
+
+On the other hand, the normal algorithm produces a natural result in this case:
+
+    void f() {    // marked
+    void g(int n) {
+    }
+
+The alternative is worse:
+
+    void f() {
+        void g(int n) {    // marked
+    }
+
+It isn't just a question of whether the indenting is natural. It is also a
+question of the amount of change caused by a local edit. With a fixed algorithm,
+adding a bracket is likely to change the indenting of all the text below the
+current position. Then typing the corresponding close bracket would change the
+indenting back again. That would be very distracting for the user, and also
+cause problems for the implementation.
+
+It seems that the most recently typed bracket is the one that should be marked.
+However, keeping track of the history of insertion of characters seems too heavy
+a price to pay for natural indenting.
+
+A simple alternative is to take the cursor position into account. The text up to
+the cursor is processed by the usual algorithm, and the text after the cursor is
+processed in the same way, but right to left from the end of the text. Then the
+unmatched brackets before the cursor are compared with the unmatched close
+brackets after the cursor. Typing a single character is now likely to have only
+a local effect. If an open curly bracket is typed, and then the cursor is moved
+down a few lines before inserting the close bracket, the lines moved over get
+indented one by one.

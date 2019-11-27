@@ -82,137 +82,188 @@ named according to file extensions. For example, <code>c.txt</code> defines the
 syntax of <code>.c</code> files. Each file is a description of a string-matching
 state machine for scanning a single line of text in the given language.</p>
 
-<p>Sometimes there are multiple interpretations. For example, in C,
-<code>"*/"//"</code> would normally be a string literal <code>"*/"</code>
-followed by a one-line comment <code>//"</code>. However, after <code>/*</code>,
-it is interpreted instead as the last part of a multi-line comment
-<code>"*/</code> followed by a string literal <code>"//"</code>. To deal with
-this, language features such as comments and string literals are scanned into
-minimal tokens. The text <code>"*/"//"</code> is scanned as five mini-tokens
-<code>"</code>, <code>*/</code>, <code>"</code>, <code>//</code> and
-<code>"</code>. Each line is scanned once and for all, regardless of context.
-The start and end of comments and string literals are treated like brackets and
-dealt with later by the editor. With this approach, there are no multi-line
-tokens, and tokens can be used to support word-based actions and paragraph
-reformatting as well as syntax highlighting.</p>
+<p>Sometimes there are multiple interpretations. In C, for example, a line
+<code>"*/"//"</code> would normally be interpreted as a string literal
+<code>"*/"</code> followed by a one-line comment <code>//"</code>. However, if
+the line appears inside a multiline comment, it is interpreted instead as the
+last part of the comment <code>"*/</code> followed by a string literal
+<code>"//"</code>.</p>
 
-<p>The format of language description files is fairly simple. Lines which are
-blank or start with anything other than a letter are ignored as comments.
-Otherwise, a line represents a string matching rule, and consists of the name of
-a state, a list of strings to match, and a target state. A state name must start
-with a letter. When the scanner is in the given state and one of the strings in
-the list is matched, the scanner moves past the matched string in the input and
-goes into the target state. For example:</p>
+<p>There is a way to avoid these problems, and to make scanning of each line
+independent and context free. That means a line never needs to be rescanned
+unless its text changes. To achieve this, compounds such as comments or string
+literals are divided by the scanner into smaller tokens than usual. Thus the
+line <code>"*/"//"</code> is scanned once and for all into the five tokens
+<code>" */ " // "</code>, with the first middle and last tagged as string
+quotes, the second as an end of comment, and the fourth as a start of one-line
+comment. With this approach, there are no multi-line tokens. These small tokens
+work well in supporting such things as word-based actions and paragraph
+reformatting.</p>
 
-<pre>start if for while key
+<p>In the editor, the bracket matching process is used to match string quotes or
+the start and end of comments, and provide a context for adjusting token types
+just before display. This avoids the rescanning delays in some editors when
+large amounts of text are commented out or uncommented.</p>
+
+<p>The format of language description files is fairly simple. A line which is
+blank or starts with a non-letter such as <code>#</code> is a comment line which
+is ignored. Otherwise, a line represents a string matching rule, and consists of
+the name of a state, a list of pattern strings to match, a target state, and a
+one-character action code, all separated by spaces. When the scanner is in the
+first state and one of the strings in the list is matched, the scanner moves
+past the matched string in the input, carries out the action, and goes into the
+target state. For example:</p>
+
+<pre>start == != start +
 </pre>
 
-<p>With this rule, if the scanner is in the <code>start</code> state and any one
-of the keywords <code>if</code>, <code>for</code> or <code>while</code> appears
-next, then the scanner moves past the keyword and goes into the <code>key</code>
-state.</p>
+<p>With this rule, if the scanner is in the <code>start</code> state and either
+of the equality symbols appears next, then the scanner moves past the symbol and
+remains in the <code>start</code> state. The plus sign is an action which
+tags the symbol as an operator.</p>
 
-<p>The strings in a rule are plain ASCII text with no quotes, and they may not
-contain control characters or spaces. If a string consists of two characters
-separated by two dots, it represents a range of one-character strings, e.g.
-<code>0..9</code> stands for <code>0 1 2 3 4 5 6 7 8 9</code>. For example:</p>
+<p>With two exceptions, each action code means to move past the matched text,
+end the current token, and tag it as a token of a particular type. The dot
+action character <code>.</code> means to accept the matched text as part of the
+current token without ending it. The exclamation mark action <code>!</code>
+means to reject the matched text, i.e. go to the target state without moving
+forward through the input. This provides a limited form of lookahead. Typical
+action characters are listed here, though <a href="style.h">style.h</a> should
+be consulted for a more authoritative list:</p>
 
-<pre>start a..z A..Z 0..9 id
+<pre>.   accept
+!   reject
+W   word
+I   identifier
+V   variable
+R   reserved
+T   type
+K   keyword
+@   key symbol e.g. = , ;
++   operator
+:   label indicator (affects indenting)
+#   number
+"   string quote
+'   character quote
+(   open bracket symbol e.g. ( [ {
+)   close bracket e.g. ) ] }
+[   open keyword e.g. begin
+]   close keyword e.g. end
+{   open comment e.g. /*
+}   close comment e.g. */
+/   open one-line comment e.g. //
+_   gap, i.e. spaces
+?   invalid token
 </pre>
 
-<p>Here, when the scanner is in the <code>start</code> state, and a lettr or
-digit appears next in the input, the scanner moves past the character and goes
-into the <code>id</code> state.</p>
+<p>The editor makes some automatic adjustments to token types after scanning,
+based on tokens nearby. For example, an identifier is marked as a function if it
+is followed by an open bracket, a field if it follows a dot, or a type if it is
+followed by another identifier. Therefore these distinctions need not be made in
+the language description file.</p>
 
-<p>An optional style name can appear in a rule, attached as a prefix to the
-target state by a colon. In that case, the current token is terminated after the
-string which matched, and is given that style. For example:</p>
+<p>The pattern strings in a rule are plain ASCII text with no quotes or escape
+conventions. They may not contain control characters or spaces. They may not
+contain non-ASCII characters. However, non-ASCII Unicode characters in the text
+being scanned are treated the same as letters. This covers most common cases
+where such characters are used in comments, strings or identifiers.</p>
 
-<pre>start + - * / &lt; &lt;= == >= > Op:start
-</pre>
-
-<p>In the <code>start</code> state, if one of the operators appears next in the
-input, it becomes a token with style <code>Op</code>.</p>
-
-<p>A small amount of lookahead is orivded by allowing a style name to be
-attached with a colon as a suffix to the state at the beginning of a rule. For
+<p>The only special notation in pattern strings is that if a pattern consists of
+two characters separated by two dots, it represents a range of one-character
+strings, e.g. <code>0..9</code> stands for <code>0 1 2 3 4 5 6 7 8 9</code>. For
 example:</p>
 
-<pre>id:Function ( sign
+<pre>start a..z A..Z 0..9 id .
 </pre>
 
-<p>In the <code>id</code> state, if an open bracket appears next, the token
-recognized so far is marked as a function name, before moving past the bracket
-and going into the sign state.</p>
+<p>Here, when the scanner is in the <code>start</code> state, and a letter or
+digit (or non-ascii character) appears next in the input, the scanner moves past
+the character and goes into the <code>id</code> state. In ranges, and nowhere
+else, an underscore stands for a space. For example:</p>
 
-<p>Unicode characters beyond plain text are not supported in language definition
-files. However, they are allowed in the text to be scanned, and are treated as
-letters, regardless of language. This covers most common cases where such
-characters are used in comments, strings or identifiers.</p>
+<pre>bad _..~ start ?
+</pre>
+
+<p>The range <code>_..~</code> represents any visible character, so if one is
+seen in the <code>start</code> state, the scanner tags it as invalid. Another example is:</p>
+
+<pre>start _.._ gap .
+</pre>
+
+<p>The range <code>_.._</code> represents a single space, and is the only way of
+matching spaces.</p>
 
 <p>There may be multiple rules for the same state. If a string mentioned in any
-one of the rules matches, that rule determines the action taken.  If two
-different strings match, such as <code>&lt;</code> and <code>&lt;=</code>, the
-longer string takes precedence. If the same string is mentioned in multiple
-rules, the earlier rule takes precedence. For example:</p>
+one of the rules matches, that rule determines the action taken. For
+example:</p>
 
-<pre>start a..z A..Z id
-start !..~ bad
+<pre>start == != start +
+start a..z A..Z 0..9 id .
+</pre>
+
+<p>In the start state, if an equality symbol appears next in the input, it is
+marked as an operator token. If a letter or digit appears, the scanner moves to
+the <code>id</code> state. If two different strings match at one place in the
+input, the longer string takes precedence. For example:</p>
+
+<pre>start = start @
+start == != start +
+</pre>
+
+<p>If there are two equal signs next in the input, the second rule applies, not
+the first. If there is a single equal sign, the first rule applies.</p>
+
+<p>If the same string is mentioned in multiple rules, the earlier rule takes
+precedence. Thus later rules act as defaults. For example:</p>
+
+<pre>start a..z A..Z id .
+start !..~ start ?
 </pre>
 
 <p>This says that if a letter is matched, the scanner goes into the
-<code>id</code> state, but if any other non-space character is matched, it goes
-into the <code>bad</code> state.</p>
+<code>id</code> state, but if any other non-space character is matched, the
+scanner tags it as invalid.</p>
 
-<p>Two special types of rule are recognized. If a rule has a single string
-which is a single underscore, it matches a space. For example:</p>
+<p>If a rule has no pattern strings at all, it matches the empty string, and so
+defines a default action to be taken if nothing else matches, or if the input
+position is at the end of the line. For example:</p>
 
-<pre>gap _ gap
+<pre>id a..z A..Z 0..9 id .
+id start I
 </pre>
 
-<p>When in the gap state, if a space character is found, it is accepted and the
-scanner remains in the gap state.</p>
+<p>While letters and digits are matched, the scanner stays in the
+<code>id</code> state. In any other case, the token is tagged as an identifier.
+Each state should have a default rule of this kind, to ensure that
+scanning always succeeds.</p>
 
-<p>If a rule has no strings at all, it matches the empty string, and so defines a
-default action to be taken if nothing else matches, or if the input position is
-at the end of the line. For example:</p>
+<p>Here are some example rules for a language where an identifier is allowed to
+start with a keyword:</p>
 
-<pre>id a..z A..Z 0..9 id
-id Id:start
+<pre>start a..z A..Z id .
+start if else for while key .
+
+key a..z A..Z 0..9 id .
+key start K
+
+id a..z A..Z 0..9 id .
+id start I
 </pre>
 
-<p>If a letter or digit is matched in the <code>id</code> state,
-the scanner stays in the <code>id</code> state. However, in any other case,
-including the end of the line, the token ends and is given the <code>Id</code>
-style, and the scanner goes into the <code>start</code> state. Each state should
-normally have a default rule of this kind, to ensure that scanning always
-succeeds. The available styles are listed in <a href="style.h">style.h</a>.</p>
-
-<p>Here are example rules for a language where an identifier is allowed to start
-with a keyword:</p>
-
-<pre>start a..z A..Z id
-start if else for while key
-
-key a..z A..Z 0..9 id
-key Key:start
-
-id a..z A..Z 0..9 id
-id Id:start
-</pre>
-
-<p>Suppose keyword <code>if</code> appears next in the input. Since
-<code>if</code> is longer than the single letter <code>i</code>, the second rule
-for the <code>start</code> state applies. Then, in the <code>key</code> state,
-if the keyword is followed by a letter or digit, <code>ifx</code> for example,
-the scanner goes into the <code>id</code> state. Otherwise, <code>if</code> is
-marked as a <code>Key</code> token.</p>
+<p>Suppose keyword <code>for</code> appears next in the input. Since
+<code>for</code> is longer than the single letter <code>f</code>, the second
+rule for the <code>start</code> state applies. Then, in the <code>key</code>
+state, if the keyword is followed by a letter or digit, <code>form</code> for
+example, the scanner goes into the <code>id</code> state. Otherwise,
+<code>for</code> is tagged as a keyword.</p>
 
 <p>The scanner being described has different goals from those of a scanner in a
 compiler. On the one hand, it may omit some details needed only for full
-compiling, or it may classify tokens differently. On the other hand, it must be
-able to handle any text, whether lexically correct or not, and it may add
-details to help support editor features.</p>
+compiling, it may accept some tokens that a compiler would reject, or it may
+classify tokens differently. On the other hand, it must tag white space as gap
+tokens, it must correctly handle comments and literals, it must be able to
+handle any text whether valid or not, and its tags to help support a variety of
+editor features.</p>
 
 </body>
 </html>
