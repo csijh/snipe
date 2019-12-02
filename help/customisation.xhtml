@@ -73,7 +73,7 @@ file.</p>
 <h2>Language descriptions</h2>
 
 <p><mark>Snipe</mark> has a scanner used to divide the text of a file being
-edited into tokens, and to give each a style. The result is used for syntax
+edited into tokens, and to tag each with a type. The result is used for syntax
 highlighting, word-based actions, auto indenting, auto semicolons, line breaking
 and so on.</p>
 
@@ -89,16 +89,15 @@ the line appears inside a multiline comment, it is interpreted instead as the
 last part of the comment <code>"*/</code> followed by a string literal
 <code>"//"</code>.</p>
 
-<p>There is a way to avoid these problems, and to make scanning of each line
-independent and context free. That means a line never needs to be rescanned
-unless its text changes. To achieve this, compounds such as comments or string
-literals are divided by the scanner into smaller tokens than usual. Thus the
-line <code>"*/"//"</code> is scanned once and for all into the five tokens
-<code>" */ " // "</code>, with the first middle and last tagged as string
-quotes, the second as an end of comment, and the fourth as a start of one-line
-comment. With this approach, there are no multi-line tokens. These small tokens
-work well in supporting such things as word-based actions and paragraph
-reformatting.</p>
+<p>There is a way to avoid these problems, and to scan each line independently
+and free of context. That means a line never needs to be rescanned unless its
+text changes. To achieve this, compounds such as comments or string literals are
+divided by the scanner into smaller tokens than usual. Thus the line
+<code>"*/"//"</code> is scanned once and for all into the five tokens <code>" */
+" // "</code>, with the first middle and last tagged as string quotes, the
+second as an end of comment, and the fourth as a start of one-line comment. With
+this approach, there are no multi-line tokens. These small tokens work well in
+supporting such things as word-based actions and paragraph reformatting.</p>
 
 <p>In the editor, the bracket matching process is used to match string quotes or
 the start and end of comments, and provide a context for adjusting token types
@@ -108,115 +107,72 @@ large amounts of text are commented out or uncommented.</p>
 <p>The format of language description files is fairly simple. A line which is
 blank or starts with a non-letter such as <code>#</code> is a comment line which
 is ignored. Otherwise, a line represents a string matching rule, and consists of
-the name of a state, a list of pattern strings to match, a target state, and a
-one-character action code, all separated by spaces. When the scanner is in the
-first state and one of the strings in the list is matched, the scanner moves
-past the matched string in the input, carries out the action, and goes into the
-target state. For example:</p>
+the name of a state, a list of pattern strings to match, a target state, and an
+optional one-character action code, all separated by spaces. When the scanner is
+in the first state and one of the strings in the list is matched, the scanner
+moves past the matched string in the input, carries out the action, and goes
+into the target state. For example:</p>
 
 <pre>start == != start +
 </pre>
 
 <p>With this rule, if the scanner is in the <code>start</code> state and either
 of the equality symbols appears next, then the scanner moves past the symbol and
-remains in the <code>start</code> state. The plus sign is an action which
-tags the symbol as an operator.</p>
+remains in the <code>start</code> state. The plus sign is an action which tags
+the symbol as an operator. When a token is tagged, it consists of all the
+characters since the end of the previous token. Sequences of white space have to
+be tagged as gap tokens.</p>
 
-<p>With two exceptions, each action code means to move past the matched text,
-end the current token, and tag it as a token of a particular type. The dot
-action character <code>.</code> means to accept the matched text as part of the
-current token without ending it. The exclamation mark action <code>!</code>
-means to reject the matched text, i.e. go to the target state without moving
-forward through the input. This provides a limited form of lookahead. Typical
-action characters are listed here, though <a href="style.h">style.h</a> should
-be consulted for a more authoritative list:</p>
+<p>The strings in a rule are plain ASCII text with no quotes. They may not
+contain spaces, control characters, or non-ASCII characters. However, non-ASCII
+Unicode characters in the text being scanned are treated the same as letters.
+This covers most common cases where such characters are used in comments,
+strings or identifiers. If a pattern consists of two characters separated by two
+dots, it represents a range of one-character strings, e.g. <code>0..9</code>
+stands for <code>0 1 2 3 4 5 6 7 8 9</code>. For example:</p>
 
-<pre>.   accept
-!   reject
-W   word
-I   identifier
-V   variable
-R   reserved
-T   type
-K   keyword
-@   key symbol e.g. = , ;
-+   operator
-:   label indicator (affects indenting)
-#   number
-"   string quote
-'   character quote
-(   open bracket symbol e.g. ( [ {
-)   close bracket e.g. ) ] }
-[   open keyword e.g. begin
-]   close keyword e.g. end
-{   open comment e.g. /*
-}   close comment e.g. */
-/   open one-line comment e.g. //
-_   gap, i.e. spaces
-?   invalid token
-</pre>
-
-<p>The editor makes some automatic adjustments to token types after scanning,
-based on tokens nearby. For example, an identifier is marked as a function if it
-is followed by an open bracket, a field if it follows a dot, or a type if it is
-followed by another identifier. Therefore these distinctions need not be made in
-the language description file.</p>
-
-<p>The pattern strings in a rule are plain ASCII text with no quotes or escape
-conventions. They may not contain control characters or spaces. They may not
-contain non-ASCII characters. However, non-ASCII Unicode characters in the text
-being scanned are treated the same as letters. This covers most common cases
-where such characters are used in comments, strings or identifiers.</p>
-
-<p>The only special notation in pattern strings is that if a pattern consists of
-two characters separated by two dots, it represents a range of one-character
-strings, e.g. <code>0..9</code> stands for <code>0 1 2 3 4 5 6 7 8 9</code>. For
-example:</p>
-
-<pre>start a..z A..Z 0..9 id .
+<pre>start a..z A..Z 0..9 id
 </pre>
 
 <p>Here, when the scanner is in the <code>start</code> state, and a letter or
 digit (or non-ascii character) appears next in the input, the scanner moves past
-the character and goes into the <code>id</code> state. In ranges, and nowhere
-else, an underscore stands for a space. For example:</p>
+the character and goes into the <code>id</code> state. The following escape
+sequences are recognized:</p>
 
-<pre>bad _..~ start ?
+<pre>\s     space
+\b     backslash
+\a     accept action
+\r     reject action
 </pre>
 
-<p>The range <code>_..~</code> represents any visible character, so if one is
-seen in the <code>start</code> state, the scanner tags it as invalid. Another example is:</p>
-
-<pre>start _.._ gap .
-</pre>
-
-<p>The range <code>_.._</code> represents a single space, and is the only way of
-matching spaces.</p>
+<p>The accept action moves past the matched text, accepting it as part of the
+current token, without terminating the token. The accept action is the default
+if no action is present at the end of a rule. The reject action discards all the
+matched characters since the end of the previous token.</p>
 
 <p>There may be multiple rules for the same state. If a string mentioned in any
 one of the rules matches, that rule determines the action taken. For
 example:</p>
 
 <pre>start == != start +
-start a..z A..Z 0..9 id .
+start a..z A..Z 0..9 id
 </pre>
 
 <p>In the start state, if an equality symbol appears next in the input, it is
 marked as an operator token. If a letter or digit appears, the scanner moves to
-the <code>id</code> state. If two different strings match at one place in the
+the <code>id</code> state. If two different strings match at one position in the
 input, the longer string takes precedence. For example:</p>
 
-<pre>start = start @
+<pre>start = start =
 start == != start +
 </pre>
 
 <p>If there are two equal signs next in the input, the second rule applies, not
-the first. If there is a single equal sign, the first rule applies.</p>
+the first. If there is a single equal sign, the first rule applies. If the same
+string is mentioned in multiple rules, the earlier rule takes precedence. Thus
+later rules act as defaults. For example:</p>
 
-<p>If the same string is mentioned in multiple rules, the earlier rule takes
-precedence. Thus later rules act as defaults. For example:</p>
-
-<pre>start a..z A..Z id .
+<pre>start a..z A..Z id
 start !..~ start ?
 </pre>
 
@@ -228,7 +184,7 @@ scanner tags it as invalid.</p>
 defines a default action to be taken if nothing else matches, or if the input
 position is at the end of the line. For example:</p>
 
-<pre>id a..z A..Z 0..9 id .
+<pre>id a..z A..Z 0..9 id
 id start I
 </pre>
 
@@ -237,33 +193,92 @@ id start I
 Each state should have a default rule of this kind, to ensure that
 scanning always succeeds.</p>
 
-<p>Here are some example rules for a language where an identifier is allowed to
-start with a keyword:</p>
+<p>Some possible action characters are listed here:</p>
 
-<pre>start a..z A..Z id .
-start if else for while key .
+<pre>\a  accept
+\r  reject
+I   identifier
+K   keyword
+=   key symbol e.g. = , ;
++   operator
+:   label indicator
+#   number
+"   open/close character/string literal, e.g. ' "
+(   open bracket symbol e.g. ( [ { begin
+)   close bracket e.g. ) ] } end
+[   open non-nestable comment e.g. /*
+]   close non-nestable comment e.g. */
+{   open nestable comment
+}   close nestable comment
+&lt;   open multi-line literal
+>   close multi-line literal
+/   open one-line comment e.g. //
+_   gap, i.e. white space
+?   invalid token
+</pre>
 
-key a..z A..Z 0..9 id .
+<p>All actions other than <code>\a</code> and <code>\r</code> terminate the
+current token with a tag. Tags to do with comments, literals, brackets,
+operators and labels are symbol characters and are used by the editor to handle
+bracketing, indenting and continuations. Letter actions are used only in themes
+for syntax highlighting. Thus further letter tags such as <code>F</code> for
+functions can be added in language descriptions and themes, without affecting or
+recompiling the editor. See the theme documentation for letter actions not
+listed here.</p>
+
+<p>Since tokens are not tagged until the end, decisions about which tag to use
+can be delayed. For example, rules like these can be used for a language where
+an identifier is allowed to start with a keyword:</p>
+
+<pre>start a..z A..Z id
+start if else for while key
+
+key a..z A..Z 0..9 id
 key start K
 
-id a..z A..Z 0..9 id .
+id a..z A..Z 0..9 id
 id start I
 </pre>
 
 <p>Suppose keyword <code>for</code> appears next in the input. Since
 <code>for</code> is longer than the single letter <code>f</code>, the second
-rule for the <code>start</code> state applies. Then, in the <code>key</code>
-state, if the keyword is followed by a letter or digit, <code>form</code> for
-example, the scanner goes into the <code>id</code> state. Otherwise,
-<code>for</code> is tagged as a keyword.</p>
+rule for the <code>start</code> state applies rather than the first. Then, in
+the <code>key</code> state, if the keyword is followed by a letter or digit,
+<code>form</code> for example, the scanner goes into the <code>id</code> state.
+Otherwise, <code>for</code> is tagged as a keyword.</p>
+
+<p>The reject action provides some lookahead for solving tougher problems. For
+example, suppose that identifiers are to be tagged as <code>I</code> except that
+if one identifier is followed by another, the first is to be tagged as
+<code>T</code> to highlight it differently as a type. This could be achieved
+with the rules:</p>
+
+<pre>start a..z A..Z id
+
+id a..z A..Z 0..9 id
+id \s idGap I
+id start I
+
+idGap \s idGap
+idGap a..z A..Z idId \r
+idGap start \r
+
+idId start T
+</pre>
+
+<p>In the <code>id</code> rule, if a space is encountered, the token is
+tentatively tagged with <code>I</code>, and scanning passes to the
+<code>idGap</code> rule. If a letter is seen in the <code>idGap</code> rule, the
+reject action moves the input position back to the end of the tentative
+<code>I</code> token, as if it hadn't been tagged. The <code>idId</code> rule
+then overwrites the <code>I</code> tag with a <code>T</code> tag.</p>
 
 <p>The scanner being described has different goals from those of a scanner in a
 compiler. On the one hand, it may omit some details needed only for full
 compiling, it may accept some tokens that a compiler would reject, or it may
-classify tokens differently. On the other hand, it must tag white space as gap
-tokens, it must correctly handle comments and literals, it must be able to
-handle any text whether valid or not, and its tags to help support a variety of
-editor features.</p>
+classify tokens differently. On the other hand, it must be able to handle any
+text whether valid or not, it must tag white space as gap tokens, and it must
+apply suitable tags to drive various editor features.</p>
 
 </body>
 </html>

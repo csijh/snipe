@@ -8,7 +8,7 @@
 
 // Special action constants. The rest are token tags.
 typedef unsigned char byte;
-enum { SKIP = '\0', ACCEPT = '.', REJECT = '!' };
+enum { SKIP = '\0', ACCEPT = '\1', REJECT = '\2' };
 
 // A scanner consists of a table[nstates][npatterns][2], an array of state
 // names, and an array of pattern strings. The starters array gives the first
@@ -90,10 +90,13 @@ static inline int match(char *s, char *p) {
     return i;
 }
 
+// Scan a line, tagging the first byte of each token in the tokens array. Make a
+// local table variable of effective type byte[h][w][2] even though h and w are
+// dynamic.
 void scan(char *line, char *tokens, scanner *sc, bool trace) {
     byte (*table)[sc->npatterns][2] = (byte(*)[sc->npatterns][2]) sc->table;
-    int state = 0, start = 0;
-    for (int i = 0; i < strlen(line) || start < i; ) {
+    int state = 0, start = 0, i = 0;
+    while (i < strlen(line) || start < i) {
         int ch = line[i], action, len, target, p;
         for (p = sc->starters[ch]; ; p++) {
             action = table[state][p][0];
@@ -111,7 +114,11 @@ void scan(char *line, char *tokens, scanner *sc, bool trace) {
             );
         }
         if (action == ACCEPT) i += len;
-        else if (action != REJECT) {
+        else if (action == REJECT) {
+            i = start;
+            while (start > 0 && tokens[start] == ' ') start--;
+        }
+        else {
             tokens[start] = action;
             start = i;
             i += len;

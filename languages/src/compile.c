@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <ctype.h>
 #include <assert.h>
 
 // BIG is the limit on array sizes. It can be increased as necessary.
@@ -12,10 +13,10 @@
 enum { BIG = 5000, SMALL = 256 };
 
 // A table entry consists of two bytes, an action and a target state. An action
-// is usually a visible ASCII character, but SKIP is reserved to mean that this
-// pattern is not relevant in the current state.
+// is usually a visible ASCII character. These are the exceptions. SKIP is
+// reserved to mean that this pattern is not relevant in the current state.
 typedef unsigned char byte;
-enum { SKIP = '\0' };
+enum { SKIP = '\0', ACCEPT = '\1', REJECT = '\2' };
 
 // A scanner structure consists of the size of the state transition table then
 // the table itself, then a string store containing the state names followed by
@@ -36,11 +37,15 @@ struct scanner {
 };
 typedef struct scanner scanner;
 
-// ----- File and line handling -----------------------------------------------
+// ----- File handling --------------------------------------------------------
 
-// Crash with a message.
-void crash(char *s) {
-    fprintf(stderr, "%s\n", s);
+// Crash with an error message and possibly a line number or file name.
+void crash(char *e, int n, char const *s) {
+    fprintf(stderr, "Error");
+    if (n > 0) fprintf(stderr, " on line %d", n);
+    fprintf(stderr, ": %s\n", e);
+    if (strlen(s) > 0) fprintf(stderr, " %s", s);
+    fprintf(stderr, "\n");
     exit(1);
 }
 
@@ -48,45 +53,17 @@ void crash(char *s) {
 // terminator. Use binary mode, so that the file size equals the bytes read in.
 void readFile(char const *path, char *text) {
     FILE *file = fopen(path, "rb");
-    if (file == NULL) crash("Error: can't read file");
+    if (file == NULL) crash("can't read file", 0, path);
     fseek(file, 0, SEEK_END);
     int size = ftell(file);
     fseek(file, 0, SEEK_SET);
-    if (size < 0) crash("Error: can't find file size");
-    if (size >= BIG) crash("Error: file too big");
+    if (size < 0) crash("can't find file size", 0, path);
+    if (size >= BIG) crash("file too big", 0, path);
     int n = fread(text, 1, size, file);
-    if (n != size) crash("Error: reading file");
+    if (n != size) crash("can't read file", 0, path);
     if (n > 0 && text[n - 1] != '\n') text[n++] = '\n';
     text[n] = '\0';
     fclose(file);
-}
-
-// Validate the text. Check it is ASCII only. Convert '\t' or '\r' to a space.
-// Ban other control characters except '\n'.
-bool validate(char *text) {
-    for (int i = 0; text[i] != '\0'; i++) {
-        unsigned char ch = text[i];
-        if (ch >= 128) return false;
-        else if (ch == '\t' || ch == '\r') text[i] = ' ';
-        else if (ch == '\n') continue;
-        else if (ch < 32 || ch > 126) return false;
-    }
-    return true;
-}
-
-// Split the text into an array of lines, replacing each newline by a null.
-// Skip blank lines or lines starting with //.
-void splitLines(char *text, char *lines[]) {
-    int p = 0, n = 0;
-    for (int i = 0; text[i] != '\0'; i++) {
-        if (text[i] != '\n') continue;
-        text[i]= '\0';
-        if (text[p] != '\0' && (text[p] != '/' || text[p+1] != '/')) {
-            lines[n++] = &text[p];
-        }
-        p = i + 1;
-    }
-    lines[n++] = NULL;
 }
 
 // ----- Lists and sets of strings --------------------------------------------
@@ -116,7 +93,60 @@ int find(char *s, char *strings[]) {
     return i;
 }
 
-// ----- Tokens ---------------------------------------------------------------
+// ----- Lines and tokens -----------------------------------------------------
+
+// Validate a line. Check it is ASCII only. Convert '\t' or '\r' to a space. Ban
+// other control characters except '\n'. Check that an initial state name has at
+// least two characters. Check that the only escapes are s,b,a,r
+void validate(int n, char *line) {
+    for (int i = 0; line[i] != '\0'; i++) {
+        unsigned char ch = line[i];
+        if (ch == '\t' || ch == '\r') line[i] = ' ';
+        else if (ch >= 128) crash("non-ASCII character", n, "");
+        else if (ch < 32 || ch > 126) crash("control character", n, "");
+        else if (ch == '\\') {
+            ch = line[i+1];
+            if (ch != 's' && ch != 'b' && ch != 'a' && ch != 'r') {
+                crash("unknown escape sequence", n, "");
+            }
+        }
+    }
+    if (isalpha(line[0]) && (line[1] == ' ' || line[1] == '\0')) {
+        crash("state name too short", n, "");
+    }
+}
+
+// Split the text into an array of lines, replacing each newline by a null. Skip
+// blank lines or lines starting with a non-letter.
+void splitLines(char *text, char *lines[]) {
+    int p = 0, n = 1;
+    for (int i = 0; text[i] != '\0'; i++) {
+        if (text[i] != '\n') continue;
+        text[i]= '\0';
+        validate(n, &text[p]);
+        if (text[p] != '\0' && isalpha(text[p])) {
+            add(&text[p], lines);
+        }
+        n++;
+        p = i + 1;
+    }
+}
+
+// Interpret escape sequences.
+void unescape(char *s) {
+    int n = 0, len = strlen(s);
+    for (int i = 0; i < len; i++) {
+        if (s[i] == '\\') {
+            i++;
+            if (s[i] == 's') s[n++] = ' ';
+            else if (s[i] == 'b') s[n++] = '\\';
+            else if (s[i] == 'a') s[n++] = ACCEPT;
+            else if (s[i] == 'r') s[n++] = REJECT;
+        }
+        else s[n++] = s[i];
+    }
+    s[n] = '\0';
+}
 
 // Space for a one-character string for each ASCII character.
 char singles[128][2];
@@ -145,7 +175,8 @@ void expandRange(char *range, char *tokens[]) {
 }
 
 // Split each line into an array of tokens, replacing spaces by null characters
-// as necessary. Expand ranges into explicit one-character tokens.
+// as necessary. Expand ranges into explicit one-character tokens. Add a missing
+// accept action.
 void splitTokens(char *lines[], char *tokens[][SMALL]) {
     int nlines = length(lines);
     for (int i = 0; i < nlines; i++) {
@@ -157,13 +188,16 @@ void splitTokens(char *lines[], char *tokens[][SMALL]) {
             while (line[end] != ' ' && line[end] != '\0') end++;
             line[end] = '\0';
             char *pattern = &line[start];
+            unescape(pattern);
             if (isRange(pattern)) expandRange(pattern, tokens[i]);
             else add(pattern, tokens[i]);
             start = end + 1;
             while (start < len && line[start] == ' ') start++;
         }
         char *last = tokens[i][length(tokens[i])-1];
-        if (strlen(last) != 1) crash("No action at end of line");
+        if (strlen(last) > 1) {
+            add(singles[ACCEPT], tokens[i]);
+        }
     }
 }
 
@@ -289,7 +323,6 @@ void fillTable(
 scanner *buildScanner(char const *path) {
     scanner *sc = calloc(1, sizeof(scanner));
     readFile(path, sc->text);
-    validate(sc->text);
     splitLines(sc->text, sc->lines);
     makeSingles();
     splitTokens(sc->lines, sc->tokens);
@@ -327,15 +360,6 @@ void writeScanner(scanner *sc, char const *path) {
 
 // ----- Testing --------------------------------------------------------------
 
-void testValidate() {
-    char s[] = "abc\tdef\r\n";
-    assert(validate(s));
-    assert(strcmp(s, "abc def \n") == 0);
-    assert(! validate("\x80"));
-    assert(! validate("\x1F"));
-    assert(! validate("\x7F"));
-}
-
 // Check two NULL terminated arrays of strings are equal.
 bool eq(char *as[], char *bs[]) {
     for (int i = 0; i < length(as); i++) {
@@ -346,18 +370,18 @@ bool eq(char *as[], char *bs[]) {
 
 void testSplitLines() {
     char s[] = "abc\ndef\n\nghi\n";
-    char *lines[10];
+    char *lines[10] = {NULL};
     char *expect[] = {"abc", "def", "ghi", NULL};
     splitLines(s, lines);
     assert(eq(lines, expect));
 }
 
 void testSplitTokens() {
-    char s1[20] = "s a b c t", s2[20] = "  s  a b c  t  ", s3[20] = "s a..c t";
+    char s1[20] = "s a b c t", s2[20] = " s  \\s \\b  t  ", s3[20] = "s a..c t";
     char *lines[4] = {s1, s2, s3, NULL};
     char *expect[3][6] = {
         {"s", "a", "b", "c", "t", NULL},
-        {"s", "a", "b", "c", "t", NULL},
+        {"s", " ", "\\", "t", NULL},
         {"s", "a", "b", "c", "t", NULL}
     };
     char *tokens[3][SMALL] = {{NULL},{NULL},{NULL}};
@@ -400,14 +424,14 @@ void testExpandPatterns() {
 }
 
 int main(int n, char const *args[n]) {
-    testValidate();
+//    testValidate();
     testSplitLines();
     testSplitTokens();
     testGatherStates();
     testGatherPatterns();
     testSort();
     testExpandPatterns();
-    if (n != 2) crash("Use: ./compile language.txt");
+    if (n != 2) crash("Use: ./compile language.txt", 0, "");
     scanner *sc = buildScanner(args[1]);
     char out[100];
     strcpy(out, args[1]);

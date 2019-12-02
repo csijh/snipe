@@ -1,0 +1,88 @@
+Notes on model classes
+
+cursors -> semis -> indent -> brackets -> style -> lines -> text -> history OR
+
+unicode
+(action)
+text -> unicode
+history
+lines
+tokens (styles/tags/scan)
+brackets
+indents
+wraps
+cursors
+document
+
+OR
+
+text (adjusts edits) -> history
+text -> lines
+text -> style = tags
+text -> brackets
+text -> indents
+(text) -> cursors
+
+OR
+
+text -> array of edits
+insert(text, edits) adds two edits, to be broadcast
+
+* No longer have dependence on filer or support classes
+* have standard atomic edits: insert before, delete before
+    insert before cursor
+    delete before cursor
+    move cursor (deselects, so 'move c c' = 'deselect')
+    drag cursor (selects)
+    point (create new cursor)
+    cycle L/R (change cursors cyclically)
+    undo (flag?)
+    end edit
+* delegate down dependence chain OR call independently from document=controller
+* cursors first because causes multiple calls to other modules
+* delete right = move right + delete before
+* delete selection = move right (deselecting) + delete
+* need to get inserted/deleted text from bytes before calling history, e.g.
+* undo extracted from history, but needs flag to work differently on history
+* maybe all functions like getText have a common document structure as argument
+* (then you don't have to worry who is responsible)
+
+text
+-----
+maintains physical invariants
+    (no invalid utf8, no controls?, no trailing spaces or lines, final nl)
+    FF can be displayed as U+240C
+    VT can be displayed as U+240B etc.
+    an auto-save at any moment preserves invariants in file
+    cursor(s) can be beyond right or bottom edge
+insert(at,s) adjusts the insertion text
+    remove invalid bytes (and controls) and potential trails
+    add newline to preserve final newline
+    the adjustment could be pre-insert, returning new string
+delete(at,n) adjusts the delete range (both ends?) and fills in delete text
+    abc [d]\n  -->  abc[ d]\n     left end
+    abc[d\n]$  -->  abc[d]\n$     right end
+    abc\n[def]\n$  -->  abc\n[def\n]$
+    right-cursor adjust could be pre-delete, with delete returning text.
+move/drag/point/cycle move the gap to the new cursor position
+    so long scroll then edit is quick, gap is roughly on screen
+maybe return op, so must call first, and can adjust
+
+timings:
+  loading small program 1 milli
+  reading in UnicodeData.txt (2M) 2 millis (maybe cached?)
+  strlen 1 milli
+  uvalid 15 millis
+
+Actions
+-------
+loop: cursors for actions (include all consequences)
+offer all actions to text, history, lines, tags, brackets, indents, cursors(!)
+ask text for fixes and offer to everyone
+ask indents for fixes and offer to everyone
+close sequence
+if undo, offer to everyone (with undo flag for history?)
+
+How do fixes work, given they are not at a cursor?
+Insert: IF at cursor, insert before.
+Delete: IF cursor in range, must be at RH end

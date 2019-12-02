@@ -6,8 +6,6 @@
 // inserted into this module automatically by unigen.c, from Unicode data files.
 // The current version of the Unicode standard supported is 12.0.0.
 
-// TODO: add validity checking (then reject file)
-
 // Categories in the order used in the lookup tables.
 enum category {
     Cc, Cf, Cn, Co, Cs, Ll, Lm, Lo, Lt, Lu, Mc, Me, Mn, Nd, Nl, No, Pc, Pd, Pe,
@@ -20,19 +18,19 @@ int ucategory(int code);
 // The unicode replacement code point for all invalid UTF-8 sequences.
 enum { UBAD = 0xFFFD };
 
-extern bool uvalid(char *s);
+// Check if string is UTF-8 valid. If nullCheck is true, also check for nulls.
+bool uvalid(int n, char s[n], bool nullCheck);
 
 // The code and byte-length of a UTF-8 code point, plus grapheme boundary info.
 struct codePoint { int code; unsigned char length, grapheme; };
 typedef struct codePoint codePoint;
 
-// Get the code point at the given position. If grapheme boundaries are
-// required, call this only on the first code point of a grapheme.
-codePoint getCode(char const *s);
+// Get a codePoint structure suitable for iterating through a string.
+codePoint getCodePoint();
 
-// Get the next code point. If used in sequence, with the grapheme info from the
-// previous code point, this will track grapheme boundaries.
-codePoint nextCode(char grapheme, const char *s);
+// Get the next code point. The first call should be on a grapheme boundary,
+// after which grapheme boundaries will be tracked.
+void nextCode(codePoint *cp, const char *s);
 
 // Call only on a grapheme boundary. Returns the
 codePoint getGrapheme(const char *s);
@@ -45,4 +43,9 @@ bool graphemeStart(char grapheme);
 // internal use, but are provided here for unigen.c.
 enum grapheme {
     CR, LF, CO, EX, ZW, RI, PR, SM, HL, HV, HT, LV, LT, EP, OR
+};
+
+enum bidi {
+    BiL, BiR, BiEN, BiES, BiET, BiAN, BiCS, BiB, BiS, BiWS, BiON, BiBN, BiNSM,
+    BiAL, BiLRO, BiRLO, BiLRE, BiRLE, BiPDF, BiLRI, BiRLI, BiFSI, BiPDI
 };

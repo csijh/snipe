@@ -52,20 +52,92 @@ with the mouse is not yet supported.</p>
 
 <h2>Bracket matching</h2>
 
+<p>Bracket matching in Snipe:</p>
+
+<ul>
+
+<li>is used to drive indenting</li>
+
+<li>is incremental</li>
+
+<li>marks up unmatched brackets</li>
+
+<li>treats quotes and comment symbols as brackets</li>
+
+</ul>
+
+<p>Bracket matching drives Snipe's self-indenting feature. The amount by which a
+line is indented is determined simply by the number of unmatched open brackets
+which precede it.</p>
+
+<p>Bracket matching is incremental for the user's benefit, as much as for
+implementation efficiency. When a user makes a small local change, there should
+be a reasonably small response on the screen. Users are used to typing an open
+comment symbol, and having the syntax highlighting of the rest of the program
+change, until the close comment symbol is typed. However, self-indenting would
+cause an even greater problem, if typing an open bracket caused the indenting of
+the rest of the program to change.</p>
+
+<p>To avoid this problem, bracket matching is done forwards from the beginning
+of the program to the current cursor position, and separately backwards from the
+end of the program to the cursor. The indenting of each line below the cursor is
+determined by the number of unmatched close brackets which follow it. A small
+local change thus causes only a small adjustment on screen. If a user types a
+new open bracket, and then moves the cursor up or down, the indenting of the
+lines changes only one by one.</p>
+
+<p>Bracket matching is well defined, but the marking up of unmatched brackets is
+quite ambiguous. With a sequence <code>(()</code>, intuition suggests that the
+first open bracket should be marked as unmatched. However, in a similar sequence
+<code>{ ... { ... }</code> where the block brackets are far apart and the user
+has just typed the second open bracket, it is more intuitive to mark the most
+recent open bracket as unmatched, rather than the first one, which might not
+even appear on the screen. The approach taken in Snipe is that, after normal
+bracket matching has been done forwards from the start and backwards from the
+end, the remaining brackets are matched up from the outermost inwards, so that
+it is indeed brackets close to the cursor which are the most likely to be marked
+as unmatched.</p>
+
+<p>With multiple different types of bracket, there is even more ambiguity over
+marking up unmatched brackets. An intuitive approach is to give block brackets a
+higher priority that others, so in <code>{(}</code> is it the round bracket
+which is marked as unmatched. Care has to be taken with quotes and comment
+symbols. It is clear that both have a higher priority than normal brackets. In a
+sequence <code>"{"</code>, the two quotes must match and the bracket treated as
+unmatched to arrive at the right interpretation. However, quotes do not have a
+higher priority than comment symbols nor vice versa. For example, check these
+two sequences:</p>
+
+<pre>/* " */ ... /* " */
+" /* " ... " */ "
+</pre>
+
+<p>The first would be incorrectly interpreted if the quotes had higher priority,
+and the second would be incorrectly interpreted if comment symbols had higher
+priority. Priority has to go to the outermost symbols. The rules used lead to
+some slightly odd situations, but only when programs are not valid anyway. For
+example, consider the sequence:</p>
+
+<pre>/* " */ "
+</pre>
+
+<p>If this is before the cursor, it is interpreted as a comment followed by an
+unmatched quote. But if it is after the cursor, it is interpreted as a string
+literal preceded by an unmatched comment symbol.</p>
+
 <p>Round, square and curly brackets <code>()[]{}</code> on each line are
-matched, and mismatched brackets are syntax-coloured as errors, e.g. in red.
-Care is taken
-over the way in which brackets are matched, because it affects
-auto-indenting. However, bracket matching is currently only done on each
-line separately, not between lines.</p>
+matched, and unmatched brackets are syntax-coloured as errors, e.g. in red. Care
+is taken over the way in which brackets are matched, because it affects
+auto-indenting. However, bracket matching is currently only done on each line
+separately, not between lines.</p>
 
 <p>Only syntactically meaningful brackets are matched, not brackets
 inside comments or strings. To avoid ambiguities, the brackets form a hierarchy
 with <code>()</code> as the most local and <code>{}</code> as the most global.
 For example, with both <code>(}</code> and <code>{)</code> it is the round
-bracket that is reported as mismatched.</p>
+bracket that is reported as unmatched.</p>
 
-<p>Brackets which are unmatched rather than mismatched
+<p>Brackets which are unmatched rather than unmatched
 are not marked as errors. Instead, they affect indenting.</p>
 
 <h2>Auto-indenting</h2>
