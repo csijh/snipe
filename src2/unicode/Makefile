@@ -13,6 +13,5 @@ ifdef Windows
 	DEBUG = -g
 endif
 
-unigen: unigen.c ../unicode.h ../unicode.c $(DATA) $(TESTS)
+unigen: unigen.c $(DATA) $(TESTS)
 	gcc -std=c11 -Wall $(DEBUG) unigen.c -o unigen
-	./unigen
