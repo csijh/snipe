@@ -1,44 +1,59 @@
 // The Snipe editor is free and open source, see licence.txt.
-#include "op.h"
+#include "action.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <assert.h>
 
-struct op {
-    int flags;
-    int at;
-    int n;
-    char *s;
+// Define the names of the actions.
+static char *actionNames[] = {
+    [MoveLeftChar]="MoveLeftChar", [MoveRightChar]="MoveRightChar",
+    [MoveLeftWord]="MoveLeftWord", [MoveRightWord]="MoveRightWord",
+    [MoveUpLine]="MoveUpLine", [MoveDownLine]="MoveDownLine",
+    [MoveStartLine]="MoveStartLine", [MoveEndLine]="MoveEndLine",
+    [MarkLeftChar]="MarkLeftChar", [MarkRightChar]="MarkRightChar",
+    [MarkLeftWord]="MarkLeftWord", [MarkRightWord]="MarkRightWord",
+    [MarkUpLine]="MarkUpLine", [MarkDownLine]="MarkDownLine",
+    [MarkStartLine]="MarkStartLine", [MarkEndLine]="MarkEndLine",
+    [CutLeftChar]="CutLeftChar", [CutRightChar]="CutRightChar",
+    [CutLeftWord]="CutLeftWord", [CutRightWord]="CutRightWord",
+    [CutUpLine]="CutUpLine", [CutDownLine]="CutDownLine",
+    [CutStartLine]="CutStartLine", [CutEndLine]="CutEndLine",
+    [Newline]="Newline", [Bigger]="Bigger", [Smaller]="Smaller",
+    [CycleTheme]="CycleTheme", [Point]="Point", [Select]="Select",
+    [AddPoint]="AddPoint", [AddSelect]="AddSelect", [Insert]="Insert",
+    [Cut]="Cut", [Copy]="Copy", [Paste]="Paste", [PageUp]="PageUp",
+    [PageDown]="PageDown", [Undo]="Undo", [Redo]="Redo", [Resize]="Resize",
+    [Focus]="Focus", [Defocus]="Defocus", [Blink]="Blink", [Frame]="Frame",
+    [Scroll]="Scroll", [Load]="Load", [Save]="Save", [Open]="Open",
+    [Help]="Help", [Quit]="Quit", [Ignore]="Ignore"
 };
 
-const int Fix = 0x1, Del = 0x2, Left = 0x4, Sel = 0x8, Multi = 0x10;
-
-op *newOp() {
-    return malloc(sizeof(op));
+// Find an action from its name.
+action findAction(char *name) {
+    for (action a = 0; a <= COUNT_ACTIONS; a++) {
+        if (strcmp(actionNames[a], name) == 0) return a;
+    }
+    printf("Error: can't find action %s\n", name);
+    exit(1);
+    return Ignore;
 }
 
-void freeOp(op *o) {
-    free(0);
+char *findActionName(action a) {
+    return actionNames[a];
 }
 
-void setOp(op *o, int flags, int at, int n, char s[n]) {
-    *o = (op) {.flags=flags, .at=at, .n=n, .s=s};
+void printAction(action a) {
+    printf("%s\n", actionNames[a]);
 }
 
-extern inline void setDeletion(op *o, char *s) {
-    o->s = s;
-}
+#ifdef actionTest
 
-int flagsOp(op *o) { return o->flags; }
-int atOp(op *o) { return o->at; }
-int lengthOp(op *o) { return o->n; }
-char *textOp(op *o) { return o->s; }
-
-#ifdef opTest
-
-// No testing.
-int main() {
-    printf("Op module OK\n");
+int main(int n, char const *args[]) {
+    setbuf(stdout, NULL);
+    assert(findAction("Ignore") == Ignore);
+    printf("Action module OK\n");
+    return 0;
 }
 
 #endif

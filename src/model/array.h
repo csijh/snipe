@@ -1,10 +1,10 @@
-// Flexible arrays. Free and open source. See licence.txt.
+// Flexible arrays and strings. Free and open source. See licence.txt.
 
 // A flexible array has information stored in a prefix so that it can be indexed
 // as normal, for maximum convenience. Careful conventions are needed to cope
 // with the fact that an array may move when it is increased in size. Mistakes
-// are easily made, e.g. calling append(a,x) and not a = append(a,x). However,
-// the compiler flag -fsanitize=address is likely to catch most errors.
+// are easily made, e.g. calling f(a,...) and not a = f(a,...). Use the compiler
+// flag -fsanitize=address to catch errors.
 
 // Create a new empty array containing items of the given size. The capacity is
 // always at least one more than the length, so that the length can exclude a
@@ -24,25 +24,27 @@ void *resizeArray(void *a, int n);
 // Delete all the elements of an array, i.e. resize to zero.
 void clearArray(void *a);
 
-// A position can be associated with an array, e.g. if it represents a subarray.
+// A position can be associated with an array, e.g. if it represents an edit.
 // Get or set the associated position.
-int atArray(void *a);
-void setAtArray(void *a, int at);
+int toArray(void *a);
+void setToArray(void *a, int at);
 
 // An opcode can be associated with an array, e.g. if it represents an edit.
 // Get or set the associated opcode.
 int opArray(void *a);
 void setOpArray(void *a, int op);
 
-// A string variable is a string stored as a character array. Synonyms are
-// provided for the array functions.
-typedef char *string;
-void *newString();
-void freeString(string s);
-int lengthString(string s);
-void *resizeString(string s, int n);
-void clearString(string s);
-int atString(string s);
-void setAtString(string s, int at);
-int opString(string s);
-void setOpString(string s, int op);
+// A string variable is a string stored as a character array. These are synonyms
+// are provided for the array functions, except that s null character is
+// maintained at the end. However, a string may also contain nulls.
+typedef char string;
+string *newString();
+string *fillString(string *str, char *s);
+void freeString(string *s);
+int lengthString(string *s);
+void *resizeString(string *s, int n);
+void clearString(string *s);
+int toString(string *s);
+void setToString(string *s, int at);
+int opString(string *s);
+void setOpString(string *s, int op);

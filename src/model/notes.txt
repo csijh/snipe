@@ -1,51 +1,14 @@
 Notes on model classes
-
-cursors -> semis -> indent -> brackets -> style -> lines -> text -> history OR
-
-unicode
-(action)
-text -> unicode
-history
-lines
-tokens (styles/tags/scan)
-brackets
-indents
-wraps
-cursors
-document
-
-OR
-
-text (adjusts edits) -> history
-text -> lines
-text -> style = tags
-text -> brackets
-text -> indents
-(text) -> cursors
-
-OR
-
-text -> array of edits
-insert(text, edits) adds two edits, to be broadcast
-
 * No longer have dependence on filer or support classes
-* have standard atomic edits: insert before, delete before
-    insert before cursor
-    delete before cursor
-    move cursor (deselects, so 'move c c' = 'deselect')
-    drag cursor (selects)
-    point (create new cursor)
-    cycle L/R (change cursors cyclically)
-    undo (flag?)
-    end edit
-* delegate down dependence chain OR call independently from document=controller
-* cursors first because causes multiple calls to other modules
-* delete right = move right + delete before
-* delete selection = move right (deselecting) + delete
-* need to get inserted/deleted text from bytes before calling history, e.g.
-* undo extracted from history, but needs flag to work differently on history
-* maybe all functions like getText have a common document structure as argument
-* (then you don't have to worry who is responsible)
+* Have edit object which all modules respond to.
+
+document ->
+cursors -> wraps -> indents -> brackets -> tokens -> lines -> text -> history
+-> edit, unicode, arrays
+
+From document point of view, each module is 'independent'. Give action to
+cursors. Ask an active module for next edit, offer to all modules, repeat until
+there are no more.
 
 text
 -----

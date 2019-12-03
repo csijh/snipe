@@ -82,7 +82,8 @@ bool graphemeStart(char grapheme) {
 
 // Test a UTF-8 byte sequence.
 bool ok(char const *s, int length, int code) {
-    codePoint cp = getCode(s);
+    codePoint cp = getCodePoint();
+    nextCode(&cp, s);
     return (cp.length == length && cp.code == code);
 }
 

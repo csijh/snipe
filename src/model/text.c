@@ -9,10 +9,13 @@
 
 // A text object stores an array of bytes, as a gap buffer. For realloc info,
 // see http://blog.httrack.com/blog/2014/04/05/a-story-of-realloc-and-laziness/
-// The gap is between offsets lo and hi in the data array.
+// The gap is between offsets lo and hi in the data array. The gap is always at
+// the current cursor. The start and end positions of the most recent insertion
+// or deletion are stored, until fixes are applied, and are then set to -1.
 struct text {
     char *data;
     int lo, hi, top;
+    int startEdit, endEdit;
 };
 
 // Visualize the text in the given string.
@@ -60,12 +63,12 @@ static void resizeText(text *t, length n) {
     t->top = size;
 }
 
-extern inline length lengthText(text *t) {
+extern inline int lengthText(text *t) {
     return t->lo + (t->top - t->hi);
 }
 
 // Move the gap to the given position.
-static void moveGap(text *t, point at) {
+static void moveGap(text *t, position at) {
     if (at > lengthText(t)) at = lengthText(t);
     if (at < t->lo) {
         int len = (t->lo - at);
@@ -88,6 +91,72 @@ static char charAt(text *t, point at) {
     else return t->data[t->hi + (at - t->lo)];
 }
 
+bool loadText(text *t, chars *buffer) {
+    bool ok = uvalid(lengthArray(buffer), buffer, true);
+    if (! ok) return false;
+    length n = lengthArray(buffer);
+    t->lo = 0;
+    t->hi = t->top;
+    resizeText(t, n);
+    buffer = clean(t, 0, buffer);
+    resizeArray(buffer, n);
+    t->hi = t->top - n;
+    memcpy(&t->data[t->hi], buffer, n);
+    return true;
+}
+
+chars *getText(text *t, point at, length n, chars s[]) {
+    assert(at + n <= lengthText(t));
+    moveGap(t, at + n);
+    resizeArray(s, n);
+    memcpy(s, &t->data[at], n);
+    s[n] = '\0';
+    return s;
+}
+
+// Insert a string at the current position and remember the start and end.
+static void insertText(text *t, edit *e) {
+    int n = lengthEdit(e);
+    t->startEdit = t->lo;
+    t->endEdit = t->lo + n;
+    if (n > t->hi - t->lo) resizeText(t, n);
+    memcpy(&t->data[t->lo], e, n);
+    t->lo = t->lo + n;
+}
+
+// Delete a string before the current position, and remember the start and end.
+static void deleteText(text *t, edit *e) {
+    int n = lengthEdit(e);
+    if (n < 0) n = 0;
+    if (n > t->lo) n = t->lo;
+    t->startEdit = t->lo - n;
+    t->endEdit = t->lo;
+    t->lo = t->lo - n;
+}
+
+void editText(text *t, edit *e) {
+    switch (opEdit(e)) {
+        case DoInsert: insertText(t, e); break;
+        case DoDelete: deleteText(t, e); break;
+        default: moveGap(t, toEdit(e));
+    }
+}
+
+// If startEdit is negative, there are no further fixes. look for the first
+// trailing spaces requiring deletion between startEdit and endEdit. If the two
+// are equal, check for just one newline at the end of the text.
+bool fixText(text *t, edit *e) {
+    if (startEdit < 0) return false;
+    if (startEdit < t->lo) {
+        for (int i = startEdit; i < )
+    }
+
+    for (int i = startEdit; i < endEdit) {
+
+    }
+}
+
+// ----------------------------------------------------------------------------
 // Clean up insertion text, assumed to be UTF-8 valid. Remove nulls and
 // carriage returns and make these adjustments:
 //   internal trailing spaces  ...[... \n...]...  ->  ...[...\n...]...
@@ -139,30 +208,7 @@ static void fixEnd(text *t) {
     else while (t->lo >= 2 && t->data[t->lo - 2] == '\n') t->lo--;
 }
 
-    // TODO ...[...\n]\n  ->  ...[...]\n
-
-bool loadText(text *t, chars *buffer) {
-    bool ok = uvalid(lengthArray(buffer), buffer, true);
-    if (! ok) return false;
-    length n = lengthArray(buffer);
-    t->lo = 0;
-    t->hi = t->top;
-    resizeText(t, n);
-    buffer = clean(t, 0, buffer);
-    resizeArray(buffer, n);
-    t->hi = t->top - n;
-    memcpy(&t->data[t->hi], buffer, n);
-    return true;
-}
-
-chars *getText(text *t, point at, length n, chars s[]) {
-    assert(at + n <= lengthText(t));
-    moveGap(t, at + n);
-    resizeArray(s, n);
-    memcpy(s, &t->data[at], n);
-    s[n] = '\0';
-    return s;
-}
+// TODO ...[...\n]\n  ->  ...[...]\n
 
 // Get rid of invalid UTF-8 bytes and clean up.
 static chars *preInsertText(text *t, point at, chars s[]) {
@@ -181,16 +227,6 @@ static chars *preInsertText(text *t, point at, chars s[]) {
     setLength(s, j);
     s[j] = '\0';
     return clean(t, at, s);
-}
-
-chars *insertText(text *t, point at, chars s[]) {
-    s = preInsertText(t, at, s);
-    int n = lengthArray(s);
-    moveGap(t, at);
-    if (n > t->hi - t->lo) resizeText(t, n);
-    memcpy(&t->data[t->lo], s, n);
-    t->lo = t->lo + n;
-    return n;
 }
 
 // Delete n bytes after the given position. The request is adjusted as necessary
