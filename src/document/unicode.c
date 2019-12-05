@@ -6,6 +6,11 @@
 // The success and failure states of the UTF-8 byte state machine.
 enum { UTF8_ACCEPT = 0, UTF8_REJECT = 12 };
 
+// Grapheme break values for finite state machine.
+enum grapheme {
+    CR, LF, CO, EX, ZW, RI, PR, SM, HL, HV, HT, LV, LT, EP, OR
+};
+
 // States for the grapheme boundary finite state machine, plus a flag to
 // mark a grapheme boundary break before the code point just seen.
 enum graphemeState {

@@ -34,15 +34,15 @@ void setToArray(void *a, int at);
 int opArray(void *a);
 void setOpArray(void *a, int op);
 
-// A string variable is a string stored as a character array. These are synonyms
-// are provided for the array functions, except that s null character is
-// maintained at the end. However, a string may also contain nulls.
+// A string variable is a string stored as a character array. These are mostly
+// synonyms for the array functions, except that a null character is maintained
+// at the end. However, a string may also contain nulls.
 typedef char string;
 string *newString();
 string *fillString(string *str, char *s);
 void freeString(string *s);
 int lengthString(string *s);
-void *resizeString(string *s, int n);
+string *resizeString(string *s, int n);
 void clearString(string *s);
 int toString(string *s);
 void setToString(string *s, int at);

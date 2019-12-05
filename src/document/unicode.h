@@ -38,13 +38,6 @@ codePoint getGrapheme(const char *s);
 // Check if the most recent code point is the start of a grapheme.
 bool graphemeStart(char grapheme);
 
-// Grapheme break values. A classification of all code points for finding
-// boundaries between graphemes (extended grapheme clusters). These are for
-// internal use, but are provided here for unigen.c.
-enum grapheme {
-    CR, LF, CO, EX, ZW, RI, PR, SM, HL, HV, HT, LV, LT, EP, OR
-};
-
 enum bidi {
     BiL, BiR, BiEN, BiES, BiET, BiAN, BiCS, BiB, BiS, BiWS, BiON, BiBN, BiNSM,
     BiAL, BiLRO, BiRLO, BiLRE, BiRLE, BiPDF, BiLRI, BiRLI, BiFSI, BiPDI

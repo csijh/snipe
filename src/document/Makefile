@@ -1,7 +1,9 @@
 # Modules forming the editor's model.
 unicode = unicode.c
+string = string.c
+edit = edit.c $(unicode)
+
 array = array.c
-edit = edit.c $(unicode) $(array)
 text = text.c $(edit)
 
 history = history.c $(text)

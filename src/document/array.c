@@ -7,10 +7,10 @@
 #include <assert.h>
 
 // An array prefix has a capacity, length, and stride i.e. the size of each
-// item. When it represents an edit such as an insertion, 'op' gives the
-// operation to perform and 'to' gives its target in the text. The data is
-// given a pointer type, just to make sure it is always pointer-aligned.
-struct array { int max, length, to; short stride, op; char *data[]; };
+// item. When it represents an edit such as an insertion, the op, from, to
+// fields describe the operation to perform. The data is given a pointer type,
+// just to make sure it is always pointer-aligned.
+struct array { int max, length, stride, op, from, to; char *data[]; };
 typedef struct array array;
 
 void *newArray(int stride) {
@@ -80,7 +80,7 @@ string *fillString(string *str, char *s) {
 
 int lengthString(string *s) { return lengthArray(s); }
 
-void *resizeString(string *s, int n) {
+string *resizeString(string *s, int n) {
     s = resizeArray(s, n);
     s[n] = '\0';
     return s;

@@ -61,6 +61,14 @@ void changeBrackets(brackets *bs, op *o);
 // the new opener is mismatched.
 
 // Normal forward algorithm:
-// See open bracket, push.
+// See open bracket, push it.
 // See close bracket, try to match with top.
+// {) => drop the close bracket.
+// () => match and drop both.
+// (} => drop open bracket and loop.
 // Either match and drop out, or mismatch and drop out.
+
+// Normal reverse algorithm:
+// See open bracket, pop it.
+// See close bracket = top. Can't happen.
+// See close bracket not top. MAYBE reconstruct what happened since the top.

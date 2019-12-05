@@ -1,12 +1,12 @@
 // The Snipe editor is free and open source, see licence.txt.
-#include "array.h"
+#include "edit.h"
 #include <stdbool.h>
 
 // A text object is a flexible byte array holding the content of a file. It is
 // implemented as a gap buffer, with the gap maintained at the current cursor
 // position. For n bytes, positions in the text run from 0 (at the start) to n
-// (after the final newline). There are never any invalid UTF-8 sequences or
-// nulls or returns (assuming inserted text has been cleaned first).
+// (after the final newline). The text never contains invalid UTF-8 sequences or
+// nulls or returns.
 
 // After each edit is executed, the fixText() function should be called
 // repeatedly to obtain further edits needed to repair the text. These repairs
@@ -28,14 +28,13 @@ void freeText(text *t);
 // Fill a text object from a newly loaded file, discarding any previous content.
 // Return false if the buffer contains invalid UTF-8 sequences or nulls (because
 // it is probably binary and shouldn't be loaded).
-bool loadText(text *t, chars buffer[]);
+bool loadText(text *t, int n, char *buffer);
 
 // Return the number of bytes.
 int lengthText(text *t);
 
-// Make a copy of n characters of text at a given position in s as a substring.
-// Returning the possibly resized string.
-string *getText(text *t, position at, int n, string *s);
+// Make a copy in s of n characters of text at a given position.
+void getText(text *t, position at, int n, char *s);
 
 // Update the text according to a requested edit.
 void editText(text *t, edit *e);
