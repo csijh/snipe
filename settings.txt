@@ -35,3 +35,6 @@ HelpIndex help/index.xhtml
 Theme files/solarized-dark.txt
 Theme files/solarized-light.txt
 // Theme files/monokai.txt
+
+// Languages where multiline comments are nestable.
+NestedComments .d .hs .lhs .rs .scala .swift

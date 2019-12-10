@@ -1,5 +1,9 @@
 // Snipe language interpreter. Free and open source. See license.txt.
-// Read in a compiled language description and execute it for testing.
+// Read in a compiled language description and execute it for testing. Type
+//
+//     ./interpret [-t] c
+//
+// to read in c.bin and execute tests from c-test.txt
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -8,7 +12,7 @@
 
 // Special action constants. The rest are token tags.
 typedef unsigned char byte;
-enum { SKIP = '\0', ACCEPT = '\1', REJECT = '\2' };
+enum { SKIP = '\0', ACCEPT = ' ', REJECT = '\r' };
 
 // A scanner consists of a table[nstates][npatterns][2], an array of state
 // names, and an array of pattern strings. The starters array gives the first
@@ -35,8 +39,49 @@ void crash(char *s) {
     exit(1);
 }
 
+// Read in a text file. Use binary mode, so that the number of bytes read
+// equals the file size.
+char *readTests(char *path) {
+    FILE *file = fopen(path, "rb");
+    if (file == NULL) crash("Error: can't read file");
+    fseek(file, 0, SEEK_END);
+    int size = ftell(file);
+    fseek(file, 0, SEEK_SET);
+    if (size < 0) crash("Error: can't find file size");
+    char *data = malloc(size + 1);
+    int n = fread(data, 1, size, file);
+    if (n != size) { free(data); fclose(file); crash("read failed"); }
+    data[n] = '\0';
+    fclose(file);
+    return data;
+}
+
+// Split the text of a language description into an array of lines, replacing
+// each newline by a null. Skip lines up to a line of at least 5 minuses, and
+// blank lines.
+char **splitLines(char *fullText) {
+    char *text = strstr(fullText, "-----");
+    if (text == NULL) crash("Error: no line of minuses");
+    while (*text != '\n') text++;
+    text++;
+    int n = 0;
+    for (int i = 0; text[i] != '\0'; i++) if (text[i] == '\n') n++;
+    char **lines = malloc((n+1) * sizeof(char *));
+    int p = 0;
+    n = 0;
+    for (int i = 0; text[i] != '\0'; i++) {
+        if (text[i] == '\r') text[i] = '\0';
+        if (text[i] != '\n') continue;
+        text[i]= '\0';
+        if (text[p] != '\0') lines[n++] = &text[p];
+        p = i + 1;
+    }
+    lines[n] = NULL;
+    return lines;
+}
+
 // Read in the scanner from a binary file.
-void readFile(char const *path, scanner *sc) {
+void readScanner(char const *path, scanner *sc) {
     FILE *file = fopen(path, "rb");
     if (file == NULL) crash("Error: can't read file");
     fseek(file, 0, SEEK_END);
@@ -81,6 +126,26 @@ void construct(scanner *sc) {
     }
 }
 
+// Analyse the scanner.
+void analyse(scanner *sc) {
+    byte (*table)[sc->npatterns][2] = (byte(*)[sc->npatterns][2]) sc->table;
+    for (char ch = ' '; ch <= '~'; ch++) {
+        int target1 = -1;
+        bool done = false;
+        for (int s = 0; s < sc->nstates && ! done; s++) {
+            for (int p = 0; p < sc->npatterns && ! done; p++) {
+                if (table[s][p][0] != ch) continue;
+                byte target = table[s][p][1];
+                if (target1 < 0) target1 = target;
+                else if (target != target1) {
+                    printf("Except %c %d %d\n", ch, target1, target);
+                    done = true;
+                }
+            }
+        }
+    }
+}
+
 // Check if a string starts with a pattern. Return the length or -1.
 static inline int match(char *s, char *p) {
     int i;
@@ -99,6 +164,10 @@ void scan(char *line, char *tokens, scanner *sc, bool trace) {
     while (i < strlen(line) || start < i) {
         int ch = line[i], action, len, target, p;
         for (p = sc->starters[ch]; ; p++) {
+            if (p == 294) {
+                printf("ch=%c, p0=%d, s='%s'\n", ch, sc->starters[ch], sc->patterns[196]);
+                printf("ps=%d\n", sc->npatterns);
+            }
             action = table[state][p][0];
             target = table[state][p][1];
             char c = action;
@@ -119,29 +188,55 @@ void scan(char *line, char *tokens, scanner *sc, bool trace) {
             while (start > 0 && tokens[start] == ' ') start--;
         }
         else {
-            tokens[start] = action;
-            start = i;
             i += len;
+            if (i > start) tokens[start] = action;
+            start = i;
         }
         state = target;
     }
 }
 
+// Run the tests from the end of the language description file.
+int runTests(char**lines, scanner *sc, bool trace) {
+    char tags[100];
+    int passes = 0;
+    for (int i = 0; lines[i] != NULL; i = i + 2) {
+        for (int i = 0; i < 100; i++) tags[i] = ' ';
+        tags[strlen(lines[i])] = '\0';
+        scan(lines[i], tags, sc, trace);
+        int n = strlen(tags);
+        while (n > 0 && tags[n-1] == ' ') tags[--n] = '\0';
+        if (strcmp(tags, lines[i+1]) == 0) { passes++; continue; }
+        fprintf(stderr, "Error:\n");
+        fprintf(stderr, "%s\n", lines[i]);
+        fprintf(stderr, "%s\n", tags);
+        exit(1);
+    }
+    return passes;
+}
+
 int main(int n, char const *args[n]) {
-    char const *path;
-    bool trace;
-    trace = n > 2;
-    if (n == 2) path = args[1];
-    else if (n == 3 && strcmp(args[1], "-t") == 0) path = args[2];
-    else if (n == 3 && strcmp(args[2], "-t") == 0) path = args[1];
-    else crash("Use: ./interpret [-t] language.bin");
+    char const *lang;
+    bool trace = n > 2;
+    if (n == 2) lang = args[1];
+    else if (n == 3 && strcmp(args[1], "-t") == 0) lang = args[2];
+    else if (n == 3 && strcmp(args[2], "-t") == 0) lang = args[1];
+    else crash("Use: ./interpret [-t] lang\n"
+        "to read lang.bin and run tests from lang.txt");
     scanner *sc = malloc(sizeof(scanner));
-    readFile(path, sc);
+    char path[100];
+    sprintf(path, "%s.bin", lang);
+    readScanner(path, sc);
     construct(sc);
-    char line[] = "abc";
-    char tokens[] = "   ";
-    scan(line, tokens, sc, trace);
-    printf("%s\n%s\n", line, tokens);
+    bool analysing = false;
+    if (analysing) analyse(sc);
+    sprintf(path, "%s.txt", lang);
+    char *testFile = readTests(path);
+    char **lines = splitLines(testFile);
+    int p = runTests(lines, sc, trace);
+    free(lines);
+    free(testFile);
     freeScanner(sc);
+    printf("Tests passed: %d\n", p);
     return 0;
 }

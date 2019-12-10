@@ -46,5 +46,8 @@ void deselectEdit(edit *e, int at, int to);
 void moveEdit(edit *e, int at, int to);
 void endEdit(edit *e);
 
+// Get the string from an insertion or deletion, valid only during the edit.
+char const *stringEdit(edit *e);
+
 // Copy the string from an insertion or deletion to s.
 void copyEdit(edit *e, char *s);

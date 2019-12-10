@@ -2,12 +2,13 @@
 unicode = unicode.c
 string = string.c
 edit = edit.c $(unicode)
+text = text.c $(edit)
+lines = lines.c $(edit)
+tokens = tokens.c
 
 array = array.c
-text = text.c $(edit)
 
 history = history.c $(text)
-lines = lines.c $(history)
 cursors = cursors.c $(lines)
 scan = scan.c $(cursors)
 brackets = brackets.c $(scan)

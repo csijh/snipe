@@ -9,14 +9,15 @@
 #include <assert.h>
 
 // BIG is the limit on array sizes. It can be increased as necessary.
-// SMALL is the limit on anything where there is a restriction to one byte.
-enum { BIG = 5000, SMALL = 256 };
+// SMALL is the limit on arrays indexed by bytes.
+enum { BIG = 10000, SMALL = 256 };
 
 // A table entry consists of two bytes, an action and a target state. An action
-// is usually a visible ASCII character. These are the exceptions. SKIP is
-// reserved to mean that this pattern is not relevant in the current state.
+// is an ASCII character. SKIP is reserved to mean that this pattern is not
+// relevant in the current state, accept means add a character to the current
+// token, and reject means backtrack to the start of the current token.
 typedef unsigned char byte;
-enum { SKIP = '\0', ACCEPT = '\1', REJECT = '\2' };
+enum { SKIP = '\0', ACCEPT = ' ', REJECT = '\r' };
 
 // A scanner structure consists of the size of the state transition table then
 // the table itself, then a string store containing the state names followed by
@@ -97,7 +98,8 @@ int find(char *s, char *strings[]) {
 
 // Validate a line. Check it is ASCII only. Convert '\t' or '\r' to a space. Ban
 // other control characters except '\n'. Check that an initial state name has at
-// least two characters. Check that the only escapes are s,b,a,r
+// least two characters. Check that the only escapes are \s,\b,\n,\r and a
+// backslash followed by whitespace.
 void validate(int n, char *line) {
     for (int i = 0; line[i] != '\0'; i++) {
         unsigned char ch = line[i];
@@ -106,7 +108,7 @@ void validate(int n, char *line) {
         else if (ch < 32 || ch > 126) crash("control character", n, "");
         else if (ch == '\\') {
             ch = line[i+1];
-            if (ch != 's' && ch != 'b' && ch != 'a' && ch != 'r') {
+            if (strchr("sbnr \n", ch) == NULL) {
                 crash("unknown escape sequence", n, "");
             }
         }
@@ -117,12 +119,15 @@ void validate(int n, char *line) {
 }
 
 // Split the text into an array of lines, replacing each newline by a null. Skip
-// blank lines or lines starting with a non-letter.
+// blank lines or lines starting with a non-letter. Stop at a line starting with
+// at least 5 minus signs.
 void splitLines(char *text, char *lines[]) {
     int p = 0, n = 1;
     for (int i = 0; text[i] != '\0'; i++) {
+        if (text[i] == '\r') text[i] = ' ';
         if (text[i] != '\n') continue;
         text[i]= '\0';
+        if (strncmp(&text[p], "-----", 3) == 0) break;
         validate(n, &text[p]);
         if (text[p] != '\0' && isalpha(text[p])) {
             add(&text[p], lines);
@@ -136,12 +141,12 @@ void splitLines(char *text, char *lines[]) {
 void unescape(char *s) {
     int n = 0, len = strlen(s);
     for (int i = 0; i < len; i++) {
-        if (s[i] == '\\') {
+        if (s[i] == '\\' && i < len-1) {
             i++;
             if (s[i] == 's') s[n++] = ' ';
             else if (s[i] == 'b') s[n++] = '\\';
-            else if (s[i] == 'a') s[n++] = ACCEPT;
-            else if (s[i] == 'r') s[n++] = REJECT;
+            else if (s[i] == 'n') s[n++] = '\n';
+            else if (s[i] == 'r') s[n++] = '\r';
         }
         else s[n++] = s[i];
     }
@@ -167,8 +172,6 @@ bool isRange(char *s) {
 // Expand a range x..y into an explicit series of one-character tokens. Add to
 // the tokens array.
 void expandRange(char *range, char *tokens[]) {
-    if (range[0] == '_') range[0] = ' ';
-    if (range[3] == '_') range[3] = ' ';
     for (int ch = range[0]; ch <= range[3]; ch++) {
         add(singles[ch], tokens);
     }
@@ -284,8 +287,8 @@ void fillRule(
     byte action = tokens[n-1][0];
     byte state = (byte) find(tokens[0], states);
     byte target = (byte) find(tokens[n-2], states);
-    for (int i = 2; i < n-1; i++) {
-        byte p = (byte) find(tokens[i], patterns);
+    for (int i = 1; i < n-1; i++) {
+        short p = (short) find(tokens[i], patterns);
         byte oldAction = table[state][p][0];
         if (oldAction != SKIP) continue;
         table[state][p][0] = action;
@@ -303,6 +306,7 @@ void fillDefault(
     for (int p = 0; p < length(patterns); p++) {
         char *pattern = patterns[p];
         if (strlen(pattern) != 0) continue;
+        if (p == 180) printf("fill %s %d %d\n", pattern, action, target);
         table[state][p][0] = action;
         table[state][p][1] = target;
     }
@@ -424,7 +428,6 @@ void testExpandPatterns() {
 }
 
 int main(int n, char const *args[n]) {
-//    testValidate();
     testSplitLines();
     testSplitTokens();
     testGatherStates();

@@ -94,6 +94,10 @@ void endEdit(edit *e) {
     set(e, DoEnd, 0, 0, 0, NULL);
 }
 
+char const *stringEdit(edit *e) {
+    return e->s;
+}
+
 void copyEdit(edit *e, char *s) {
     memcpy(s, e->s, e->length);
     s[e->length] = '\0';

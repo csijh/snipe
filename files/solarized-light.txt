@@ -1,37 +1,17 @@
-GAP      #fdf6e3 base3
-SELECT   #073642 base02
-POINT    #586e75 base01
-COMMENT  #93a1a1 base1
-WORD     #657b83 base00
-KEY      #b58900 yellow
-RESERVED #cb4b16 orange
-SIGN     #657b83 base00
-OP       #657b83 base00
-NUMBER   #2aa198 cyan
-STRING   #2aa198 cyan
-ID       #657b83 base00
-PROPERTY #657b83 base00
-FUNCTION #268bd2 blue
-BAD      #dc322f red
+// See http://ethanschoonover.com/solarized/#usage-development
 
-// See http://ethanschoonover.com/solarized
-//
-// #002b36 base03
-// #073642 base02
-// #586e75 base01
-// #657b83 base00
-// #839496 base0
-// #93a1a1 base1
-// #eee8d5 base2
-// #fdf6e3 base3
-// #b58900 yellow
-// #cb4b16 orange
-// #dc322f red
-// #d33682 magenta
-// #6c71c4 violet
-// #268bd2 blue
-// #2aa198 cyan
-// #859900 green
-//
-// dark:  base03 base02 base01 base0  base1
-// light: base3  base2  base1  base00 base01
+_            #fdf6e3 // base3  background
+!            #eee8d5 // base2  selection background
+@            #073642 // base02 inverted background
+# < >        #93a1a1 // base1  dim text
+I P W S +    #657b83 // base00 normal text
+( ) [ ] { }  #657b83 // base00
+|            #586e75 // base01 strong text
+K            #b58900 // yellow
+R            #cb4b16 // orange
+N ' "        #2aa198 // cyan
+F            #268bd2 // blue
+?            #dc322f // red
+             #d33682 // magenta
+             #6c71c4 // violet
+             #859900 // green
