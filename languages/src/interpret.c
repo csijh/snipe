@@ -12,14 +12,18 @@
 
 // Special action constants. The rest are token tags.
 typedef unsigned char byte;
-enum { SKIP = '\0', ACCEPT = ' ', REJECT = '\r' };
+enum { SKIP = '.', ACCEPT = ' ' };
 
-// A scanner consists of a table[nstates][npatterns][2], an array of state
-// names, and an array of pattern strings. The starters array gives the first
-// pattern starting with each character.
+// A scanner consists of a table[nstates][npatterns], an array types[ntags]
+// mapping tag values to characters, an array targets[ntags] mapping tag values
+// to target states, an array of state names, and an array of pattern strings.
+// The starters array gives the first pattern starting with each character.
 struct scanner {
-    short nstates, npatterns;
+    short nstates, npatterns, ntags;
     byte *table;
+    char *types;
+    byte *targets;
+    char *strings;
     char **states;
     char **patterns;
     short starters[128];
@@ -50,7 +54,7 @@ char *readTests(char *path) {
     if (size < 0) crash("Error: can't find file size");
     char *data = malloc(size + 1);
     int n = fread(data, 1, size, file);
-    if (n != size) { free(data); fclose(file); crash("read failed"); }
+    if (n != size) { free(data); fclose(file); crash("Error: read failed"); }
     data[n] = '\0';
     fclose(file);
     return data;
@@ -88,15 +92,21 @@ void readScanner(char const *path, scanner *sc) {
     int size = ftell(file);
     fseek(file, 0, SEEK_SET);
     if (size < 0) crash("Error: can't find file size");
-    byte sizes[4];
-    int n = fread(sizes, 1, 4, file);
-    if (n != 4) crash("Error: reading file");
+    byte sizes[6];
+    int n = fread(sizes, 1, 6, file);
+    if (n != 6) crash("Error: reading file");
     sc->nstates = (sizes[0] << 8) | sizes[1];
     sc->npatterns = (sizes[2] << 8) | sizes[3];
-    size = size - 4;
+    sc->ntags = (sizes[4] << 8) | sizes[5];
+    printf("ns=%d, np=%d, nt=%d\n", sc->nstates, sc->npatterns, sc->ntags);
+    size = size - 6;
     sc->table = malloc(size);
     n = fread(sc->table, 1, size, file);
     if (n != size) crash("Error: reading file");
+    int tableSize = sc->nstates * sc->npatterns;
+    sc->types = (char *) sc->table + tableSize;
+    sc->targets = (byte *) sc->types + sc->ntags;
+    sc->strings = (char *) sc->targets + sc->ntags;
     fclose(file);
 }
 
@@ -104,7 +114,7 @@ void readScanner(char const *path, scanner *sc) {
 void construct(scanner *sc) {
     sc->states = malloc(sc->nstates * sizeof(char *));
     sc->patterns = malloc(sc->npatterns * sizeof(char *));
-    char *strings = (char *)(sc->table + sc->nstates * sc->npatterns * 2);
+    char *strings = sc->strings;
     for (int i = 0; i < sc->nstates; i++) {
         sc->states[i] = strings;
         strings += strlen(strings) + 1;
@@ -126,26 +136,6 @@ void construct(scanner *sc) {
     }
 }
 
-// Analyse the scanner.
-void analyse(scanner *sc) {
-    byte (*table)[sc->npatterns][2] = (byte(*)[sc->npatterns][2]) sc->table;
-    for (char ch = ' '; ch <= '~'; ch++) {
-        int target1 = -1;
-        bool done = false;
-        for (int s = 0; s < sc->nstates && ! done; s++) {
-            for (int p = 0; p < sc->npatterns && ! done; p++) {
-                if (table[s][p][0] != ch) continue;
-                byte target = table[s][p][1];
-                if (target1 < 0) target1 = target;
-                else if (target != target1) {
-                    printf("Except %c %d %d\n", ch, target1, target);
-                    done = true;
-                }
-            }
-        }
-    }
-}
-
 // Check if a string starts with a pattern. Return the length or -1.
 static inline int match(char *s, char *p) {
     int i;
@@ -156,37 +146,29 @@ static inline int match(char *s, char *p) {
 }
 
 // Scan a line, tagging the first byte of each token in the tokens array. Make a
-// local table variable of effective type byte[h][w][2] even though h and w are
+// local table variable of effective type byte[h][w] even though h and w are
 // dynamic.
 void scan(char *line, char *tokens, scanner *sc, bool trace) {
-    byte (*table)[sc->npatterns][2] = (byte(*)[sc->npatterns][2]) sc->table;
+    byte (*table)[sc->npatterns] = (byte(*)[sc->npatterns]) sc->table;
     int state = 0, start = 0, i = 0;
     while (i < strlen(line) || start < i) {
-        int ch = line[i], action, len, target, p;
+        int ch = line[i], tag, action, len, target, p;
         for (p = sc->starters[ch]; ; p++) {
-            if (p == 294) {
-                printf("ch=%c, p0=%d, s='%s'\n", ch, sc->starters[ch], sc->patterns[196]);
-                printf("ps=%d\n", sc->npatterns);
-            }
-            action = table[state][p][0];
-            target = table[state][p][1];
-            char c = action;
-            if (c == 0) c = '-';
+            tag = table[state][p];
+            action = sc->types[tag];
+            target = sc->targets[tag];
             if (action == SKIP) continue;
             len = match(&line[i], sc->patterns[p]);
             if (len >= 0) break;
         }
         if (trace) {
+            char c = action;
             printf(
                 "%d %s '%s' %c\n",
-                i, sc->states[state], sc->patterns[p], action
+                i, sc->states[state], sc->patterns[p], c
             );
         }
         if (action == ACCEPT) i += len;
-        else if (action == REJECT) {
-            i = start;
-            while (start > 0 && tokens[start] == ' ') start--;
-        }
         else {
             i += len;
             if (i > start) tokens[start] = action;
@@ -228,8 +210,6 @@ int main(int n, char const *args[n]) {
     sprintf(path, "%s.bin", lang);
     readScanner(path, sc);
     construct(sc);
-    bool analysing = false;
-    if (analysing) analyse(sc);
     sprintf(path, "%s.txt", lang);
     char *testFile = readTests(path);
     char **lines = splitLines(testFile);

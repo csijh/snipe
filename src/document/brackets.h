@@ -15,8 +15,7 @@ void changeBrackets(brackets *bs, op *o);
 // Need a bit or extra styles: mismatched 'bracket'.
 // ----------------------------------------------------------------------------
 // Store unmatched brackets up to cursor. (That is indenters plus unmatched
-// brackets on current line.) Don't need line boundaries! Except do need tokens,
-// and tokens need lines.
+// brackets on current line.) Don't need line boundaries!
 
 // Insert character before cursor: = normal algorithm
 // Non-bracket: nothing happens.

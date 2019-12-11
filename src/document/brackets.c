@@ -1,19 +1,17 @@
 // The Snipe editor is free and open source, see licence.txt.
 
-// For each bracket, store the character and the position in the text.
-// TODO: store point, partner, type, open/close/either
+// For each bracket, store the position in the text and the tag.
 struct bracket { int at; char tag; };
 typedef struct bracket;
 
 // Bracket matching is done forwards from the start of the text to the cursor,
-// and backwards from the end of the text to the cursor. The unmatched open
-// brackets before the cursor, and the unmatched close brackets after the
-// cursor, are stored. The number of brackets stored is determined roughly by
-// the indent level at the cursor position, so is not likely to be large. A gap
-// buffer is used, with the gap at the cursor position. That makes it possible
-// to make cheap incremental changes. The current cursor position is tracked in
-// the at field. The total number of bytes in the text is tracked in max, and
-// entries after the gap are stored relative to max.
+// and backwards from the end of the text to the cursor. Brackets are stored in
+// a gap buffer, with the gap at the current cursor position. The unmatched open
+// brackets before the cursor are stored before the gap, and the unmatched close
+// brackets after the cursor are stored after the gap, effectively forming two
+// stacks. The current cursor position is tracked in the at field. The total
+// number of bytes in the text is tracked in max, and positions in entries after
+// the gap are relative to max.
 struct brackets {
     bracket *data;
     int lo, hi, end;
@@ -36,6 +34,81 @@ static inline top(brackets *bs) {
     return &bs->data[bs->lo - 1];
 }
 
+// Each tag is mapped to one of these constants, to extract the bracket info.
+enum bracket {
+    Nb, // Non-bracket
+    Or, // Open round bracket '('
+    Os, // Open square bracket '['
+    Oc, // Open curly bracket '{'
+    Oi, // Open curly initialiser bracket '%' for '{'
+    Ol, // Open line comment '#', e.g. //
+    Om, // Open multiline comment '<', e.g. /*
+    Lq, // Literal single quote '\'', treated as open/close bracket.
+    Ld, // Literal double quote '"', treated as open/close bracket.
+    Cr, // Close round bracket ')'
+    Cs, // Close square bracket ']'
+    Cc, // Close curly bracket '}', or end
+    Ci, // Close curly-initialiser bracket '~' for '}', or end
+    Cl, // Close line-comment '$' for '\n'
+    Cm, // Close multiline comment '>', e.g. */
+    BRACKETS // count the number of brackets
+};
+
+// Action to perform when comparing a bracket on top of the stack with a tag
+// encountered in the text. One forward matching example and one backward
+// matching example are given for each action.
+enum action {
+    Move,  // ( x   x )   move past tag
+    Push,  // ( (   ) )   push tag as opener
+    Match, // ( )   ( )   pop bracket, move past tag
+    Pop,   // ( ]   [ )   pop bracket and mismatch, continue matching tag
+    Lose,  // [ )   ( ]   mark tag as mismatched and move on
+    Note,  // # )   ( #   mark tag as commented and move on
+    Quote, // " )   ( "   mark tag as quoted and move on
+    Drop,  // " $   $ "   pop bracket and mismatch, and move on
+    Nest,  // < <   > >   check for nesting of multiline comments
+};
+
+// Lookup table for forward bracket matching. There is an entry [o][b] for each
+// open bracket o that can appear on the stack, and each bracket b that can
+// appear in the text.
+static char forwardTable[][BRACKETS] = {
+    [Or][Nb]=Move, [Or][Or]=Push, [Or][Os]=Push, [Or][Oi]=Push, [Or][Oc]=Push,
+    [Or][Ol]=Push, [Or][Om]=Push, [Or][Lq]=Push, [Or][Ld]=Push, [Or][Cr]=Match,
+    [Or][Cs]=Pop, [Or][Ci]=Pop, [Or][Cc]=Pop, [Or][Cl]=Move, [Or][Cm]=Lose,
+
+    [Os][Nb]=Move, [Os][Or]=Push, [Os][Os]=Push, [Os][Oi]=Push, [Os][Oc]=Push,
+    [Os][Ol]=Push, [Os][Om]=Push, [Os][Lq]=Push, [Os][Ld]=Push, [Os][Cr]=Lose,
+    [Os][Cs]=Match, [Os][Ci]=Pop, [Os][Cc]=Pop, [Os][Cl]=Move, [Os][Cm]=Lose,
+
+    [Oc][Nb]=Move, [Oc][Or]=Push, [Oc][Os]=Push, [Oc][Oi]=Push, [Oc][Oc]=Push,
+    [Oc][Ol]=Push, [Oc][Om]=Push, [Oc][Lq]=Push, [Oc][Ld]=Push, [Oc][Cr]=Lose,
+    [Oc][Cs]=Lose, [Oc][Ci]=?, [Oc][Cc]=Match, [Oc][Cl]=Move, [Oc][Cm]=Lose,
+
+    [Ol][Nb]=Note, [Ol][Or]=Note, [Ol][Os]=Note, [Ol][Oi]=Note, [Ol][Oc]=Note,
+    [Ol][Ol]=Note, [Ol][Om]=Note, [Ol][Lq]=Note, [Ol][Ld]=Note, [Ol][Cr]=Note,
+    [Ol][Cs]=Note, [Ol][Ci]=Note, [Ol][Cc]=Note, [Ol][Cl]=Match, [Ol][Cm]=Note,
+
+    [Om][Nb]=Note, [Om][Or]=Note, [Om][Os]=Note, [Om][Oi]=Note, [Om][Oc]=Note,
+    [Om][Ol]=Note, [Om][Om]=Note, [Om][Lq]=Note, [Om][Ld]=Note, [Om][Cr]=Note,
+    [Om][Cs]=Note, [Om][Ci]=Note, [Om][Cc]=Note, [Om][Cl]=Note, [Om][Cm]=Match,
+
+    [Lq][Nb]=Quote, [Lq][Or]=Quote, [Lq][Os]=Quote, [Lq][Oi]=Quote,
+    [Lq][Oc]=Quote, [Lq][Ol]=Quote, [Lq][Om]=Quote, [Lq][Lq]=Match,
+    [Lq][Ld]=Quote, [Lq][Cr]=Quote, [Lq][Cs]=Quote, [Lq][Ci]=Quote,
+    [Lq][Cc]=Quote, [Lq][Cl]=Quote, [Lq][Cm]=Match,
+
+    [Ld][Nb]=Quote, [Ld][Or]=Quote, [Ld][Os]=Quote, [Ld][Oi]=Quote,
+    [Ld][Oc]=Quote, [Ld][Ol]=Quote, [Ld][Om]=Quote, [Ld][Lq]=Quote,
+    [Ld][Ld]=Match, [Ld][Cr]=Quote, [Ld][Cs]=Quote, [Ld][Ci]=Quote,
+    [Ld][Cc]=Quote, [Ld][Cl]=Quote, [Ld][Cm]=Match,
+};
+
+// Or Nb
+static void move() {
+    s->point++;
+}
+
 //     if (x == 3) n++;
 // _   K _(I_+ _N)_I+ S
 
@@ -43,92 +116,27 @@ static inline top(brackets *bs) {
 // < _I
 // <
 
-enum tag {
-    Or, // Open round bracket '('
-    Os, // Open square bracket '['
-    Oi, // Open curly-initialiser bracket '|' for '{'
-    Oc, // Open curly-block bracket '{'
-    Ol, // Open line comment '#', e.g. //
-    Om, // Open multiline comment '<', e.g. /*
-    Qs, // Single quote '\'', treated as open/close bracket.
-    Qd, // Double quote '"', treated as open/close bracket.
-    Cr, // Close round bracket ')'
-    Cs, // Close square bracket ']'
-    Ci, // Close curly-initialiser bracket : for '}', or end
-    Cc, // Close curly bracket '}', or end
-    Cl, // Close line-comment '\n'
-    Cm, // Close multiline comment '>', e.g. */
-    Op, // Operator '+'
-    Lb, // Label indicator ':'
-    Iv, // Invalid '?'
-    Ic = 0x80, // In comment (override flag)
-    Il = 0x40, // In literal (override flag)
-    Um = 0xC0, // Unmatched (override flag)
-    TAGS // count the number of tags
-};
+// Map tag to bracket...
 
 // Language quirks: (a) \ before \n is ignored.
 
-// Action to perform when comparing an 'old' bracket on top of the stack with a
-// 'new' token encountered in the text. Examples relate to forward matching, but
-// the actions apply also to backward matching.
-enum action {
-    I, // ignore     ( x   move past new
-    P, // push       ( (   push new, it is an opener
-    E, // equal      ( )   pop old, move past new (matched pair)
-    G, // greater    ( ]   pop old and mismatch, continue matching new
-    L, // less       [ )   mark new as mismatched and move on
-    C, // comment    / )   mark new as commented and move on
-    Q, // quote      " )   mark new as quoted and move on
-    M, // mismatch   " \n  pop old and mismatch, and move on
-    N, // nest      /* /*  check for nesting of multiline comments
-};
 
-// Working out a range of text to rescan: in language description, work out
-// for each tag whether it leaves the scanner in a unique known state.
-// Go back to the most recent point just after a token whose tag leaves the
-// machine in a known state. Rescan until you reach a token where (a) the tag
-// agrees and (b) the machine is left in the known state. Likely problem tags
-// are #include for recognising <stdio.h> as a string, and struct/enum/= for
-// recognizing open curly brackets which start initialisers.
+// TODO: get scanner to issue a tag which encapsulates both the signal character
+// and the target state. Working out a range of text to rescan: in language
+// description, work out for each tag whether it leaves the scanner in a unique
+// known state. Go back to the most recent point just after a token whose tag
+// leaves the machine in a known state. Rescan until you reach a token where (a)
+// the tag agrees and (b) the machine is left in the known state. Likely problem
+// tags are #include for recognising <stdio.h> as a string, and struct/enum/=
+// for recognizing open curly brackets which start initialisers. TODO:
 
-// Mismatched brackets: only sixteen or so tags count as brackets. Add another
-// sixteen 'mismatched bracket' constants. Now we have 26 (A-Z) + 16 (brackets)
-// + 16 (mismatched brackets) + 6 (other) making 64.
-
-// Seem to want commented and quoted as overrides, using two bits, leaving 64
-// tags available. Maybe can combine commented and quoted as override, with
-// nature of override cached with each line. Or maybe, like selections, we can
-// have ranges which are post-applied to lines. Or maybe we can 'change' the tag
-// and rely on re-bracketing (but then how find the rescan point?)
-// Newline + newline-in-comment + newline-in-quotes.
-
-// Lookup table for forward bracket matching. There is a row for each open
-// bracket that can appear on the stack.
-static char forwardTable[TAGS][TAGS] = {
-    //       x  (  [  |  {  // /* '  "  )  ]  :  }  \n */
-    [Or] = { I, P, P, P, P  P, P, P, P, E, G, G  G, I, L, }, // (
-    [Os] = { I, P, P, P, P, P, P, P, P, L, E, G, I, L, L, }, // [
-    [Oc] = { I, P, P, P, P, P, P, P, P, L, L, E, I, L, L, }, // {
-    [Ol] = { C, C, C, C, C, C, C, C, C, C, C, C, E, C, C, }, // //
-    [Om] = { C, C, C, C, C, C, C, C, C, C, C, C, I, E, C, }, // /*
-    [Qs] = { Q, Q, Q, Q, Q, Q, Q, E, Q, Q, Q, Q, M, Q, Q, }, // '
-    [Qd] = { Q, Q, Q, Q, Q, Q, Q, Q, E, Q, Q, Q, M, Q, Q, }, // "
-
-}
-
-// Lookup table for backward bracket matching. There is a row for each close
-// bracket that can appear on the stack.
-static char forwardTable[TAGS][TAGS] = {
-    //       x  (  [  |  {  // /* '  "  )  ]  :  }  \n */
-    [Qs] = { Q, Q, Q, Q, Q, Q, Q, E, Q, Q, Q,    Q, M, Q, }, // '
-    [Qd] = { Q, Q, Q,    Q, Q, Q, Q, E, Q, Q,    Q, M, Q, }, // "
-    [Cr] = { I, E, L,    L, G, L, P, P, L, L,    E, ?, L, }, // )
-    [Cs] = { ?, C, C,    C, C, C, C, C, C, C,    C, E, C, }, // ]
-    [Cc] = { ?, C, C,    C, C, C, C, C, C, C,    C, ?, E, }, // }
-    [Cl] = { ?, C, C,    C, C, C, C, C, C, C,    C, ?, C, }, // \n
-    [Cm] = { ?, Q, Q,    Q, Q, Q, E, Q, Q, Q,    Q, ?, Q, }, // */
-}
+// TODO: just override, then re-scan on bracketing change. Seem to want
+// commented and quoted as overrides, using two bits, leaving 64 tags available.
+// Maybe can combine commented and quoted as override, with nature of override
+// cached with each line. Or maybe, like selections, we can have ranges which
+// are post-applied to lines. Or maybe we can 'change' the tag and rely on
+// re-bracketing (but then how find the rescan point?) Newline +
+// newline-in-comment + newline-in-quotes.
 
 // Scan from the top unmatched opener to the current cursor position.
 static void matchForward(brackets *bs, int start, int n, char s[n]) {

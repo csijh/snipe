@@ -58,20 +58,7 @@ key start K
 
 # Identifiers
 id a..z A..Z 0..9 _ \bU \bu id
-id idGap I
-
-# Lookahead after id for following open bracket or id
-idGap \s idGap
-idGap \n idGap
-idGap idNext
-
-idNext ( call \r
-idNext a..z A..Z 0..9 _ \bU \bu type \r
-idNext normal \r
-
-call start F
-type start T
-normal start I
+id start I
 
 # A dot starts a number, or is a symbol possibly followed by a field.
 dot 0..9 num
@@ -220,7 +207,7 @@ int n;
 K  _IS
 
 string s;
-T     _IS
+I     _IS
 
 enum suit { Club, Diamond, Heart, Spade };
 K   _I   _%_I   S_I      S_I    S_I    _}S
@@ -235,7 +222,7 @@ K   _+I_S_"IE IE IE  IE   IE  NIE   I"
 < _I  _"> "# "
 
 obj.field, obj->field, function(arg)
-I  SD    S_I  S D    S_F       (I  )
+I  SD    S_I  S D    S_I       (I  )
 
 #include <stdio.h>
 RR      _"I      "

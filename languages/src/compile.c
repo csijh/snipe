@@ -1,6 +1,10 @@
 // Snipe language compiler. Free and open source. See license.txt.
+
 // Compile a language description into a scanner in a binary file. The program
-// interpret.c can be used for testing.
+// interpret.c can be used for testing. Scanning produces a tag for each byte in
+// the text of a document. Tag values are allocated dynamically to encode both
+// the token type and the target state following the token. This allows text to
+// be re-scanned starting at any token boundary.
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -12,20 +16,30 @@
 // SMALL is the limit on arrays indexed by bytes.
 enum { BIG = 10000, SMALL = 256 };
 
-// A table entry consists of two bytes, an action and a target state. An action
-// is an ASCII character. SKIP is reserved to mean that this pattern is not
-// relevant in the current state, accept means add a character to the current
-// token, and reject means backtrack to the start of the current token.
-typedef unsigned char byte;
-enum { SKIP = '\0', ACCEPT = ' ', REJECT = '\r' };
+// The types for continuation bytes (within a grapheme), and continuation
+// characters within the same token (also used as the accept action).
+enum { Byte = '.', Char = ' ', Accept = ' ' };
 
-// A scanner structure consists of the size of the state transition table then
-// the table itself, then a string store containing the state names followed by
-// the patterns. The remaining fields are for temporary use during construction.
+// Each table entry is a tag representing both a token type or special action,
+// and a target state. The tag value SKIP is reserved for use within the scanner
+// as a default table entry meaning that the entry is not relevant in the
+// current state. It represents type Byte so it can be used to tag continuation
+// bytes, and it represents the initial state so it can be used to scan from the
+// beginning of the text.
+typedef unsigned char byte;
+enum { SKIP = 0 };
+
+// A scanner structure consists of the size of the state transition table and
+// number of tags, then the table itself, then an array mapping each tag value
+// to a token type character, then an array mapping each tag value to a target
+// state, then a string store containing the state names followed by the
+// patterns. The remaining fields are for temporary use during construction.
 // Many are NULL terminated arrays of strings.
 struct scanner {
-    short nstates, npatterns;
-    byte table[SMALL][BIG][2];
+    short nstates, npatterns, ntags;
+    byte table[SMALL][BIG];
+    char types[SMALL];
+    byte targets[SMALL];
     char strings[BIG];
 
     char text[BIG];
@@ -146,7 +160,6 @@ void unescape(char *s) {
             if (s[i] == 's') s[n++] = ' ';
             else if (s[i] == 'b') s[n++] = '\\';
             else if (s[i] == 'n') s[n++] = '\n';
-            else if (s[i] == 'r') s[n++] = '\r';
         }
         else s[n++] = s[i];
     }
@@ -199,7 +212,7 @@ void splitTokens(char *lines[], char *tokens[][SMALL]) {
         }
         char *last = tokens[i][length(tokens[i])-1];
         if (strlen(last) > 1) {
-            add(singles[ACCEPT], tokens[i]);
+            add(singles[Accept], tokens[i]);
         }
     }
 }
@@ -279,9 +292,27 @@ int transfer(char *list[], int n, char strings[n]) {
     return n;
 }
 
+// Find a tag or allocate a new one. If calling for the first time, allocate the
+// SKIP tag.
+int findTag(char type, byte state, int n, char types[], byte targets[]) {
+    if (n == 0) {
+        types[SKIP] = Byte;
+        targets[SKIP] = 0;
+        n = 1;
+    }
+    for (int i = 0; i < n; i++) {
+        if (types[i] == type && targets[i] == state) return i;
+    }
+    if (n >= 256) crash("too many tags", 0, "");
+    types[n] = type;
+    targets[n] = state;
+    return n;
+}
+
 // Fill a non-default rule into the table.
-void fillRule(
-    byte table[][BIG][2], char *tokens[], char *states[], char *patterns[]
+int fillRule(
+    byte table[][BIG], char *tokens[], char *states[], char *patterns[],
+    int ntags, char types[], byte targets[]
 ) {
     int n = length(tokens);
     byte action = tokens[n-1][0];
@@ -289,39 +320,65 @@ void fillRule(
     byte target = (byte) find(tokens[n-2], states);
     for (int i = 1; i < n-1; i++) {
         short p = (short) find(tokens[i], patterns);
-        byte oldAction = table[state][p][0];
+        byte oldAction = table[state][p];
         if (oldAction != SKIP) continue;
-        table[state][p][0] = action;
-        table[state][p][1] = target;
+        byte tag = findTag(action, target, ntags, types, targets);
+        if (tag >= ntags) ntags = tag + 1;
+        table[state][p] = tag;
     }
+    return ntags;
 }
 
 // Fill a default rule into the table.
-void fillDefault(
-    byte table[][BIG][2], char *tokens[], char *states[], char *patterns[]
+int fillDefault(
+    byte table[][BIG], char *tokens[], char *states[], char *patterns[],
+    int ntags, char types[], byte targets[]
 ) {
     byte action = tokens[2][0];
     byte state = (byte) find(tokens[0], states);
     byte target = (byte) find(tokens[1], states);
     for (int p = 0; p < length(patterns); p++) {
-        char *pattern = patterns[p];
-        if (strlen(pattern) != 0) continue;
-        if (p == 180) printf("fill %s %d %d\n", pattern, action, target);
-        table[state][p][0] = action;
-        table[state][p][1] = target;
+        if (strlen(patterns[p]) != 0) continue;
+        byte tag = findTag(action, target, ntags, types, targets);
+        if (tag >= ntags) ntags = tag + 1;
+        table[state][p] = tag;
     }
+    return ntags;
+}
+
+// Fill in any missing defaults as creating invalid tokens.
+int fillMissing(
+    byte table[][BIG], char *states[], char *patterns[],
+    int ntags, char types[], byte targets[]
+) {
+    for (int s = 0; s < length(states); s++) {
+        for (int p = 0; p < length(patterns); p++) {
+            if (table[s][p] != SKIP) continue;
+            if (strlen(patterns[p]) != 0) continue;
+            byte tag = findTag('?', 0, ntags, types, targets);
+            if (tag >= ntags) ntags = tag + 1;
+            table[s][p] = tag;
+        }
+    }
+    return ntags;
 }
 
 // Enter rules into the table.
-void fillTable(
-    byte table[][BIG][2], int n, char *tokens[n][SMALL],
-    char *states[], char *patterns[]
+int fillTable(
+    byte table[][BIG], int n, char *tokens[n][SMALL],
+    char *states[], char *patterns[], int ntags, char types[], byte targets[]
 ) {
+    for (int s=0; s<SMALL; s++) for (int p=0; p<BIG; p++) table[s][p] = SKIP;
     for (int i = 0; i < n; i++) {
         int t = length(tokens[i]);
-        if (t == 3) fillDefault(table, tokens[i], states, patterns);
-        else fillRule(table, tokens[i], states, patterns);
+        if (t == 3) ntags = fillDefault(
+            table, tokens[i], states, patterns, ntags, types, targets);
+        else ntags = fillRule(
+            table, tokens[i], states, patterns, ntags, types, targets);
     }
+    ntags = fillMissing(
+        table, states, patterns, ntags, types, targets);
+    return ntags;
 }
 
 scanner *buildScanner(char const *path) {
@@ -339,7 +396,9 @@ scanner *buildScanner(char const *path) {
     sc->nstrings = transfer(sc->patterns, sc->nstrings, sc->strings);
     sc->nstates = length(sc->states);
     sc->npatterns = length(sc->patterns);
-    fillTable(sc->table, nlines, sc->tokens, sc->states, sc->patterns);
+    sc->ntags = fillTable(
+        sc->table, nlines, sc->tokens, sc->states, sc->patterns,
+        sc->ntags, sc->types, sc->targets);
     return sc;
 }
 
@@ -349,15 +408,19 @@ void writeShort(short n, FILE *fp) {
     fwrite(bytes, 1, 2, fp);
 }
 
+// TODO: allocate tags.
 void writeScanner(scanner *sc, char const *path) {
     FILE *fp = fopen(path, "wb");
     writeShort(sc->nstates, fp);
     writeShort(sc->npatterns, fp);
+    writeShort(sc->ntags, fp);
     for (int s = 0; s < sc->nstates; s++) {
         for (int p = 0; p < sc->npatterns; p++) {
-            fwrite(sc->table[s][p], 1, 2, fp);
+            fwrite(&sc->table[s][p], 1, 1, fp);
         }
     }
+    for (int t = 0; t < sc->ntags; t++) fwrite(&sc->types[t], 1, 1, fp);
+    for (int t = 0; t < sc->ntags; t++) fwrite(&sc->targets[t], 1, 1, fp);
     fwrite(sc->strings, 1, sc->nstrings, fp);
     fclose(fp);
 }
