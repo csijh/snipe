@@ -1,6 +1,7 @@
 # The C language, according to the C11 standard
 # See http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1548.pdf
 # Compile to c.bin and copy that to h.bin.
+# TODO: ignore \ before \n
 
 # Potential keywords: go to key state to check if really identifiers
 start  _Alignas _Atomic _Bool _Complex _Generic _Imaginary    key

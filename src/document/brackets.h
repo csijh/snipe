@@ -2,17 +2,16 @@
 
 // A brackets object keeps track of the brackets in the text, and does
 // incremental bracket matching.
+struct brackets;
+typedef struct brackets brackets;
+
+// Create or free a brackets object.
 brackets *newBrackets();
 void freeBrackets(brackets *bs);
 
 // Track insertions, deletions and cursor movements.
-void changeBrackets(brackets *bs, op *o);
+// void changeBrackets(brackets *bs, op *o);
 
-// ----------------------------------------------------------------------------
-// Style:
-// Need conversion to/from ASCII characters.
-// Need two bits: comment override, string override. OR attach them to lines.
-// Need a bit or extra styles: mismatched 'bracket'.
 // ----------------------------------------------------------------------------
 // Store unmatched brackets up to cursor. (That is indenters plus unmatched
 // brackets on current line.) Don't need line boundaries!

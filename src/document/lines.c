@@ -40,13 +40,12 @@ static void moveGap(lines *ls, int at) {
     }
 }
 
-// Resize.
 static void resize(lines *ls) {
     int size = ls->top;
     size = size * 3 / 2;
-    ls->ends = realloc(ls->ends, size);
+    ls->ends = realloc(ls->ends, size * sizeof(int));
     int hilen = ls->top - ls->hi;
-    memmove(&ls->ends[size - hilen], &ls->ends[ls->hi], hilen);
+    memmove(&ls->ends[size - hilen], &ls->ends[ls->hi], hilen * sizeof(int));
     ls->hi = size - hilen;
     ls->top = size;
 }

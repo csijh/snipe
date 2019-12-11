@@ -21,7 +21,7 @@
 
 enum tag {
     Byte,       // '.' Continuation byte in a grapheme
-    Grapheme,   // ' ' First byte of continuation grapheme in a token
+    Char,       // ' ' First byte of continuation character in a token
     Gap,        // '_' White space
     Operator,   // '+' Operator token, affects semicolon handling
     Label,      // ':' Label indicator, affects indenting
@@ -34,11 +34,11 @@ enum tag {
     OpenC,      // '{' Open curly bracket block (or 'begin')
     CloseC,     // '}' Close curly bracket block (or 'end')
     OpenI,      // '%' Open curly bracket initializer
-    CloseI,     // '|' Close curly bracket initializer
+    CloseI,     // '!' Close curly bracket initializer
     Comment,    // '<' Open multiline comment, e.g. /*
     EndComment, // '>' Close multiline comment, e.g. */
     Note,       // '#' Open one-line comment, e.g. # or //
-    Newline,    // '\n' Newline, end of one-line comment
+    Newline,    // '$' Newline, end of one-line comment
     Invalid,    // '?' Invalid token
     AToken,     // 'A' First of 26 tags representing capital letters
     Commented = 0x80,   // Flag bits overriding the main tag value
