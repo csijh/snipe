@@ -3,8 +3,8 @@
 // Each byte of text in a document is given a corresponding tag byte. These tags
 // mark the start of graphemes (the unit of cursor movement), and the start of
 // tokens (the unit of word-based cursor movement and syntax highlighting), and
-// classify the tokens. Tags are generated using language description state
-// machines loaded from the languages folder.
+// classify the tokens (for bracket matching etc). Tags are generated using a
+// language description state machine loaded from the languages folder.
 
 // Each tag consists of a 6-bit value and a 2-bit flag. The value gives the type
 // of a token, or marks the byte as the first byte of a continuation grapheme,

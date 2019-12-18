@@ -7,22 +7,24 @@
 #include <string.h>
 #include <assert.h>
 
-// A text object stores an array of bytes, as a gap buffer. For realloc info,
-// see http://blog.httrack.com/blog/2014/04/05/a-story-of-realloc-and-laziness/
-// The gap is between offsets lo and hi in the data array. The gap is always at
-// the current cursor. There is a range of text which might need fixing, which
-// covers any recent insertions and deletions.
+// A text object stores an array of bytes, as a gap buffer, with the gap
+// maintained at the current cursor position. For realloc info, see
+// http://blog.httrack.com/blog/2014/04/05/a-story-of-realloc-and-laziness/
+// The gap is between offsets lo and hi in the data array. For each cursor, the
+// associated selector is negative if there is no selection. After each edit,
+// startEdit and endEdit cover the range of text which may have changed.
 struct text {
     char *data;
-    int lo, hi, top;
-    int startFix, endFix;
+    int lo, hi, end;
+    int iCursor, nCursors, maxCursors, *cursors, *selectors;
+    int startEdit, endEdit;
 };
 
 text *newText() {
     int n = 1024;
     text *t = malloc(sizeof(text));
     char *data = malloc(n);
-    *t = (text) { .lo = 0, .hi = n, .top = n, .data = data };
+    *t = (text) { .lo = 0, .hi = n, .end = n, .data = data };
     t->startFix = -1;
     t->endFix = -1;
     return t;
@@ -35,19 +37,23 @@ void freeText(text *t) {
 
 // Resize to make room for an insertion of n bytes.
 static void resizeText(text *t, int n) {
-    int hilen = t->top - t->hi;
+    int hilen = t->end - t->hi;
     int needed = t->lo + n + hilen;
-    int size = t->top;
+    int size = t->end;
     if (size >= needed) return;
     while (size < needed) size = size * 3 / 2;
     t->data = realloc(t->data, size);
     if (hilen > 0) memmove(&t->data[size - hilen], &t->data[t->hi], hilen);
     t->hi = size - hilen;
-    t->top = size;
+    t->end = size;
 }
 
 extern inline int lengthText(text *t) {
-    return t->lo + (t->top - t->hi);
+    return t->lo + (t->end - t->hi);
+}
+
+extern inline int atText(text *t) {
+    return t->lo;
 }
 
 // Move the gap to the given position.
@@ -104,9 +110,9 @@ bool loadText(text *t, int n, char *buffer) {
     if (! ok) return false;
     n = clean(n, buffer);
     t->lo = 0;
-    t->hi = t->top;
+    t->hi = t->end;
     resizeText(t, n);
-    t->hi = t->top - n;
+    t->hi = t->end - n;
     memcpy(&t->data[t->hi], buffer, n);
     return true;
 }
@@ -219,7 +225,7 @@ bool fixText(text *t, edit *e) {
 // Flatten the text into the given string.
 static char *show(text *t, char *s) {
     int j = 0;
-    for (int i = 0; i < t->top; i++) {
+    for (int i = 0; i < t->end; i++) {
         if (i < t->lo || i >= t->hi) s[j++] = t->data[i];
     }
     s[j] = '\0';
@@ -241,11 +247,11 @@ static bool testInsert(char *before, char *after) {
     strcpy(temp, before);
     int open = strchr(temp, '[') - temp;
     int close = strchr(temp, ']') - temp;
-    int end = strlen(temp);
+    int len = strlen(temp);
     text *t = newText();
     memcpy(t->data, temp, open);
-    memcpy(&t->data[open], &temp[close+1], end - close - 1);
-    t->lo = open + end - close - 1;
+    memcpy(&t->data[open], &temp[close+1], len - close - 1);
+    t->lo = open + len - close - 1;
     edit *e = newEdit();
     insertEdit(e, open, close-open-1, &temp[open+1]);
     editText(t, e);
@@ -263,12 +269,12 @@ static bool testDelete(char *before, char *after) {
     strcpy(temp, before);
     int open = strchr(temp, '[') - temp;
     int close = strchr(temp, ']') - temp;
-    int end = strlen(temp);
+    int len = strlen(temp);
     text *t = newText();
     memcpy(t->data, temp, open);
     memcpy(&t->data[open], &temp[open+1], close-open-1);
-    memcpy(&t->data[close-1], &temp[close+1], end-close-1);
-    t->lo = end - 2;
+    memcpy(&t->data[close-1], &temp[close+1], len-close-1);
+    t->lo = len - 2;
     edit *e = newEdit();
     deleteEdit(e, open, close-open-1, &temp[open+1]);
     editText(t, e);
@@ -283,19 +289,19 @@ static bool testDelete(char *before, char *after) {
 // final newlines can occur through an insertion or deletion.
 int main() {
     assert(testInsert("abc[def]ghi\n", "abcdefghi\n"));
-    assert(testInsert("x  [\ny\n]z\n", "x\ny\nz\n"));
-    assert(testInsert("x[\ny  \n]z\n", "x\ny\nz\n"));
-    assert(testInsert("x[\ny\nz  ]\n", "x\ny\nz\n"));
-    assert(testInsert("x[\ny\nz]", "x\ny\nz\n"));
-    assert(testInsert("x[\ny\nz  ]", "x\ny\nz\n"));
-    assert(testInsert("x[\ny\nz\n]\n", "x\ny\nz\n"));
-    assert(testInsert("x[\ny\nz\n\n]", "x\ny\nz\n"));
-    assert(testInsert("x\ny\nz\n[\n]", "x\ny\nz\n"));
+    assert(testInsert("x  [\ny\n]z\n", "x\ny\nz\n")); // cursor holds trailers??
+    assert(testInsert("x[\ny  \n]z\n", "x\ny\nz\n")); // clean
+    assert(testInsert("x[\ny\nz  ]\n", "x\ny\nz\n")); // clean
+    assert(testInsert("x[\ny\nz]", "x\ny\nz\n"));     // clean (insert more)
+    assert(testInsert("x[\ny\nz  ]", "x\ny\nz\n"));   // clean (del/ins)
+    assert(testInsert("x[\ny\nz\n]\n", "x\ny\nz\n")); // clean
+    assert(testInsert("x[\ny\nz\n\n]", "x\ny\nz\n")); // clean
+    assert(testInsert("x\ny\nz\n[\n]", "x\ny\nz\n")); // clean
 
     assert(testDelete("abc[def]ghi\n", "abcghi\n"));
-    assert(testDelete("x\n  [y]\nz\n", "x\n\nz\n"));
-    assert(testDelete("x\ny\n[z]\n", "x\ny\n"));
-    assert(testDelete("x\ny[\nz\n]", "x\ny\n"));
+    assert(testDelete("x\n  [y]\nz\n", "x\n\nz\n"));  // cursor holds trailers
+    assert(testDelete("x\ny\n[z]\n", "x\ny\n"));      // clean (del more?)
+    assert(testDelete("x\ny[\nz\n]", "x\ny\n"));      // clean (del less?)
 
     printf("Text module OK\n");
     return 0;

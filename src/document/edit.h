@@ -4,19 +4,39 @@
 // automatic adjustments such as re-indenting. The state of a document consists
 // of its text, and a set of cursors with possible selectors. The edits and
 // their rules are designed so that the edits are inverses of each other for
-// undo, and that an undo restores cursors and selectors as well as text.
+// undo, and that an undo restores cursors as well as text.
 
-// DoInsert(at,s) is an insertion of a string at a given position. If there is a
-// cursor at that position, it moves to the end of the insertion. DoDelete(at,s)
-// is a deletion of a string at the given position. If there is a cursor in the
-// range deleted, it must be at the end of the string. The string s must be
-// filled in from the text when the edit is created.
+// DoInsert(at,s) is an insertion of a string before the given position. If
+// there is a cursor there, it moves to the end of the insertion. DoDelete(at,s)
+// is a deletion of a string up to the given position. The deleted text mustn't
+// include a cursor other than at the end. The string is filled in from the text
+// when the edit is created.
 
 // DoAdd(at) adds a new cursor at the given position. DoCancel(at) removes a
-// cursor. DoSelect(at,to) moves the cursor and selects the text covered.
-// DoDeselect(at,to) moves the cursor to its selector, cancelling it.
-// DoMove(at,to) moves a cursor (self-inverse). DoEnd() marks the end of the
-// edits for one user action.
+// cursor at the given position. DoSelect(at,to) moves the cursor from the given
+// position and selects the text covered. DoDeselect(at,to) moves the cursor at
+// the current position to its selector, cancelling it. DoMove(at,to) moves the
+// cursor at the given position (self-inverse). DoEnd(at) marks the end of the
+// edits for one user action, and sets the current cursor position.
+
+// AddCursor(at), DelCursor(at) must be no selection (so inverses)
+// MoveCursor(from,to) must be no selection (so self-inverse)
+// MoveEnd(B,from,to) can be used to select/deselect, base is unique
+// MoveEnd(LR,from,to) L/R needed because marker position isn't unique
+
+// SetCursor(i): make the i'th cursor current (or Set(n) for n cursors).
+// -- store delta-i because self-inverse.
+// AddCursor(at): insert a new cursor, in base order, which becomes current
+// -- store delta-at, so know where to undo to
+// DelCursor(at): delete current cursor, which has no selection and is at 'at'.
+// MoveCursor(to): move current cursor, which has no selection. (delta)
+// MarkCursor(to): move just the marker, to anywhere. (delta)
+// Ins(s): insert s at current cursor, which has no selection.
+// Del(s): delete back from current cursor, which has no selection.
+
+// Then: don't have to maintain non-overlap, but can act first and
+// collapse afterwards. Must create or move cursor temporarily to ins/del. Must
+// move marker to deselect. How add n'th cursor? Add after maybe? Or set(n)?
 
 enum editOp {
     DoInsert, DoDelete, DoAdd, DoCancel, DoSelect, DoDeselect, DoMove, DoEnd

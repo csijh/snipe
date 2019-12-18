@@ -22,3 +22,5 @@ char *findActionName(action a);
 
 // Print out an action, e.g. for testing.
 void printAction(action a);
+
+// Move/Mark/Cut  Back/Fore  Char/Word/Line/Row

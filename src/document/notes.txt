@@ -1,4 +1,13 @@
+Edit sequence
+-------------
+Insert or delete becomes replacement (text -> history).
+There is then a repair range (b,e). Where is current position?
+Lines can be repaired (remove and insert).
+Tags can be repaired (extending the range a bit).
+Brackets can be repaired from the tags.
+
 Notes on model classes
+----------------------
 * No longer have dependence on filer or support classes
 * Have edit object which all modules respond to.
 

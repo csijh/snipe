@@ -1,7 +1,9 @@
 // Snipe bracket matcher. Free and open source. See licence.txt.
 
 // A brackets object keeps track of the brackets in the text, and does
-// incremental bracket matching.
+// incremental bracket matching. Bracket matching is done forwards from the
+// start of the text to the cursor, backwards from the end of the text to the
+// cursor, and then inwards from the outside on the remaining stacks.
 struct brackets;
 typedef struct brackets brackets;
 

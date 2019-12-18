@@ -6,35 +6,31 @@
 #include <string.h>
 #include <assert.h>
 
-
 typedef unsigned char byte;
 
-// For each bracket, store the position in the text and the bracket tag.
-struct bracket { int at; char bTag; };
-typedef struct bracket bracket;
-
-// Bracket matching is done forwards from the start of the text to the cursor,
-// and backwards from the end of the text to the cursor. Brackets are stored in
-// a gap buffer, with the gap at the current cursor position. The unmatched open
-// brackets before the cursor are stored before the gap, and the unmatched close
-// brackets after the cursor are stored after the gap, effectively forming two
-// stacks. The current cursor position is tracked in the at field. The total
-// number of bytes in the text is tracked in max, and positions in entries after
-// the gap are relative to max. The types array and nesting flag are borrowed
-// from the scanner (they vary between languages). The tags pointer is a
-// temporary pointer to the next tag, at position bs->at in the text.
+// Unmatched bracket positions and types are stored in a gap buffer, with the
+// gap at the current cursor position. The unmatched open brackets before the
+// cursor are stored before the gap, and the unmatched close brackets after the
+// cursor are stored after the gap, effectively forming two stacks. The current
+// cursor position is tracked in the at field. The total number of bytes in the
+// text is tracked in max, and positions in entries after the gap are relative
+// to max. The map array maps tags to their bracket values, and the nesting flag
+// says whether multiline comments can nest. They vary between languages. The
+// tags array provides direct but ephemeral access to the tags, either from 0 to
+// at for forward matching or at to max for backward matching.
 struct brackets {
-    bracket *data;
+    int *positions;
+    byte *types;
     int lo, hi, end;
     int at, max;
-    char *types;
+    char map[256];
     bool nesting;
-    byte *tags;
+    byte tags;
 };
 
-// Bracket matching is done using tags alone, with needing the original text.
+// Bracket matching is done using tags alone, without needing the original text.
 // Each tag is mapped to one of these constants, to extract the bracket info.
-enum bracketTag {
+enum bracket {
     Nb, // Non-bracket
     Ot, // Open text (sentinel)
     Or, // Open round bracket '('
@@ -55,9 +51,9 @@ enum bracketTag {
     BRACKETS // count the number of bracket constants
 };
 
-// Actions to perform when comparing a bracket on top of the stack with a byte
-// encountered in the text. A forward matching example and a backward matching
-// example are given for each action.
+// Actions to perform when comparing a bracket on top of the stack with the tag
+// of a byte encountered in the text. A forward matching example and a backward
+// matching example are given for each action.
 enum action {
     Move,  // ( x   x )   move past byte
     Push,  // ( (   ) )   push byte as opener and move on
@@ -71,7 +67,7 @@ enum action {
 };
 
 // Lookup table for forward bracket matching. There is an entry [x][y] for each
-// open bracket x that can appear on the stack, and each bracket y that can
+// open bracket x that can appear on the stack, and each bracket type y that can
 // appear next in the text.
 static char forwardTable[][BRACKETS] = {
     [Ot][Nb]=Move, [Ot][Or]=Push, [Ot][Os]=Push, [Ot][Oi]=Push, [Ot][Oc]=Push,
@@ -111,37 +107,46 @@ static char forwardTable[][BRACKETS] = {
 
 // Create a new brackets object, with a sentinel bracket at each end.
 brackets *newBrackets() {
+    int n = 24;
     brackets *bs = malloc(sizeof(brackets));
-    bracket *data = malloc(6 * sizeof(bracket));
-    *bs = (brackets) { .lo=1, .hi=5, .end=6, .max=0, .at=0, .data=data };
-    bs->data[0] = (bracket) { .at = 0, .bTag = Ot };
-    bs->data[bs->hi] = (bracket) { .at = 0, .bTag = Ct };
+    int *positions = malloc(n * sizeof(int));
+    byte *types = malloc(n * sizeof(byte));
+    *bs = (brackets) { .lo=1, .hi=n-1, .end=n, .at=0, .max=0 };
+    bs->positions = positions;
+    bs->positions[0] = -1;
+    bs->positions[n-1] = 0;
+    bs->types = types;
+    bs->types[0] = Ot;
+    bs->types[n-1] = Ct;
     return bs;
 }
 
 void freeBrackets(brackets *bs) {
-    free(bs->data);
+    free(bs->positions);
+    free(bs->types);
     free(bs);
 }
 
 static void resize(brackets *bs) {
     int size = bs->end;
     size = size * 3 / 2;
-    bs->data = realloc(bs->data, size * sizeof(bracket));
+    bs->positions = realloc(bs->positions, size * sizeof(int));
+    bs->types = realloc(bs->types, size * sizeof(byte));
     int n = bs->end - bs->hi;
-    memmove(&bs->data[size - n], &bs->data[bs->hi], n * sizeof(bracket));
+    memmove(&bs->positions[size - n], &bs->positions[bs->hi], n * sizeof(int));
+    memmove(&bs->types[size - n], &bs->types[bs->hi], n * sizeof(byte));
     bs->hi = size - n;
     bs->end = size;
 }
 
-// Get the type associated with a tag.
-static inline int getType(brackets *bs, byte tag) {
-    return bs->types[tag];
+// Get the bracket type associated with a tag.
+static inline int getBracket(brackets *bs, byte tag) {
+    return bs->map[tag];
 }
 
-// Convert a scanner tag into a bracket tag.
-static int getBracketTag(brackets *bs, byte tag) {
-    switch (getType(bs, tag)) {
+// Convert a token type character into a bracket.
+static int getBracketTag(brackets *bs, char type) {
+    switch (type) {
         case '\'': return Lq;
         case '"': return Ld;
         case '(': return Or;
@@ -162,58 +167,63 @@ static int getBracketTag(brackets *bs, byte tag) {
 
 // Get the top open bracket on the forward stack.
 static inline bracket *topForward(brackets *bs) {
-    return &bs->data[bs->lo - 1];
+    return &bs->types[bs->lo - 1];
 }
 
 // Mark a tag as a mismatched bracket.
-static inline void mismatch(brackets *bs, int at) {
-    // TODO
+static inline void mismatch(brackets *bs, int at, byte *tags) {
+    tags[at] = 0xC0 | tags[at];
 }
 
 // Mark a tag as commented.
-static inline void commented(brackets *bs, int at) {
-    // TODO
+static inline void commented(brackets *bs, int at, byte *tags) {
+    tags[at] = 0x80 | tags[at];
 }
 
 // Mark a tag as quoted.
 static inline void quoted(brackets *bs, int at) {
-    // TODO
+    tags[at] = 0x40 | tags[at];
 }
 
 // Actions to perform during forward matching when comparing a bracket on top of
 // the stack with the next byte in the text.
 
-// Eg  ( x  move past a byte during forward scanning.
-static inline void moveForward(brackets *bs) {
-    bs->at++;
-    bs->tags++;
-}
-
-// Eg  ( (  push byte as opener and move on
-static inline void pushForward(brackets *bs) {
+static inline void pushForward(brackets *bs, int at, byte bracket) {
     if (bs->lo >= bs->hi) resize(bs);
-    bs->data[bs->lo++] = (bracket) { .at = bs->at, .bTag = bs->tags[0] };
-    moveForward(bs);
+    bs->positions[bs->lo] = at;
+    bs->types[bs->lo++] = bracket;
 }
 
+static inline void popForward(brackets *bs) {
+    bs->lo--;
+}
+
+static inline void moveForward(brackets *bs) {
+    // TODO
+}
+
+// COULD BE JUST pop; return true.
 // Eg  ( )  pop bracket, move past byte
 static inline void matchForward(brackets *bs) {
-    bs->lo--;
+    popForward(bs);
     moveForward(bs);
 }
 
+// COULD BE JUST pop; mismatch(p); return false.
 // Eg  ( ]  pop bracket and mismatch it, don't move on
 static inline void popForward(brackets *bs) {
     bs->lo--;
     mismatch(bs, bs->data[bs->lo].at);
 }
 
+// COULD BE JUST mismatch(tag); return true.
 // Eg  [ )  mark byte as mismatched and move on
 static inline void loseForward(brackets *bs) {
     mismatch(bs, bs->at);
     moveForward(bs);
 }
 
+// COULD BE JUST commented; return true.
 // Eg  # )  mark byte as commented and move on
 static inline void noteForward(brackets *bs) {
     commented(bs, bs->at);
@@ -238,18 +248,21 @@ static inline void nestForward(brackets *bs) {
     else noteForward(bs);
 }
 
-// Match brackets forward through the given tags
-static void matchingForward(brackets *bs, int n, byte tags[n]) {
-    bs->tags = tags;
+// NEEDS: positions of brackets, access to tag array to get info about stacked
+// brackets, next tag, return true/false to move on.
+
+// Move past the given tags in the forward bracket matching algorithm, as the
+// result of an insertion or rightwards move.
+static void doForward(brackets *bs, int at, int n, byte tags[n]) {
+    byte open = bs->types[bs->lo - 1];
     for (int i = 0; i < n; i++) {
-        int openBracket = getBracketTag(bs, topForward(bs)->bTag);
-        int nextBracket = getBracketTag(bs, tags[i]);
-        int action = forwardTable[openBracket][nextBracket];
+        byte next = bs->map[tags[i]];
+        int action = forwardTable[open][next];
         switch (action) {
-            case Move: moveForward(bs); break;
-            case Push: pushForward(bs); break;
-            case Match: matchForward(bs); break;
-            case Pop: popForward(bs); break;
+            case Move: at++; break;
+            case Push: pushForward(bs, at, next); at++; break;
+            case Match: popForward(bs); at++; break;
+            case Pop: popForward(bs); i--; break;
             case Lose: loseForward(bs); break;
             case Note: noteForward(bs); break;
             case Quote: quoteForward(bs); break;
@@ -259,6 +272,30 @@ static void matchingForward(brackets *bs, int n, byte tags[n]) {
         }
     }
 }
+
+// Undo one tag in forward bracket matching algorithm.
+// TODO: because of repair of tags, haven't got the old ones to undo from. So,
+// probably only C and E apply.
+// undoForward(brackets *bs, int at, byte tag) { ... }
+// A: IF at is position of top bracket (== tag) then just pop.
+// B: IF tag is open bracket, MUST be A
+// C: IF top bracket is < or " then unmark tag (or do some rescanning?)
+// D: IF tag is Nb just move back
+// E: have closer, now must re-bracket forwards from top bracket
+
+static void undoForward(brackets *bs, int to) {
+    while (top-pos >= to) popForward(bs);
+    if (top is < or " or ') move to to;
+    else {
+        move to top;
+        redo to to;
+    }
+}
+
+// Translation table: types[] and targets[]. For newly added tags (i >= index)
+// types[i] holds override type and targets[i] holds previous tag value. COULD
+// recognise via override types '-' for comment, '~' for literal, '!' for
+// mismatched tag.
 
 // Forward bracket matching tests. The first of each pair of strings is a
 // sequence of token types. The second shows which brackets remain on the stack

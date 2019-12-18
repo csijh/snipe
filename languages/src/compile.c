@@ -408,7 +408,6 @@ void writeShort(short n, FILE *fp) {
     fwrite(bytes, 1, 2, fp);
 }
 
-// TODO: allocate tags.
 void writeScanner(scanner *sc, char const *path) {
     FILE *fp = fopen(path, "wb");
     writeShort(sc->nstates, fp);
@@ -504,6 +503,9 @@ int main(int n, char const *args[n]) {
     n = strlen(out);
     strcpy(&out[n-3], "bin");
     writeScanner(sc, out);
+    if (sc->ntags > 64) {
+        printf("Warning: number of tags > 64, no room for two flag bits\n");
+    }
     free(sc);
     return 0;
 }
