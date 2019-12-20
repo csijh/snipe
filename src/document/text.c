@@ -7,11 +7,25 @@
 #include <string.h>
 #include <assert.h>
 
+// A cursor has a base and a mark, which are equal if there is no selection.
+// Bases are always in order of position in the text. They may temporarily be
+// equal during an edit, but are distinct by the end. There is a remembered
+// column for up/down movement.
+struct cursor { int base, mark, col; };
+typedef struct cursor cursor;
+// A cursor has a sequence number, start and end of selection, and remembered
+// column for up/down movement. The from and to positions are equal if there is
+// no selection. The from positions of multiple cursors are always in order of
+// position in the text. They may temporarily be equal, but are distinct between
+// user actions.
+struct cursor { int c, from, to, col; };
+typedef struct cursor cursor;
+
+
 // A text object stores an array of bytes, as a gap buffer, with the gap
 // maintained at the current cursor position. For realloc info, see
 // http://blog.httrack.com/blog/2014/04/05/a-story-of-realloc-and-laziness/
-// The gap is between offsets lo and hi in the data array. For each cursor, the
-// associated selector is negative if there is no selection. After each edit,
+// The gap is between offsets lo and hi in the data array. After each edit,
 // startEdit and endEdit cover the range of text which may have changed.
 struct text {
     char *data;

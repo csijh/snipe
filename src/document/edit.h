@@ -1,46 +1,43 @@
-// Primitive edit operations. Free and open source. See licence.txt.
+// History and primitive edit operations. Free and open source. See licence.txt.
 
 // Each user action becomes a sequence of edits to a document. The edits include
 // automatic adjustments such as re-indenting. The state of a document consists
-// of its text, and a set of cursors with possible selectors. The edits and
-// their rules are designed so that the edits are inverses of each other for
-// undo, and that an undo restores cursors as well as text.
+// of its text, and a set of cursors. The edits are based on a current position,
+// not necessarily related to a cursor, and a current cursor index. The edits
+// and their rules are designed so that the edits are inverses of each other for
+// undo/redo, and that an undo restores cursors as well as text. The edits are:
 
-// DoInsert(at,s) is an insertion of a string before the given position. If
-// there is a cursor there, it moves to the end of the insertion. DoDelete(at,s)
-// is a deletion of a string up to the given position. The deleted text mustn't
-// include a cursor other than at the end. The string is filled in from the text
-// when the edit is created.
+// Goto(p): change current position.
 
-// DoAdd(at) adds a new cursor at the given position. DoCancel(at) removes a
-// cursor at the given position. DoSelect(at,to) moves the cursor from the given
-// position and selects the text covered. DoDeselect(at,to) moves the cursor at
-// the current position to its selector, cancelling it. DoMove(at,to) moves the
-// cursor at the given position (self-inverse). DoEnd(at) marks the end of the
-// edits for one user action, and sets the current cursor position.
+// Insert(s): insert string s before current position. A cursor base or mark at
+// or after the current position is adjusted.
 
-// AddCursor(at), DelCursor(at) must be no selection (so inverses)
-// MoveCursor(from,to) must be no selection (so self-inverse)
-// MoveEnd(B,from,to) can be used to select/deselect, base is unique
-// MoveEnd(LR,from,to) L/R needed because marker position isn't unique
+// Delete(s): delete string s before current position. There must be no cursor
+// base or mark in the range of the deletion, except at the current position.
 
-// SetCursor(i): make the i'th cursor current (or Set(n) for n cursors).
-// -- store delta-i because self-inverse.
-// AddCursor(at): insert a new cursor, in base order, which becomes current
-// -- store delta-at, so know where to undo to
-// DelCursor(at): delete current cursor, which has no selection and is at 'at'.
-// MoveCursor(to): move current cursor, which has no selection. (delta)
-// MarkCursor(to): move just the marker, to anywhere. (delta)
-// Ins(s): insert s at current cursor, which has no selection.
-// Del(s): delete back from current cursor, which has no selection.
+// SetCursor(c): change current cursor. For n cursors, 0 <= c <= n with c == n
+// only immediately preceding an AddCursor.
 
-// Then: don't have to maintain non-overlap, but can act first and
-// collapse afterwards. Must create or move cursor temporarily to ins/del. Must
-// move marker to deselect. How add n'th cursor? Add after maybe? Or set(n)?
+// AddCursor(): insert a cursor at the current position. This must preserve the
+// ordering of the cursor bases.
 
-enum editOp {
-    DoInsert, DoDelete, DoAdd, DoCancel, DoSelect, DoDeselect, DoMove, DoEnd
+// DelCursor(): delete the current cursor. The cursor must not have a selection.
+// If the last cursor is deleted, this must be followed by a SetCursor.
+
+// MoveCursor: move the current cursor to the current position. There must be no
+// selection and the order of the cursor bases must be preserved.
+
+// MoveBase: move the base of the current cursor to the current position,
+// preserving the order of the cursor bases.
+
+// MoveMark: move the mark of the current cursor to the current position.
+
+enum edit {
+    Goto, DoInsert, DoDelete, SetCursor, AddCursor, DelCursor, MoveCursor,
+    MoveBase, MoveMark
 };
+
+
 
 struct edit;
 typedef struct edit edit;

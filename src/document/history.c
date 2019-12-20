@@ -1,144 +1,106 @@
-// The Snipe editor is free and open source, see licence.txt.
+// History, undo, redo. Free and open source. See licence.txt.
 #include "history.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 
-// A history structure consists of a tracked position, a flag to say whether a
-// multi-cursor group of edits is under way, and a list of bytes.
-struct history { int position; bool inGroup; chars *bs; };
+// A history structure consists of a tracked current text position, current
+// cursor index, and a flexible array of bytes. As well as the length, which is
+// the high water mark, there is a current position in the history, during
+// undo/redo sequences.
+struct history { int at, cursor, current, length, max; char *bs; };
 
-// Edits are stored using a custom bytecode. Each byte has a 3-bit opcode and
-// non-negative operand. Operand values 0..27 are stored directly in the
-// remaining 5 bits of the opcode byte. Values 28..31 mean that the actual
-// operand is stored in 1..4 further bytes.
-
-// A single-cursor edit is stored as an insertion or deletion, optionally
-// followed by a Left or Right opcode to specify the position at which the edit
-// happened relative to the tracked position. A multi-cursor edit is stored as a
-// series of single-cursor edits. The first edit in the sequence is accompanied
-// by a Left opcode with operand zero, and the last is accompanied by a Right
-// opcode with operand zero.
+// An insertion is stored as AT INS "..." INS, a deletion as AT DEL "..." DEL a
+// set cursor as AT SET C SET and other operations as AT OP. An opcode is even,
+// and has 1 added to indicate the last edit of a user action. The codes for INS
+// and DEL take advantage of the fact that text never contains '\0'...'\3', so
+// that a search can be made from either end of the string to the other to find
+// the length. Operation bytes have the top bit unset. An argument AT has bytes
+// with the top bit set, and contains a packed, signed integer. If there are no
+// argument bytes, the argument is zero or not needed. An AT UP operation
+// records the previous point in the history, when undos are followed by a
+// normal edit.
+enum opcode {
+    INS = 0, DEL = 2, NEXT = 4, BACK = 6, ADD = 8, CUT = 10, MOVE = 12, BASE =
+    14, MARK = 16, UP = 18
+};
 
 history *newHistory() {
     history *h = malloc(sizeof(history));
-    h->position = 0;
-    h->inGroup = false;
-    h->bs = newChars();
+    *h = (history) { .position = 0, .cursor = 0, .length = 0, .max = 1000; };
+    h->bs = malloc(h->max);
     return h;
 }
 
 void freeHistory(history *h) {
-    freeList(h->bs);
+    free(h->bs);
     free(h);
 }
 
-// Add a bytes to the history.
-static void add(chars *cs, char c) {
-    int n = length(cs);
-    resize(cs, n + 1);
-    C(cs)[n] = c;
+// Resize the byte array to fit n more bytes.
+static void resize(history *h, int n) {
+    while (h->length + n > h->max) h->max = h->max * 3 / 2;
+    h->bs = realloc(h->bs, h->max);
 }
 
-// Push n bytes onto the history.
-static void pushBytes(history *h, int n, char *s) {
-    int len = length(h->bs);
-    resize(h->bs, len + n);
-    for (int i = 0; i < n; i++) C(h->bs)[len + i] = s[i];
+// Add a byte to the history.
+static inline void push(history *h, char b) {
+    if (h->length + 1 > h->max) resize(h, 1);
+    h->bs[h->length++] = b;
 }
 
-// Pop n bytes off the history into the given array.
-static void popBytes(history *h, int n, char s[n]) {
-    int len = length(h->bs);
-    len = len - n;
-    for (int i = 0; i < n; i++) s[i] = C(h->bs)[len + i];
-    resize(h->bs, len);
+// Add n bytes to the history.
+static inline void pushBytes(history *h, int n, char *s) {
+    if (h->length + n > h->max) resize(h, n);
+    memcpy(&h->bs[h->length], s, n);
 }
 
-// Push a bytecode op onto the history, operand first.
-static void pushBytecode(history *h, int op, int n) {
-    if (n <= 27) { add(h->bs, (op << 5) | n); return; }
-    int count = 0;
-    while (n > 0) {
-        add(h->bs, n & 0xFF);
-        n = n >> 8;
-        count++;
+// Add an integer to the history, in bytes with the top bit set. (Avoid relying
+// on arithmetic right shift of negative integers.)
+static void pushInt(history *h, int n) {
+    if (n < -134217728 || n >= 134217728) push(0x80 | ((n >> 28) & 0x7F));
+    if (n < -1048576 || n >= 1048576) push(0x80 | ((n >> 21) & 0x7F));
+    if (n < -8192 || n >= 8192) push(0x80 | ((n >> 14) & 0x7F));
+    if (n < -64 || n >= 64) push(0x80 | ((n >> 7) & 0xFF));
+    push(0x80 | (n & 0x7F));
+}
+
+// Pop an integer off the history.
+static int popInt(history *h) {
+    int end = h->current, start;
+    for (start = end; start > 0 && (h->bs[start-1] & 0x80) != 0; start--) {}
+    if (start == end) return 0;
+    h->current = start;
+    signed char p = &h->bs[start];
+    int n = (*p << 1) / 2;
+    for (int i = start + 1; i < end; i++) {
+        n = (n << 7) | (h->bs[i] & 0x7F);
     }
-    add(h->bs, (op << 5) | (27 + count));
+    return n;
 }
 
-// Pop a bytecode op off the history into the given variables.
-static void popBytecode(history *h, int *pop, int *pn) {
-    int len = length(h->bs);
-    unsigned char byte = C(h->bs)[--len];
-    *pop = byte >> 5;
-    *pn = byte & 0x1F;
-    if (*pn >= 28) {
-        int n = 0;
-        for (int i = 0; i < *pn - 27; i++) {
-            n = (n << 8) + (C(h->bs)[--len] & 0xFF);
-        }
-        *pn = n;
-    }
-    resize(h->bs, len);
-}
-
-// Add two more opcodes.
-enum { Left = DelRL + 1, Right = DelRL + 2 };
-
-// Push an edit onto the history. Start with the insert/delete, then maybe add
-// left/right movement, and a begin/end marker.
-void pushEdit(history *h, opcode op, int at, int n, char *s, bool last) {
-    if (op != Ins) pushBytes(h, n, s);
-    pushBytecode(h, op, n);
-
-    if (at > h->position) pushBytecode(h, Right, at - h->position);
-    else if (at < h->position) pushBytecode(h, Left, h->position - at);
-    if (op == Ins) h->position = at + n;
-    else h->position = at;
-
-    if (! h->inGroup && last) return;
-    if (! h->inGroup) {
-        pushBytecode(h, Left, 0);
-        h->inGroup = true;
-    }
-    if (last) {
-        pushBytecode(h, Right, 0);
-        h->inGroup = false;
+// Push an edit onto the history.
+void pushEdit(history *h, int op, int at, int n, char *s) {
+    int delta = at - h->at;
+    if (at != 0) pushInt(h, delta);
+    h->at = at;
+    switch (op) {
+        case Insert: push(h,INS); pushBytes(h,n,s); push(h,INS); break;
+        case Delete: push(h,DEL); pushBytes(h,n,s); push(h,DEL); break;
+        case SetCursor: push(h,SET); pushInt(h,n); push(h,SET); break;
+        case AddCursor: push(h,ADD); break;
+        case CutCursor: push(h,CUT); break;
+        case MoveCursor: push(h,MOVE); break;
+        case MoveBase: push(h,BASE); break;
+        case MoveMark: push(h,MARK); break;
+        case End: h->bs[h->length-1] |= 1;
     }
 }
 
-void popEdit(history *h, opcode *op, int *at, int *n, char *s, bool *last) {
-    *at = h->position;
-    *last = true;
-    *n = 0;
-    *s = '\0';
-    if (length(h->bs) == 0) return;
-    bool done = false;
-    while (! done) {
-        popBytecode(h, op, n);
-        switch (*op) {
-            case Left:
-                if (*n == 0) *last = true;
-                else h->position += *n;
-                break;
-            case Right:
-                if (*n == 0) *last = false;
-                else h->position -= *n;
-                break;
-            case Ins:
-                h->position -= *n;
-                *at -= *n;
-                done = true;
-                break;
-            default:
-                popBytes(h, *n, s);
-                done = true;
-                break;
-        }
-    }
-}
+// ----------
+
+
 
 #ifdef historyTest
 
