@@ -1,6 +1,7 @@
 # Modules forming the editor's model.
 unicode = unicode.c
 string = string.c
+history = history.c
 edit = edit.c $(unicode)
 text = text.c $(edit)
 lines = lines.c $(edit)
@@ -8,7 +9,6 @@ tokens = tokens.c
 
 array = array.c
 
-history = history.c $(text)
 cursors = cursors.c $(lines)
 scan = scan.c $(cursors)
 brackets = brackets.c $(scan)
