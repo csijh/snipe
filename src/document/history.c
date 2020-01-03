@@ -1,24 +1,23 @@
 // History, undo, redo. Free and open source. See licence.txt.
 // TODO: Elide successive 1-char insertions.
+// TODO: short-undo
 #include "history.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 
-// A history structure consists of a tracked current text position, current
-// cursor index, a current position in the history during undo/redo sequences,
-// the length (high water mark) and a flexible array of bytes.
-struct history { int at, cursor, current, length, max; char *bs; };
+// A history structure consists of a flexible array of bytes, with a current
+// position in the history during undo/redo sequences.
+struct history { int current, length, max; char *bs; };
 
-// Add a constant to record the position in the history, if not at the end when
-// a non-undo-redo edit is recorded.
+// Add an opcode to record the position in the history, if not at the end when
+// a new non-undo-redo edit is recorded.
 enum { Up = End + 1 };
 
 history *newHistory() {
     history *h = malloc(sizeof(history));
-    *h = (history) { .at=0, .cursor=0, .current=0, .length=0, .max=1000 };
-    h->bs = malloc(h->max);
+    *h = (history) { .current=0, .length=0, .max=1000, .bs=malloc(1000) };
     return h;
 }
 
@@ -41,27 +40,26 @@ static inline void save(history *h, char b) {
 }
 
 // Add n bytes to the history.
-static inline void saveN(history *h, int n, char const *s) {
+static inline void saveString(history *h, int n, char const *s) {
     if (h->length + n > h->max) resize(h, n);
     memcpy(&h->bs[h->length], s, n);
     h->length += n;
     h->current = h->length;
 }
 
-// An insertion is stored as N INS "..." INS, a deletion as N DEL "..." DEL and
-// other operations as N OP. An opcode is shifted left one bit, and has 1 added
-// to indicate the last edit of a user action. The codes for INS and DEL take
-// advantage of the fact that text never contains '\0'...'\3', so that a search
-// can be made from either end of the string to the other to find the length. An
-// argument N has bytes with the top bit set, and contains a packed, signed
-// integer. It has opcodes on either side with the top bit unset to delimit it.
-// If there are no argument bytes, the argument is zero or not needed.
+// An insert or delete is stored as N OP "..." OP and other operations as N OP.
+// An opcode is shifted left one bit, and has 1 added to indicate the last edit
+// of a user action. The codes for insert and delete take advantage of the fact
+// that text never contains '\0'...'\3', so that a search can be made from
+// either end of the string to find the length.
 static inline void saveOp(history *h, int op) {
     save(h, op << 1);
 }
 
-// Add an integer to the history, in bytes with the top bit set. (Avoid relying
-// on arithmetic right shift of negative integers.)
+// Add a signed integer argument to the history, packed in bytes with the top
+// bit set. There are opcodes on either side with the top bit unset to delimit
+// it. If there are no argument bytes, the argument is zero or not needed.
+// (Avoid relying on arithmetic right shift of negative integers.)
 static void saveInt(history *h, int n) {
     if (n == 0) return;
     if (n < -134217728 || n >= 134217728) save(h, 0x80 | ((n >> 28) & 0x7F));
@@ -71,49 +69,44 @@ static void saveInt(history *h, int n) {
     save(h, 0x80 | (n & 0x7F));
 }
 
-// save a text position onto the history, as a delta to make it self-inverse.
-static void saveAt(history *h, int at) {
-    int delta = at - h->at;
-    saveInt(h, delta);
-    h->at = at;
-}
-
-// save an edit onto the history.
-void saveEdit(history *h, int op, int at, int n, char const *s) {
+// Save an opcode and integer argument (in reverse order). If this is after an
+// undo, record the old position in the history.
+static void saveOpArg(history *h, int op, int by) {
     if (h->current != h->length) {
         int delta = h->length - h->current;
+        h->current = h->length;
         saveInt(h, delta);
         saveOp(h, Up);
     }
-    switch (op) {
-        case Insert: case Delete:
-            saveAt(h,at); saveOp(h,op); saveN(h,n,s); saveOp(h,op); break;
-        case SetCursor: saveInt(h,n); saveOp(h,op); break;
-        case AddCursor: saveAt(h,at); saveOp(h,op); break;
-        case CutCursor: saveOp(h,op); break;
-        case MoveCursor: saveAt(h,at); saveOp(h,op); break;
-        case MoveBase: saveAt(h,at); saveOp(h,op); break;
-        case MoveMark: saveAt(h,at); saveOp(h,op); break;
-        case End: h->bs[h->length-1] |= 1;
-    }
+    saveInt(h,by);
+    saveOp(h,op);
     h->current = h->length;
 }
 
-void saveInsert(history *h, int p, int n, char const *s) {
-    saveEdit(h, Insert, p, n, s);
+// Save an opcode and a string (in reverse order).
+static void saveOpString(history *h, int op, int n, char const *s) {
+    saveString(h,n,s);
+    saveOp(h,op);
+    h->current = h->length;
 }
 
-void saveDelete(history *h, int p, int n, char const *s) {
-    saveEdit(h, Delete, p, n, s);
+void saveInsert(history *h, int by, int n, char const *s) {
+    saveOpArg(h, Insert, by);
+    saveOpString(h, Insert, n, s);
 }
 
-void saveSetCursor(history *h, int n) { saveEdit(h, SetCursor, 0, n, NULL); }
-void saveAddCursor(history *h, int p) { saveEdit(h, AddCursor, p, 0, NULL); }
-void saveCutCursor(history *h) { saveEdit(h, CutCursor, 0, 0, NULL); }
-void saveMoveCursor(history *h, int p) { saveEdit(h, MoveCursor, p, 0, NULL); }
-void saveMoveBase(history *h, int p) { saveEdit(h, MoveBase, p, 0, NULL); }
-void saveMoveMark(history *h, int p) { saveEdit(h, MoveMark, p, 0, NULL); }
-void saveEnd(history *h) { saveEdit(h, End, 0, 0, NULL); }
+void saveDelete(history *h, int by, int n, char const *s) {
+    saveOpArg(h, Delete, by);
+    saveOpString(h, Delete, n, s);
+}
+
+void saveAddCursor(history *h, int by) { saveOpArg(h, AddCursor, by); }
+void saveCutCursor(history *h, int by) { saveOpArg(h, CutCursor, by); }
+void saveSetCursor(history *h, int by) { saveOpArg(h, SetCursor, by); }
+void saveMoveCursor(history *h, int by) { saveOpArg(h, MoveCursor, by); }
+void saveMoveBase(history *h, int by) { saveOpArg(h, MoveBase, by); }
+void saveMoveMark(history *h, int by) { saveOpArg(h, MoveMark, by); }
+void saveEnd(history *h) { if (h->length > 0) h->bs[h->length-1] |= 1; }
 
 // Pop an opcode off the history.
 static int popOp(history *h) {
@@ -122,54 +115,109 @@ static int popOp(history *h) {
     return ch >> 1;
 }
 
-// Pop an integer off the history, avoiding left shift of negative number.
-static int popInt(history *h) {
-    int end = h->current, start;
-    for (start = end; start > 0 && (h->bs[start-1] & 0x80) != 0; start--) {}
+// Unpack an int from a range of bytes with the top bit set. Avoid left shift of
+// negative numbers.
+static int unpack(history *h, int start, int end) {
     if (start == end) return 0;
-    h->current = start;
     char ch = h->bs[start];
     bool neg = (ch & 0x40) != 0;
     unsigned int n = neg ? -1 : 0;
-    for (int i = start; i < end; i++) {
-        n = (n << 7) | (h->bs[i] & 0x7F);
-    }
+    for (int i = start; i < end; i++) n = (n << 7) | (h->bs[i] & 0x7F);
     return n;
 }
 
-// Pop a position off the history.
-static int popAt(history *h) {
-    int at = h->at;
-    int delta = popInt(h);
-    int old = h->at + delta;
-    h->at = old;
-    return at;
+// Pop an integer backward off the history (for undo).
+static int popInt(history *h) {
+    int end = h->current, start;
+    for (start = end; start > 0 && (h->bs[start-1] & 0x80) != 0; start--) {}
+    h->current = start;
+    return unpack(h, start, end);
+}
+
+// Read an integer forward off the history (for redo).
+static int readInt(history *h) {
+    int start = h->current, end;
+    for (end = start; end < h->length && (h->bs[end] & 0x80) != 0; end++) {}
+    h->current = end;
+    return unpack(h, start, end);
 }
 
 // Pop a string off the history, returning the number of bytes in *pn.
-static char const *popN(history *h, int *pn) {
+static char const *popString(history *h, int *pn) {
     int i;
-    for (i = h->current - 1; i >= 0 && h->bs[i] >= 4; i--) { }
+    for (i = h->current; i > 0 && h->bs[i-1] >= 4; i--) { }
     *pn = h->current - i;
     h->current = i;
     return &h->bs[h->current];
 }
 
+// Read a string from the history, returning the number of bytes in *pn.
+static char const *readString(history *h, int *pn) {
+    int i;
+    for (i = h->current; i < h->length && h->bs[i] >= 4; i++) { }
+    *pn = i - h->current;
+    int old = h->current;
+    h->current = i;
+    return &h->bs[old];
+}
+
+// Pop an edit off the history.
 static edit popEdit(history *h) {
-    edit e = { .op=0, .at=0, .n=0, .last=false, .s=NULL };
+    edit e = { .last=false, .op=0, .by=0, .n=0, .s=NULL };
     e.op = popOp(h);
-    switch (e.op) {
-        case Insert: case Delete:
-            e.s = popN(h, &e.n); e.at = popAt(h); break;
-        case SetCursor: e.n = popInt(h); break;
-        case AddCursor: e.at = popAt(h); break;
-        case CutCursor: break;
-        case MoveCursor: e.at = popAt(h); break;
-        case MoveBase: e.at = popAt(h); break;
-        case MoveMark: e.at = popAt(h); break;
+    if (e.op == Insert || e.op == Delete) {
+        e.s = popString(h, &e.n); popOp(h);
+    }
+    e.by = popInt(h);
+    if (h->length == 0 || (h->bs[h->length-1] >> 1) == Up) {
+        popOp(h);
+        h->current = h->current - popInt(h);
     }
     if (h->length == 0 || (h->bs[h->length-1] & 1) != 0) e.last = true;
     return e;
+}
+
+// Read an edit forwards from the history, for redo.
+static edit readEdit(history *h) {
+    edit e = { .last=false, .op=End, .by=0, .n=0, .s=NULL };
+    if (h->current >= h->length) return e;
+    e.by = readInt(h);
+    char ch = h->bs[h->current++];
+    e.last = ch & 1;
+    e.op = ch >> 1;
+    if (e.op == Insert || e.op == Delete) {
+        e.s = readString(h, &e.n);
+        ch = h->bs[h->current++];
+        e.last = ch & 1;
+    }
+    return e;
+}
+
+static void invert(edit *e) {
+    switch (e->op) {
+        case Insert: e->op = Delete; break;
+        case Delete: e->op = Insert; break;
+        case AddCursor: e->op = CutCursor; break;
+        case CutCursor: e->op = AddCursor; break;
+        case SetCursor: e->by = - e->by; break;
+        case MoveCursor: e->by = - e->by; break;
+        case MoveBase: e->by = - e->by; break;
+        case MoveMark: e->by = - e->by; break;
+    }
+}
+
+edit undo(history *h) {
+    edit e = { .op = End };
+    if (h->current == 0) return e;
+    e = popEdit(h);
+    invert(&e);
+    return e;
+}
+
+edit redo(history *h) {
+    edit e = { .op = End };
+    if (h->current == h->length) return e;
+    return readEdit(h);
 }
 
 #ifdef historyTest
@@ -213,64 +261,30 @@ static void testInts(history *h) {
     assert(checkInt(h,-2147483648));
 }
 
-// Check that saving an edit and then popping it restores the edit.
-static bool checkEdit(history *h, int op, int at, int n, char *s) {
-    edit e = { .op=op, .at=at, .n=n, .s=s };
+// Check that an edit can be saved and undone.
+static bool checkUndo(history *h, int op, int by, int n, char *s) {
+    edit e = { .op=op, .by=by, .n=n, .s=s };
     h->current = h->length = 0;
-    saveEdit(h, op, at, n, s);
-    printf("c=%d\n", h->current);
-    for (int i = 0; i < 6; i++) {
-        printf("%d\n", h->bs[i]);
-    }
-
-    edit e2 = popEdit(h);
+    saveOpArg(h, op, by);
+    if (n > 0) saveOpString(h, op, n, s);
+    edit e2 = undo(h);
+    invert(&e);
     return
-        h->current==0 && e2.op==e.op && e2.at==e.at && e2.n==e.n &&
-        strncmp(e2.s, e.s, e.n);
+        h->current==0 && e2.op==e.op && e2.by==e.by && e2.n==e.n &&
+        (e.s == NULL || strncmp(e2.s, e.s, e.n) == 0);
 }
 
+// Check that edits can be saved and undone.
 static void testUndo(history *h) {
-    assert(checkEdit(h, Insert, 42, 3, "abc"));
+    assert(checkUndo(h, Insert, 42, 3, "abc"));
+    assert(checkUndo(h, Insert, 0, 3, "abc"));
+    assert(checkUndo(h, Delete, 31, 4, "wxyz"));
+    assert(checkUndo(h, AddCursor, 100, 0, NULL));
+    assert(checkUndo(h, CutCursor, 100, 0, NULL));
+    assert(checkUndo(h, SetCursor, 4, 0, NULL));
+    assert(checkUndo(h, MoveCursor, 100, 0, NULL));
 }
 
-/*
-
-// Test saveing and popping deletion text.
-static void testText() {
-    history *h = newHistory();
-    saveN(h, 10, "abcdefghij");
-    assert(length(h->bs) == 10);
-    char s[100];
-    popBytes(h, 10, s);
-    assert(length(h->bs) == 0);
-    assert(strncmp(s, "abcdefghij", 10) == 0);
-    freeHistory(h);
-}
-
-static void testEdit() {
-    history *h = newHistory();
-    int op, at, n;
-    bool last;
-    char s[100];
-    saveEdit(h, Ins, 5, 1, "", true);
-    popEdit(h, &op, &at, &n, s, &last);
-    assert(op == Ins && at == 5 && n == 1 && last == true);
-    assert(length(h->bs) == 0);
-    saveEdit(h, Ins, 20, 3, "", false);
-    saveEdit(h, Ins, 3, 20, "", true);
-    popEdit(h, &op, &at, &n, s, &last);
-    assert(op == Ins && at == 3 && n == 20 && last == false);
-    popEdit(h, &op, &at, &n, s, &last);
-    assert(op == Ins && at == 20 && n == 3 && last == true);
-    assert(length(h->bs) == 0);
-    saveEdit(h, DelR, 3, 1, "x", true);
-    popEdit(h, &op, &at, &n, s, &last);
-    assert(op == DelR && at == 3 && n == 1 && last == true);
-    assert(strncmp(s, "x", n) == 0);
-    assert(length(h->bs) == 0);
-    freeHistory(h);
-}
-*/
 int main() {
     setbuf(stdout, NULL);
     testOps();
@@ -278,7 +292,6 @@ int main() {
     testInts(h);
     testUndo(h);
     freeHistory(h);
-//    testEdit();
     printf("History module OK\n");
     return 0;
 }

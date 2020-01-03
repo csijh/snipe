@@ -1,14 +1,110 @@
 // Cursors and selections. Free and open source. See licence.txt.
 #include "cursors.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <assert.h>
 
-// Multiple cursors are held in a flexible array of structures. The current
-// cursor is tracked to supporting dragging.
+struct cursor { int base, mark, col; };
+typedef struct cursor cursor;
+
+// Multiple cursors are held in a flexible array of structures.
 struct cursors {
-//    text *t;
     int length, max, current;
     cursor *a;
 };
 
+cursors *newCursors() {
+    int n = 2;
+    cursors *cs = malloc(sizeof(cursors));
+    cursor *a = malloc(n * sizeof(cursor));
+    *cs = (cursors) { .current=0, .length=0, .max=n, .a=a };
+    return cs;
+}
+
+void freeCursors(cursors *cs) {
+    free(cs->a);
+    free(cs);
+}
+
+// Double the capacity.
+static void expand(cursors *cs) {
+    cs->max = cs->max * 2;
+    cs->a = realloc(cs->a, cs->max);
+}
+
+int nCursors(cursors *cs) {
+    return cs->length;
+}
+
+int currentCursor(cursors *cs) {
+    return cs->current;
+}
+
+void setCursor(cursors *cs, int i) {
+    if (i < 0) i = 0; else if (i >= cs->length) i = cs->length - 1;
+    cs->current = i;
+}
+
+void addCursor(cursors *cs, int at) {
+    if (cs->length >= cs->max) expand(cs);
+    for (int i = cs->length - 1; i > cs->current; i--) cs->a[i+1] = cs->a[i];
+    cs->a[cs->current+1] = (cursor) { .base=at, .mark=at, .col=0 };
+    cs->length++;
+}
+
+void cutCursor(cursors *cs) {
+    if (cs->current == cs->length - 1) return;
+    for (int i = cs->current + 2; i < cs->length; i++) cs->a[i-1] = cs->a[i];
+    cs->length--;
+}
+
+void moveCursor(cursors *cs, int to) {
+    cs->a[cs->current].base = to;
+    cs->a[cs->current].mark = to;
+}
+
+void selectCursor(cursors *cs, int to) {
+    cs->a[cs->current].mark = to;
+}
+
+void rebaseCursor(cursors *cs, int to) {
+    cs->a[cs->current].base = to;
+}
+
+int cursorBase(cursors *cs) {
+    return cs->a[cs->current].base;
+}
+
+int cursorMark(cursors *cs) {
+    return cs->a[cs->current].mark;
+}
+
+int cursorLeft(cursors *cs) {
+    cursor *c = &cs->a[cs->current];
+    if (c->base <= c->mark) return c->base;
+    return c->mark;
+}
+
+int cursorRight(cursors *cs) {
+    cursor *c = &cs->a[cs->current];
+    if (c->base >= c->mark) return c->base;
+    return c->mark;
+}
+
+int cursorCol(cursors *cs) {
+    return cs->a[cs->current].col;
+}
+
+#ifdef cursorsTest
+
+int main() {
+    printf("Cursors module OK\n");
+    return 0;
+}
+
+#endif
+
+/*
 // Adjust the end points of the cursors as the result of an insertion. If an
 // endpoint is on the insertion point, put it after the insertion if the cursor
 // has a selection to the right or no selection.
@@ -22,7 +118,7 @@ static void postInsert(cursors *cs, int at, int n) {
         }
     }
 }
-
+*/
 // ----------
 // Types of insertion:
 // a) at a cursor (e.g. type/paste)
@@ -87,6 +183,7 @@ static void postInsert(cursors *cs, int at, int n) {
 // Move cursor(at,to)     [cursor and selector]
 // Move Selector(at,to)   [e.g. to collapse in opposite direction]
 
+/*
 // Prepare to do a deletion forwards from 'at' to 'to'. To ensure that it can be
 // undone by an insert, deal in advance with any cursors which overlap the
 // deletion, assuming no cursors overlap before the call.
@@ -136,3 +233,4 @@ static void preDelete(cursors *cs, int at, int to, edits *e) {
     }
     // TODO pass the deletion to text.
 }
+*/

@@ -1,57 +1,46 @@
 // Cursors and selections. Free and open source. See licence.txt.
 
-// A label L means a selection is leftward, with the marker at the left end. A
-// label R means the marker is at the right end, and N means no selection.
-enum label { L = -1, N = 0, R = 1 };
-
-// A cursor covers a range of text (from <= to), with (from == to) if there is
-// no selection. The label specifies the direction of the selection. There is a
-// remembered column for up/down movement.
-struct cursor { int from, to, label, col; };
-typedef struct cursor cursor;
-
-// Multiple cursors are supported. The cursors are kept in order of position in
-// the text, with one cursor being current. Cursors don't overlap, except for
-// the current cursor during a drag operation. Cursors can only touch if there
-// is no visual ambiguity, i.e. they both have selections and at least one has a
-// marker at the position where they touch.
+// A cursor has a base and a mark, which are equal if there is no selection.
+// There is a remembered column for up/down movement. The cursors are kept in
+// order of position of their bases in the text, with one cursor being current.
+// After a user action, cursors are collapsed so that they don't overlap, and
+// they only touch if there is no visual ambiguity, i.e. they both have
+// selections and it is not the two bases which touch. During drag actions, the
+// cursors are not collapsed until the drop action.
 struct cursors;
 typedef struct cursors cursors;
 
-// ----------
-// A leftward move or delete on multiple cursors is done left to right. An
-// insertion, or rightward move or delete, is done right to left. That minimises
-// the effects of cursors on each other.
-
-// This module removes trailing spaces or trailing blank lines on every edit,
-// except where needed to maintain a cursor position. Cursor changes are passed
-// to the history object. Text changes are passed to the text object, which
-// passes them to the history and lines objects.
+// Allocate or free a set of cursors.
+cursors *newCursors();
+void freeCursors(cursors *cs);
 
 // Return the number of cursors.
 int nCursors(cursors *cs);
 
-// Return the i'th cursor.
-cursor getCursor(cursors *cs, int i);
+// Return the index of the current cursor.
+int currentCursor(cursors *cs);
 
-// Add a cursor.
+// Set the i'th cursor as current.
+void setCursor(cursors *cs, int i);
+
+// Add a cursor after the current one.
 void addCursor(cursors *cs, int at);
 
-// Remove a cursor.
-void cancelCursor(cursors *cs, int at);
+// Remove the cursor after the current one.
+void cutCursor(cursors *cs);
 
-// Move the i'th cursor.
-void moveCursor(cursors *cs, int i, int to);
+// Move the current cursor (which has no selection).
+void moveCursor(cursors *cs, int to);
 
-// Make a selection by moving the i'th cursor, leaving a selector behind.
-void selectCursor(cursors *cs, int i, int to);
+// Move the current cursor's mark.
+void selectCursor(cursors *cs, int to);
 
-// Insert text at the i'th cursor.
-void insertCursor(cursors *cs, int i, char *s);
+// Move the current cursor's base.
+void rebaseCursor(cursors *cs, int to);
 
-// Delete text from the i'th cursor to the given position.
-void cutCursor(cursors *cs, int i, int to)
-
-// Collapse overlapping cursors. (Call after each multi-cursor edit, or when
-// dropping a cursor after a drag).
-void collapseCursors(cursors *cs);
+// Get the base and mark, or left and right, or column, of the current cursor.
+int cursorBase(cursors *cs);
+int cursorMark(cursors *cs);
+int cursorLeft(cursors *cs);
+int cursorRight(cursors *cs);
+int cursorCol(cursors *cs);

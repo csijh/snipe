@@ -7,46 +7,40 @@
 #include <string.h>
 #include <assert.h>
 
-// A cursor has a base and a mark, which are equal if there is no selection.
-// Bases are always in order of position in the text. They may temporarily be
-// equal during an edit, but are distinct by the end. There is a remembered
-// column for up/down movement.
-struct cursor { int base, mark, col; };
-typedef struct cursor cursor;
-// A cursor has a sequence number, start and end of selection, and remembered
-// column for up/down movement. The from and to positions are equal if there is
-// no selection. The from positions of multiple cursors are always in order of
-// position in the text. They may temporarily be equal, but are distinct between
-// user actions.
-struct cursor { int c, from, to, col; };
-typedef struct cursor cursor;
+// TODO: text -> cursors -> history
+// Who keeps track of cursors which hold trailers? Can text ask?
+// After action: (a) collapse (b) check trailers
 
-
-// A text object stores an array of bytes, as a gap buffer, with the gap
-// maintained at the current cursor position. For realloc info, see
+// A text object stores an array of bytes, as a gap buffer, and an array of
+// cursors. The gap is between offsets lo and hi in the data array. After each
+// edit, startEdit and endEdit cover the range of text which may have changed.
+// For realloc info, see
 // http://blog.httrack.com/blog/2014/04/05/a-story-of-realloc-and-laziness/
-// The gap is between offsets lo and hi in the data array. After each edit,
-// startEdit and endEdit cover the range of text which may have changed.
 struct text {
     char *data;
     int lo, hi, end;
-    int iCursor, nCursors, maxCursors, *cursors, *selectors;
+    cursors *cs;
+    history *h;
     int startEdit, endEdit;
 };
 
-text *newText() {
+text *newText(cursors *cs, history *h) {
     int n = 1024;
     text *t = malloc(sizeof(text));
     char *data = malloc(n);
-    *t = (text) { .lo = 0, .hi = n, .end = n, .data = data };
-    t->startFix = -1;
-    t->endFix = -1;
+    *t = (text) { .lo=0, .hi=n, .end=n, .data=data, .cs=cs, .h=h };
+    t->startEdit = -1;
+    t->endEdit = -1;
     return t;
 }
 
 void freeText(text *t) {
     free(t->data);
     free(t);
+}
+
+extern inline int lengthText(text *t) {
+    return t->lo + (t->end - t->hi);
 }
 
 // Resize to make room for an insertion of n bytes.
@@ -60,14 +54,6 @@ static void resizeText(text *t, int n) {
     if (hilen > 0) memmove(&t->data[size - hilen], &t->data[t->hi], hilen);
     t->hi = size - hilen;
     t->end = size;
-}
-
-extern inline int lengthText(text *t) {
-    return t->lo + (t->end - t->hi);
-}
-
-extern inline int atText(text *t) {
-    return t->lo;
 }
 
 // Move the gap to the given position.
@@ -87,7 +73,7 @@ static void moveGap(text *t, position at) {
         t->lo = at;
     }
 }
-
+/*
 // Expand the fix range to cover an insertion or deletion, plus one extra byte,
 // so covering any byte which might contain a newline with preceding spaces.
 static void addRange(text *t, int from, int to) {
@@ -99,13 +85,14 @@ static void addRange(text *t, int from, int to) {
     }
 }
 
-// Clean up new text, assumed to be UTF-8 valid. Remove nulls, carriage
+// Clean up new text, assumed to be UTF-8 valid. Remove \0 to \7, carriage
 // returns, trailing spaces, trailing blank lines, and ensure a final newline.
 static int clean(int n, char *s) {
     int j = 0;
     for (int i = 0; i < n; i++) {
         char ch = s[i];
-        if (ch == '\0' || ch == '\r') continue;
+        if ('\0' <= ch && ch <= '\7') continue;
+        if (ch == '\r') continue;
         if (ch == '\n') {
             while (j > 0 && s[j-1] == ' ') j--;
         }
@@ -232,10 +219,10 @@ bool fixText(text *t, edit *e) {
     if (t->startFix >= 0) return fixEndText(t, e);
     return false;
 }
-
+*/
 // Unit testing
 #ifdef textTest
-
+/*
 // Flatten the text into the given string.
 static char *show(text *t, char *s) {
     int j = 0;
@@ -298,10 +285,11 @@ static bool testDelete(char *before, char *after) {
     freeText(t);
     return ok;
 }
-
+*/
 // Test all the ways in which trailing spaces, trailing blank lines or missing
 // final newlines can occur through an insertion or deletion.
 int main() {
+    /*
     assert(testInsert("abc[def]ghi\n", "abcdefghi\n"));
     assert(testInsert("x  [\ny\n]z\n", "x\ny\nz\n")); // cursor holds trailers??
     assert(testInsert("x[\ny  \n]z\n", "x\ny\nz\n")); // clean
@@ -316,7 +304,7 @@ int main() {
     assert(testDelete("x\n  [y]\nz\n", "x\n\nz\n"));  // cursor holds trailers
     assert(testDelete("x\ny\n[z]\n", "x\ny\n"));      // clean (del more?)
     assert(testDelete("x\ny[\nz\n]", "x\ny\n"));      // clean (del less?)
-
+*/
     printf("Text module OK\n");
     return 0;
 }

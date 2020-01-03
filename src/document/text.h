@@ -2,6 +2,9 @@
 #include "edit.h"
 #include <stdbool.h>
 
+// TODO: implement: Insert, Delete, SetCursor, AddCursor, CutCursor, MoveCursor,
+// MoveBase, MoveMark, End
+
 // A text object holds the UTF-8 content of a file, its cursors, and which
 // cursor is current. For n bytes, there are n+1 positions in the text, running
 // from 0 (at the start) to n (after the final newline). The text never contains
@@ -13,8 +16,10 @@
 struct text;
 typedef struct text text;
 
-// Create an empty text object, or free a text object and its data.
-text *newText(void);
+// Create an empty text object.
+text *newText(cursors *cs, history *h);
+
+// Free a text object and its data (but not the cursors or history).
 void freeText(text *t);
 
 // Return the number of bytes. The maximum length is INT_MAX, so that int can be
