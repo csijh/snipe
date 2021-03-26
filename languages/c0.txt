@@ -1,7 +1,14 @@
+# TODO: undo the attempt to combine token type and state (but remember it).
+# TODO: remember state at each space/newline
+# TODO: default rule for a state must terminate token
+# TODO: a token ends either at a space or nl or at start of next token
+# TODO: allow the spelling of tokens to be used in matching
+# TODO: should decl recognition be a bracket matching or special thing?
+
 # The C language, according to the C11 standard
 # See http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1548.pdf
 # Compile to c.bin and copy that to h.bin.
-# TODO: ignore \ before \n
+# TODO: ignore \ before \n ???
 
 # Potential keywords: go to key state to check if really identifiers
 start  _Alignas _Atomic _Bool _Complex _Generic _Imaginary    key
@@ -115,80 +122,45 @@ fileEnd start ?
 # (which require terminating semicolons). Recognize "struct id? {",
 # "union id? {", "enum id? {".
 
-# Seen struct/union/enum
-decl a..z A..Z 0..9 _ \bU \bu id
-decl declGap K
+# Check struct/union/enum
+decl a..z A..Z 0..9 _ \U \u id
+decl declId K
 
-# Seen struct/union/enum as a keyword
-declGap \s declGap
-declGap \n declGap $
-declGap declId _
+# Check possible id
+declId a..z A..Z 0..9 _ \U \u declId
+declId declCurly I
 
-# Seen struct/union/enum and a gap
-declId a..z A..Z 0..9 _ \bU \bu declId
-declId declIdGap I
-
-# Seen struct/union/enum and an id
-declIdGap \s declIdGap
-declIdGap \n declIdGap $
-declIdGap declCurly _
-
-# Seen struct/union/enum and an id and a gap
-declCurly { start %
+# Check for curly bracket
+declCurly { start DECL
 declCurly start
 
 # Look for curly brackets used in an initializer. Recognize "= {" or "= (s) {"
 # or "= (struct s) {".
 
-# Seen "="
-init \s init
-init \n init $
-init initCast _
+# Look for optional cast before curly
+init { start DECL
+init ( initTyoe
+init start
 
-# Seen "= "
-initCast { start %
-initCast ( initCastGap (
-initCast start
-
-# Seen "= ("
-initCastGap \s initCastGap
-initCastGap \n initCastGap $
-initCastGap initType _
-
-# Seen "= ( "
-initType struct initStruct _
-initType a..z A..Z 0..9 _ \bU \bu initId
+# Look for typename or struct typename
+initType struct initStruct
+initType a..z A..Z 0..9 _ \U \u initId
 initType start
 
-# Seen "= (struct"
-initStruct a..z A..Z 0..9 _ \bU \bu initId
-initStruct initStructGap K
+# Check struct
+initStruct a..z A..Z 0..9 _ \U \u initId
+initStruct initId KEY
 
-# Seen "= (struct "
-initStructGap \s initStructGap
-initStructGap \n initStructGap $
-initStructGap initId _
-
-# Seen "= (x" or "= (struct x"
+# Look for typename
 initId a..z A..Z 0..9 _ \bU \bu initId
-initId initIdGap I
-
-# Seen "= (id" or "= (struct id"
-initIdGap \s initIdGap
-initIdGap \n initIdGap $
-initIdGap initClose _
+initId initClose ID
 
 # Seen "= (id " or "= (struct id "
-initClose ) initCloseGap
+initClose ) initCurly
 initClose start
 
-# Seen "= (id)" or "= (struct id)"
-initCloseGap \s initCloseGap
-initCloseGap \n initCloseGap $
-initCloseGap initCurly _
-
-# Seen "= (id) " or "= (struct id) "
-initCurly { start %
+# Look for curly
+initCurly { start DECL
 initCurly start
 
 -------------------------------------------------------------------------------

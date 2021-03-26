@@ -1,0 +1,77 @@
+Algorithm
+---------
+
+Brackets are matched forward from start of text to current caret position.
+Surplus closers are mismatched. Surplus openers are stacked.
+
+Brackets are also matched from current caret position to end of text. Surplus
+closers are stacked, surplus openers are mismatched.
+
+Indenting is according to the number of openers between the start and that
+point, or between that point and the end, regardless of whether those brackets
+get matched or not.
+
+Remaining openers are matched with remaining closers, inwards from the ends. The
+two brackets at equal positions are matched or mismatched, which agrees with the
+indenting philosophy.
+
+The whole bracket algorithm can be described by a table. The table uses $ for
+the start and end, and ^ for newlines. The entries are + meaning push, = for
+match, < for left bracket loses, > for right bracket loses, - for both brackets
+lose.
+
+On a mismatch ( ] where ( loses, the ( is marked BAD. On a mismatch " ^ where a
+string is unclosed at the end of the line and both lose, only the " is marked
+BAD. On a match // ^ there is no change to type. Note that // and ^ are paired,
+but that's OK, because ^ can't close anything else.
+
+NOTE: can apply algorithm to a line, keeping both closers and openers. The
+brackets on the line can be tagged as such, for ease. Then can forget matches
+within the line and merge closers and openers with long distance stacks. The
+stacks keep all inter-line brackets, so it is all incremental?
+
+
+
+
+ Backward from end
+to caret is symmetrical. The algorithm handles multiple types of bracket ( [ { }
+] ) and multiline comment delimiters /* */ and string/char delimiters " '
+
+There is an array 'text' of characters dealt with so far and stack/array
+'openers' of unmatched brackets (as opposed to matched or mismatched).
+
+ADD: new character is added to text. If close bracket, compare to last opener and check
+priority of new bracket compared to last opener. Possibilities are:
+
+    * < x    do nothing
+    * < (    mismatch ( point to <
+    * { (    push (
+    * ( )    pair the two up as matched, and pop the opener
+    * [ )    pair the two up as mismatched, and pop the opener
+    * { )    mark as mismatched, chain to opener
+    * ( }    find partner (prev matched/mismatched opener)
+             mismatch and pop openers, and chain the group
+
+    lower eg:     { ) ) )        each closer points to opener
+    higher eg:    { ( ( ( }      each points to previous
+
+DEL: character is removed from text. If not bracket do nothing. If open bracket,
+check it is last opener and remove from openers. If close, check what it is
+paired with:
+
+    * If matched pair, or mismatched pair, make partner last opener
+    * If mismatched and partner is last opener, do nothing
+    * If chain of openers, push them back on the stack
+
+Algorithm 2
+-----------
+
+This is symmetrical, inward from the outside, on the openers associated with the
+text before the caret, and the closers associated with the text after the caret.
+It is inward to make it more likely that a recent mismatch is close to the
+caret.
+
+    If outermost match, pair and drop them
+    If outermost equal priority, pair as mismatched and drop
+    If closer is lower, mismatch it and drop
+    If closer is higher, mismatch opener and drop

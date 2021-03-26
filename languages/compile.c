@@ -2,9 +2,11 @@
 
 // Compile a language description into a scanner in a binary file. The program
 // interpret.c can be used for testing. Scanning produces a tag for each byte in
-// the text of a document. Tag values are allocated dynamically to encode both
-// the token type and the target state following the token. This allows text to
-// be re-scanned starting at any token boundary.
+// the text of a document. For the first byte of a token, the tag is the type of
+// token. For subsequent bytes, the tag indicates a continuation of the token,
+// with the grapheme boundaries marked. For spaces and newlines, the tag
+// indicates the scanner state, to enable incremental re-scanning.
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -16,30 +18,27 @@
 // SMALL is the limit on arrays indexed by bytes.
 enum { BIG = 10000, SMALL = 256 };
 
-// The types for continuation bytes (within a grapheme), and continuation
-// characters within the same token (also used as the accept action).
-enum { Byte = '.', Char = ' ', Accept = ' ' };
+// A tag is an action in the transition table, or a label for a byte of the
+// text. It may be a token type (to indicate the action of terminating a token,
+// and to label its first byte). As an action, it may be Skip to indicate that
+// there is no action relevant to the current state, or Accept to indicate the
+// action of continuing the same token. As a label, it may be Char to label a
+// continuation character (grapheme) within a token, or Byte to label a
+// continuation byte within a grapheme.
+enum { Skip = '.', Accept = ' ', Char = ' ', Byte = '.' };
 
-// Each table entry is a tag representing both a token type or special action,
-// and a target state. The tag value SKIP is reserved for use within the scanner
-// as a default table entry meaning that the entry is not relevant in the
-// current state. It represents type Byte so it can be used to tag continuation
-// bytes, and it represents the initial state so it can be used to scan from the
-// beginning of the text.
-typedef unsigned char byte;
-enum { SKIP = 0 };
+// Each table entry contains a tag representing an action, and a target state.
+struct entry { char action; unsigned char state; };
+typedef entry entry;
 
 // A scanner structure consists of the size of the state transition table and
-// number of tags, then the table itself, then an array mapping each tag value
-// to a token type character, then an array mapping each tag value to a target
-// state, then a string store containing the state names followed by the
-// patterns. The remaining fields are for temporary use during construction.
-// Many are NULL terminated arrays of strings.
+// number of tags, then the table itself, then a string store containing the
+// state names followed by the patterns. The remaining fields are for temporary
+// use during construction. Many are NULL terminated arrays of strings.
+// TODO: names of token types?
 struct scanner {
     short nstates, npatterns, ntags;
-    byte table[SMALL][BIG];
-    char types[SMALL];
-    byte targets[SMALL];
+    entry table[SMALL][BIG];
     char strings[BIG];
 
     char text[BIG];
@@ -111,59 +110,32 @@ int find(char *s, char *strings[]) {
 // ----- Lines and tokens -----------------------------------------------------
 
 // Validate a line. Check it is ASCII only. Convert '\t' or '\r' to a space. Ban
-// other control characters except '\n'. Check that an initial state name has at
-// least two characters. Check that the only escapes are \s,\b,\n,\r and a
-// backslash followed by whitespace.
+// other control characters.
 void validate(int n, char *line) {
     for (int i = 0; line[i] != '\0'; i++) {
         unsigned char ch = line[i];
         if (ch == '\t' || ch == '\r') line[i] = ' ';
         else if (ch >= 128) crash("non-ASCII character", n, "");
         else if (ch < 32 || ch > 126) crash("control character", n, "");
-        else if (ch == '\\') {
-            ch = line[i+1];
-            if (strchr("sbnr \n", ch) == NULL) {
-                crash("unknown escape sequence", n, "");
-            }
-        }
-    }
-    if (isalpha(line[0]) && (line[1] == ' ' || line[1] == '\0')) {
-        crash("state name too short", n, "");
     }
 }
 
 // Split the text into an array of lines, replacing each newline by a null. Skip
-// blank lines or lines starting with a non-letter. Stop at a line starting with
-// at least 5 minus signs.
+// blank lines or lines starting with anything other than a lowercase letter.
+// Stop at a line starting with at least 5 minus signs.
 void splitLines(char *text, char *lines[]) {
     int p = 0, n = 1;
     for (int i = 0; text[i] != '\0'; i++) {
-        if (text[i] == '\r') text[i] = ' ';
         if (text[i] != '\n') continue;
         text[i]= '\0';
         if (strncmp(&text[p], "-----", 3) == 0) break;
         validate(n, &text[p]);
-        if (text[p] != '\0' && isalpha(text[p])) {
+        if (text[p] != '\0' && 'a' <= text[p] && text[p] <= 'z') {
             add(&text[p], lines);
         }
         n++;
         p = i + 1;
     }
-}
-
-// Interpret escape sequences.
-void unescape(char *s) {
-    int n = 0, len = strlen(s);
-    for (int i = 0; i < len; i++) {
-        if (s[i] == '\\' && i < len-1) {
-            i++;
-            if (s[i] == 's') s[n++] = ' ';
-            else if (s[i] == 'b') s[n++] = '\\';
-            else if (s[i] == 'n') s[n++] = '\n';
-        }
-        else s[n++] = s[i];
-    }
-    s[n] = '\0';
 }
 
 // Space for a one-character string for each ASCII character.
@@ -191,8 +163,8 @@ void expandRange(char *range, char *tokens[]) {
 }
 
 // Split each line into an array of tokens, replacing spaces by null characters
-// as necessary. Expand ranges into explicit one-character tokens. Add a missing
-// accept action.
+// as necessary. Expand ranges into explicit one-character tokens. If there is
+// no token type, add an Accept token.
 void splitTokens(char *lines[], char *tokens[][SMALL]) {
     int nlines = length(lines);
     for (int i = 0; i < nlines; i++) {
@@ -204,14 +176,13 @@ void splitTokens(char *lines[], char *tokens[][SMALL]) {
             while (line[end] != ' ' && line[end] != '\0') end++;
             line[end] = '\0';
             char *pattern = &line[start];
-            unescape(pattern);
             if (isRange(pattern)) expandRange(pattern, tokens[i]);
             else add(pattern, tokens[i]);
             start = end + 1;
             while (start < len && line[start] == ' ') start++;
         }
         char *last = tokens[i][length(tokens[i])-1];
-        if (strlen(last) > 1) {
+        if ('a' <= last[0] && last[0] <= 'z') {
             add(singles[Accept], tokens[i]);
         }
     }
@@ -292,6 +263,7 @@ int transfer(char *list[], int n, char strings[n]) {
     return n;
 }
 
+/*
 // Find a tag or allocate a new one. If calling for the first time, allocate the
 // SKIP tag.
 int findTag(char type, byte state, int n, char types[], byte targets[]) {
@@ -308,9 +280,10 @@ int findTag(char type, byte state, int n, char types[], byte targets[]) {
     targets[n] = state;
     return n;
 }
+*/
 
 // Fill a non-default rule into the table.
-int fillRule(
+void fillRule(
     byte table[][BIG], char *tokens[], char *states[], char *patterns[],
     int ntags, char types[], byte targets[]
 ) {
@@ -320,17 +293,15 @@ int fillRule(
     byte target = (byte) find(tokens[n-2], states);
     for (int i = 1; i < n-1; i++) {
         short p = (short) find(tokens[i], patterns);
-        byte oldAction = table[state][p];
-        if (oldAction != SKIP) continue;
-        byte tag = findTag(action, target, ntags, types, targets);
-        if (tag >= ntags) ntags = tag + 1;
-        table[state][p] = tag;
+        byte oldAction = table[state][p].action;
+        if (oldAction != Skip) continue;
+        table[state][p].action = action;
+        table[state][p].target = target;
     }
-    return ntags;
 }
 
 // Fill a default rule into the table.
-int fillDefault(
+void fillDefault(
     byte table[][BIG], char *tokens[], char *states[], char *patterns[],
     int ntags, char types[], byte targets[]
 ) {
@@ -339,13 +310,13 @@ int fillDefault(
     byte target = (byte) find(tokens[1], states);
     for (int p = 0; p < length(patterns); p++) {
         if (strlen(patterns[p]) != 0) continue;
-        byte tag = findTag(action, target, ntags, types, targets);
-        if (tag >= ntags) ntags = tag + 1;
-        table[state][p] = tag;
+        table[state][p].action = action;
+        table[state][p].target = target;
     }
-    return ntags;
 }
 
+// =============================================================================
+// TODO: complain instead
 // Fill in any missing defaults as creating invalid tokens.
 int fillMissing(
     byte table[][BIG], char *states[], char *patterns[],

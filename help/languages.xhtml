@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en-GB" xml:lang="en-GB">
+<head>
+<meta charset="UTF-8"/>
+<style>
+    body { font-size: 120%; }
+    pre, .indent { margin-left: 40px; }
+    img { display: block; margin: 0 auto; }
+    mark {
+      font-family: cursive;
+      font-size: 95%;
+      color: #080;
+      background-color: white;
+    }
+</style>
+<title>Snipe Customisation</title>
+</head>
+<body>
+
+<h1>Languages</h1>
+
+<p><mark>Snipe</mark> has a scanner used to divide the text of a file being
+edited into tokens, and to give each token a type. The scanner is table-driven,
+using a language description from a text file. Further languages can be
+supported by adding description files.</p>
+
+<h2>Overview</h2>
+
+<p>A scanner for an editor has different goals from those of a scanner in a
+compiler. On the one hand:</p>
+
+<ul>
+<li>it may omit some details needed only for full compiling</li>
+<li>it may accept some tokens that a compiler would reject</li>
+<li>it may split or classify tokens differently</li>
+<li>it may not need to be completely accurate</li>
+</ul>
+
+<p>On the other hand:</p>
+
+<ul>
+<li>it must including all characters, including comments, in
+tokens</li>
+<li>it must be able to handle any text, whether valid or not, and never
+fail</li>
+<li>it must produce token types which are suitable to drive syntax
+highlighting, etc.</li>
+</ul>
+
+<p>In addition, the scanner for Snipe has some further specific goals:</p>
+
+<ul>
+<li>it avoids re-scanning large quantities of text</li>
+<li>it produces mini tokens within comments and literals</li>
+<li>it supports word-based cursor movement and line wrapping</li>
+<li>it helps with automatic indenting, bracket matching, semicolon insertion</li>
+</ul>
+
+<p>In most editors, when a multi-line comment delimiter such as <code>/*</code>
+is typed, it causes a large quantity of text to be re-scanned as a single big
+comment token, possibly to the end of the file. Then, when the matching close
+comment delimiter is typed, much of the text is re-scanned again, reversing the
+effect.</p>
+
+<p>To avoid this, the Snipe scanner divides the text into smaller tokens than
+usual, and then re-interprets those tokens without rescanning, as normal tokens
+or as comment fragments or as literal fragments, according to context. These
+small tokens within comments or literals then support word-based cursor movement
+and line wrapping.</p>
+
+<p>Delimiters of comments and literals are matched up later, after scanning,
+using bracket-matching techniques. For tokens which are inside comments or
+literals, their token types are temporarily overridden, e.g for syntax
+highlighting purposes.</p>
+
+<h2>Language descriptions</h2>
+
+<p>A language is described by a plain text file in the <kbd>languages</kbd>
+directory. For example, <code>c.txt</code> defines how <code>.c</code> files are
+scanned. Each file is a description of a string-matching state machine for the
+given language, together with tests which demonstrate the effects. The
+description is compiled by the program <code>languages/compile.c</code> into a
+binary file <code>c.bin</code>. The binary file can be tested with the
+<code>languages/interpret.c</code> program.</p>
+
+<p>The format of language description files is fairly simple. A line which
+doesn't begin with a lower case letter (e.g. a blank line or a line starting
+with  <code>#</code>) is a comment line which is ignored. A line of at least
+five minus signs indicates the end of the language description and the start of
+the tests. Otherwise, a line represents a string matching rule, for example:</p>
+
+<pre>start == != start OP
+</pre>
+
+<p>A rule consists of a state name, a list of pattern strings to match, a target
+state name, and an optional token type, all separated by spaces. A state name
+starts with a lower case letter, and a token type starts with an upper case
+letter. When the scanner is in the first state and one of the strings in the
+list is matched, the scanner moves past the matched string in the input, and
+goes into the target state. If there is a token type, the token is terminated
+after the matched characters and given that type. If there is no token type,
+scanning of the current token is continued.</p>
+
+<p>With the above rule, if the scanner is in the <code>start</code> state and
+either of the equality symbols appears next, then the scanner moves past the
+symbol, gives it the token type <code>OP</code>, and remains in the
+<code>start</code> state.</p>
+
+<p>The pattern strings in a rule are plain text with no quotes or escape
+sequences. They may not contain spaces, newlines, control characters, or
+non-ASCII characters. However, non-ASCII Unicode characters are allowed in the
+text being scanned, and are treated the same as letters (specifically, the same
+as the letter <code>'z'</code>). This covers most common cases where such
+characters are allowed by programming languages, in comments, strings or
+identifiers. Spaces and newlines cannot be matched. A token is always terminated
+at a white space character, and the scanner skips past any white space before
+starting the next token.</p>
+
+<p>As an abbreviation, if a pattern string consists of two characters separated
+by two dots, it represents a range of one-character strings, e.g.
+<code>0..9</code> stands for <code>0 1 2 3 4 5 6 7 8 9</code>. For example:</p>
+
+<pre>start a..z A..Z 0..9 id
+</pre>
+
+<p>This rule describes what happens when the scanner is in the
+<code>start</code> state, and a letter or digit (or non-ASCII character) appears
+next in the input. The scanner matches the character and goes into the
+<code>id</code> state. There is no token type, so the current token is not
+terminated, and scanning of the token continues.</p>
+
+<p>There may be multiple rules for the same state. If a string mentioned in any
+one of the rules matches, that rule is applied. For example:</p>
+
+<pre>start == != start OP
+start a..z A..Z 0..9 id
+</pre>
+
+<p>In the start state, if an equality symbol appears next in the input, it is
+marked as an operator token. If a letter or digit appears, the scanner moves to
+the <code>id</code> state.</p>
+
+<p>If two different strings match at one position in the input, the longer
+string takes precedence. For example:</p>
+
+<pre>start = start SYM
+start == != start OP
+</pre>
+
+<p>If there are two equal signs next in the input, the second rule applies, not
+the first. If there is a single equal sign, the first rule applies.</p>
+
+<p>If the same string is mentioned in multiple rules, the earlier rule takes
+precedence. Thus later rules act as defaults. For example:</p>
+
+<pre>start a..z A..Z 0..9 id
+start !..~ start BAD
+</pre>
+
+<p>This says that if a letter or digit is matched, the scanner goes into the
+<code>id</code> state. If any other character is matched, the scanner marks it
+as invalid.</p>
+
+<p>If a rule has no pattern strings at all, it matches the empty string, and so
+defines a default action to be taken if nothing else matches, or if the input
+position is at the end of the text. For example:</p>
+
+<pre>id a..z A..Z 0..9 id
+id start ID
+</pre>
+
+<p>While letters and digits are matched, the scanner stays in the
+<code>id</code> state. In any other case, the token is marked as an identifier
+and the scanner returns to the start state.</p>
+
+<p>Each state must have a final default rule of this kind, with no pattern
+strings and a token type, to ensure that scanning always succeeds.</p>
+
+<p>Since a token is not marked until the end of the token is reached, decisions
+about which type to use can be delayed. For example, rules like these can be
+used for a language where an identifier is allowed to start with a keyword:</p>
+
+<pre>start a..z A..Z id
+start if else for while key
+
+key a..z A..Z 0..9 id
+key start KEY
+
+id a..z A..Z 0..9 id
+id start ID
+</pre>
+
+<p>Suppose the keyword <code>for</code> appears next in the input. Since
+<code>for</code> is longer than the single letter <code>f</code>, the second
+rule for the <code>start</code> state applies rather than the first. Then, in
+the <code>key</code> state, if the keyword is followed by a letter or digit,
+<code>form</code> for example, the scanner goes into the <code>id</code> state
+and the token ends up being marked as an identifier. Otherwise, <code>for</code>
+is marked as a keyword.</p>
+
+<h3>Example: #include</h3>
+
+<p>The current state of the scanner can be recorded now and then, e.g. at the
+start of each line of the text. Then, when some text changes while editing,
+re-scanning of the changed text need begin no earlier than at the start of the
+affected line. Re-scanning would then continue until synchronisation, i.e. until
+the current state of the scanner at the start of a line matches the previous
+state recorded at that point. It is desirable that this synchronisation should
+happen after only a line or two, to avoid visual instability for the user as
+well as inefficiency in the editor. Scanning is then effectively
+incremental.</p>
+
+<p>The first state to be defined in a language description is the default one for
+the scanner to start in. It is normal for most tokens to be scanned starting
+from that first state, with other states being defined to handle progression
+through each token. In that case, re-scanning is sure to be brief. However,
+alternative start states for tokens can be used to handle unusual situations.
+Take a file inclusion in C for example:</p>
+
+<pre>#include &lt;stdio.h&gt;
+</pre>
+
+<p>In this context, immediately following a <code>#</code> sign, the word
+<code>include</code> is a keyword rather than an identifier, and the
+<code>&lt;</code> or <code>&gt;</code> signs act as string quotes rather than as
+comparison operators. The rules could include these:</p>
+
+<pre>start # hash1 SYM
+...
+
+hash1 include hash2 KEY
+...
+
+hash2 &lt; hash3
+...
+
+hash3 !..= ?..~ hash3
+hash3 &gt; start STRING
+</pre>
+
+<p>This is technically imperfect, because the C standard allows any character in
+the string other than <code>&gt;</code> or newline. These rules incorrectly
+disallow a space, and abnormally fail to divide the string into smaller
+fragments. However, they do correctly disallow a newline so, if a user is typing
+the inclusion line but hasn't reached the final <code>&gt;</code> character,
+scanning of lines below aren't affected. The only likely result of a case where
+a filename contains a space is that the line won't be correctly highlighted.</p>
+
+<h3>Example: reinterpretation</h3>
+
+<p>In C or a similar language, the text <code>"*/"//"</code> would be
+scanned as something like:</p>
+
+<pre>" STRING */ COMMENT " STRING // COMMENT " STRING
+</pre>
+
+<p>After scanning, if there is no multiline comment in progress at the start of
+the sequence, the first two quotes are matched, the one-line comment delimiter
+is matched with the end of the line, and the sequence is temporarily adjusted
+to:</p>
+
+<pre>" STRING */ STRING " STRING // COMMENT " COMMENT
+</pre>
+
+<p>On the other hand, if a multiline comment is in progress, it ends at the
+<code>*/</code> delimiter, the last two quotes are matched, and the phrase is
+instead temporarily adjusted to:</p>
+
+<pre>" COMMENT */ COMMENT " STRING // STRING " STRING
+</pre>
+
+<p>If bracket matching is incremental as well as scanning, then these
+readjustments can also be incremental, and the whole process need not be very
+expensive.</p>
+
+
+<!--
+
+
+
+
+<p>. The action characters are listed here:</p>
+
+<pre>$   newline (auto)
+B   bracket
+C   comment (including comment delimiter)
+E   escape sequence
+F   function
+I   identifier
+K   keyword
+L   label
+N   number
+O   operator
+P   property
+Q   quoted
+R   reserved word
+S   sign e.g. = , ;
+T   type
+W   word
+X   invalid?
+</pre>
+
+<p>All actions other than accept terminate the current token with a type. Upper
+case letters are used to mark tokens which only affect syntax highlighting via
+theme files. Non-letter symbols are used to mark tokens which have some
+syntactic significance which potentially affects bracketing, indenting,
+continuation, wrapping etc. Bracket matching in the editor deals with such
+things as delimiting comments and quoted literals, terminating one-line comments
+at newlines, or marking a close curly bracket as belonging to an initializer
+(which affects the handling of semicolons). That means, for example, that a
+newline should be marked with <code>$</code> so that the bracket matcher can
+detect the end of a one-line comment.</p>
+
+<p>A language description file has tests at the end, after a line of at least
+five minus signs. Each test consists of two lines of text. Tests may be
+separated by blank lines. The first line of a test consists of some program text
+in the language being described. The second line shows the token types generated
+by the scanner. The first character of a token is marked with its type, and the
+remaining characters of a token are marked with spaces.</p>
+
+<p>The scanner is made incremental by generating tags which encode both the
+token type and the state which the scanner is in after the token. A token cannot
+be affected by anything further ahead than the following character. So, after an
+edit, rescanning can be started at the nearest token boundary before the edit
+point, and stopped as soon as a token after any changed text is given the same
+tag as before the edit.</p>
+
+-->
+
+</body>
+</html>
