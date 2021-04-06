@@ -19,25 +19,28 @@
 enum { BIG = 10000, SMALL = 256 };
 
 // A tag is an action in the transition table, or a label for a byte of the
-// text. It may be a token type (to indicate the action of terminating a token,
-// and to label its first byte). As an action, it may be Skip to indicate that
-// there is no action relevant to the current state, or Accept to indicate the
-// action of continuing the same token. As a label, it may be Char to label a
-// continuation character (grapheme) within a token, or Byte to label a
-// continuation byte within a grapheme.
-enum { Skip = '.', Accept = ' ', Char = ' ', Byte = '.' };
+// text. It may be the index of a token type, to indicate the action of
+// terminating a token, and as a label for its first byte. As an action, it may
+// be Skip to indicate that the entry is not relevant to the current state, or
+// Accept to indicate the action of continuing the same token. As a label, it
+// may be Byte to label a continuation byte within a grapheme, or Char to label
+// a continuation character (grapheme) within a token, or (for a space or
+// newline) the index number of a state to enable re-scanning from that point.
+enum { Skip = 0, Accept = 1, Byte = 0, Char = 1 };
 
 // Each table entry contains a tag representing an action, and a target state.
-struct entry { char action; unsigned char state; };
-typedef entry entry;
+typedef unsigned char byte;
+struct entry { byte action, target; };
+typedef struct entry entry;
 
-// A scanner structure consists of the size of the state transition table and
-// number of tags, then the table itself, then a string store containing the
-// state names followed by the patterns. The remaining fields are for temporary
-// use during construction. Many are NULL terminated arrays of strings.
-// TODO: names of token types?
+// A scanner structure consists of the number of states and patterns (which
+// determines the size of the state transition table) and the number of token
+// types, then the table itself, then a string store containing the state names
+// followed by the patterns followed by the token type names. The remaining
+// fields are for temporary use during construction. Many are NULL terminated
+// arrays of strings.
 struct scanner {
-    short nstates, npatterns, ntags;
+    short nstates, npatterns, ntypes;
     entry table[SMALL][BIG];
     char strings[BIG];
 
@@ -46,6 +49,7 @@ struct scanner {
     char *tokens[BIG][SMALL];
     char *states[SMALL];
     char *patterns[BIG];
+    char *types[SMALL];
     char *temp[BIG];
     short nstrings;
 };
@@ -122,13 +126,11 @@ void validate(int n, char *line) {
 
 // Split the text into an array of lines, replacing each newline by a null. Skip
 // blank lines or lines starting with anything other than a lowercase letter.
-// Stop at a line starting with at least 5 minus signs.
 void splitLines(char *text, char *lines[]) {
     int p = 0, n = 1;
     for (int i = 0; text[i] != '\0'; i++) {
         if (text[i] != '\n') continue;
         text[i]= '\0';
-        if (strncmp(&text[p], "-----", 3) == 0) break;
         validate(n, &text[p]);
         if (text[p] != '\0' && 'a' <= text[p] && text[p] <= 'z') {
             add(&text[p], lines);
@@ -164,7 +166,7 @@ void expandRange(char *range, char *tokens[]) {
 
 // Split each line into an array of tokens, replacing spaces by null characters
 // as necessary. Expand ranges into explicit one-character tokens. If there is
-// no token type, add an Accept token.
+// no token type, add a " " token.
 void splitTokens(char *lines[], char *tokens[][SMALL]) {
     int nlines = length(lines);
     for (int i = 0; i < nlines; i++) {
@@ -183,7 +185,11 @@ void splitTokens(char *lines[], char *tokens[][SMALL]) {
         }
         char *last = tokens[i][length(tokens[i])-1];
         if ('a' <= last[0] && last[0] <= 'z') {
-            add(singles[Accept], tokens[i]);
+            add(singles[' '], tokens[i]);
+        } else {
+            if (last[0] < 'A' || last[0] > 'Z') {
+                crash("Expecting upper case token type", i, last);
+            }
         }
     }
 }
@@ -207,6 +213,16 @@ void gatherPatterns(int n, char *tokens[n][SMALL], char *patterns[]) {
     }
 }
 
+// Gather token types, with types[Skip/Byte] = "." and types[Accept/Char] = " ".
+void gatherTypes(int n, char *tokens[n][SMALL], char *types[]) {
+    find(".", types);
+    find(" ", types);
+    for (int i = 0; i < n; i++) {
+        int t = length(tokens[i]) - 1;
+        find(tokens[i][t], types);
+    }
+}
+
 // ----- Sorting --------------------------------------------------------------
 
 // Check if string s is a prefix of string t.
@@ -214,7 +230,7 @@ bool prefix(char const *s, char const *t) {
     return strncmp(s, t, strlen(s)) == 0;
 }
 
-// Compare two strings in ascii order, except prefer longer strings.
+// Compare two strings in ASCII order, except prefer longer strings.
 int compare(char *s, char *t) {
     int c = strcmp(s, t);
     if (c < 0 && prefix(s, t)) return 1;
@@ -263,32 +279,13 @@ int transfer(char *list[], int n, char strings[n]) {
     return n;
 }
 
-/*
-// Find a tag or allocate a new one. If calling for the first time, allocate the
-// SKIP tag.
-int findTag(char type, byte state, int n, char types[], byte targets[]) {
-    if (n == 0) {
-        types[SKIP] = Byte;
-        targets[SKIP] = 0;
-        n = 1;
-    }
-    for (int i = 0; i < n; i++) {
-        if (types[i] == type && targets[i] == state) return i;
-    }
-    if (n >= 256) crash("too many tags", 0, "");
-    types[n] = type;
-    targets[n] = state;
-    return n;
-}
-*/
-
 // Fill a non-default rule into the table.
 void fillRule(
-    byte table[][BIG], char *tokens[], char *states[], char *patterns[],
-    int ntags, char types[], byte targets[]
+    entry table[][BIG], char *tokens[], char *states[], char *patterns[],
+    char *types[]
 ) {
     int n = length(tokens);
-    byte action = tokens[n-1][0];
+    byte action = (byte) find(tokens[n-1], types);
     byte state = (byte) find(tokens[0], states);
     byte target = (byte) find(tokens[n-2], states);
     for (int i = 1; i < n-1; i++) {
@@ -302,10 +299,10 @@ void fillRule(
 
 // Fill a default rule into the table.
 void fillDefault(
-    byte table[][BIG], char *tokens[], char *states[], char *patterns[],
-    int ntags, char types[], byte targets[]
+    entry table[][BIG], char *tokens[], char *states[], char *patterns[],
+    char *types[]
 ) {
-    byte action = tokens[2][0];
+    byte action = (byte) find(tokens[2], types);
     byte state = (byte) find(tokens[0], states);
     byte target = (byte) find(tokens[1], states);
     for (int p = 0; p < length(patterns); p++) {
@@ -315,41 +312,33 @@ void fillDefault(
     }
 }
 
-// =============================================================================
-// TODO: complain instead
-// Fill in any missing defaults as creating invalid tokens.
-int fillMissing(
-    byte table[][BIG], char *states[], char *patterns[],
-    int ntags, char types[], byte targets[]
+// Check for any missing defaults, and complain.
+void checkMissing(
+    entry table[][BIG], char *states[], char *patterns[]
 ) {
     for (int s = 0; s < length(states); s++) {
         for (int p = 0; p < length(patterns); p++) {
-            if (table[s][p] != SKIP) continue;
+            if (table[s][p].action != Skip) continue;
             if (strlen(patterns[p]) != 0) continue;
-            byte tag = findTag('?', 0, ntags, types, targets);
-            if (tag >= ntags) ntags = tag + 1;
-            table[s][p] = tag;
+            crash("Default rule needed for state", 0, states[s]);
         }
     }
-    return ntags;
 }
 
 // Enter rules into the table.
-int fillTable(
-    byte table[][BIG], int n, char *tokens[n][SMALL],
-    char *states[], char *patterns[], int ntags, char types[], byte targets[]
+void fillTable(
+    entry table[][BIG], int n, char *tokens[n][SMALL],
+    char *states[], char *patterns[], char *types[]
 ) {
-    for (int s=0; s<SMALL; s++) for (int p=0; p<BIG; p++) table[s][p] = SKIP;
+    for (int s=0; s<SMALL; s++) for (int p=0; p<BIG; p++) {
+        table[s][p].action = Skip;
+    }
     for (int i = 0; i < n; i++) {
         int t = length(tokens[i]);
-        if (t == 3) ntags = fillDefault(
-            table, tokens[i], states, patterns, ntags, types, targets);
-        else ntags = fillRule(
-            table, tokens[i], states, patterns, ntags, types, targets);
+        if (t == 3) fillDefault(table, tokens[i], states, patterns, types);
+        else fillRule(table, tokens[i], states, patterns, types);
     }
-    ntags = fillMissing(
-        table, states, patterns, ntags, types, targets);
-    return ntags;
+    checkMissing(table, states, patterns);
 }
 
 scanner *buildScanner(char const *path) {
@@ -361,15 +350,17 @@ scanner *buildScanner(char const *path) {
     int nlines = length(sc->lines);
     gatherStates(nlines, sc->tokens, sc->states);
     gatherPatterns(nlines, sc->tokens, sc->patterns);
+    gatherTypes(nlines, sc->tokens, sc->types);
     sort(sc->patterns);
     expandPatterns(sc->patterns, sc->temp);
     sc->nstrings = transfer(sc->states, sc->nstrings, sc->strings);
     sc->nstrings = transfer(sc->patterns, sc->nstrings, sc->strings);
+    sc->nstrings = transfer(sc->types, sc->nstrings, sc->strings);
     sc->nstates = length(sc->states);
     sc->npatterns = length(sc->patterns);
-    sc->ntags = fillTable(
-        sc->table, nlines, sc->tokens, sc->states, sc->patterns,
-        sc->ntags, sc->types, sc->targets);
+    sc->ntypes = length(sc->types);
+    fillTable(
+        sc->table, nlines, sc->tokens, sc->states, sc->patterns, sc->types);
     return sc;
 }
 
@@ -383,14 +374,13 @@ void writeScanner(scanner *sc, char const *path) {
     FILE *fp = fopen(path, "wb");
     writeShort(sc->nstates, fp);
     writeShort(sc->npatterns, fp);
-    writeShort(sc->ntags, fp);
+    writeShort(sc->ntypes, fp);
     for (int s = 0; s < sc->nstates; s++) {
         for (int p = 0; p < sc->npatterns; p++) {
-            fwrite(&sc->table[s][p], 1, 1, fp);
+            fwrite(&sc->table[s][p].action, 1, 1, fp);
+            fwrite(&sc->table[s][p].target, 1, 1, fp);
         }
     }
-    for (int t = 0; t < sc->ntags; t++) fwrite(&sc->types[t], 1, 1, fp);
-    for (int t = 0; t < sc->ntags; t++) fwrite(&sc->targets[t], 1, 1, fp);
     fwrite(sc->strings, 1, sc->nstrings, fp);
     fclose(fp);
 }
@@ -399,6 +389,7 @@ void writeScanner(scanner *sc, char const *path) {
 
 // Check two NULL terminated arrays of strings are equal.
 bool eq(char *as[], char *bs[]) {
+    if (length(as) != length(bs)) return false;
     for (int i = 0; i < length(as); i++) {
         if (strcmp(as[i],bs[i]) != 0) return false;
     }
@@ -416,10 +407,10 @@ void testSplitLines() {
 void testSplitTokens() {
     char s1[20] = "s a b c t", s2[20] = " s  \\s \\b  t  ", s3[20] = "s a..c t";
     char *lines[4] = {s1, s2, s3, NULL};
-    char *expect[3][6] = {
-        {"s", "a", "b", "c", "t", NULL},
-        {"s", " ", "\\", "t", NULL},
-        {"s", "a", "b", "c", "t", NULL}
+    char *expect[3][7] = {
+        {"s", "a", "b", "c", "t", " ", NULL},
+        {"s", "\\s", "\\b", "t", " ", NULL},
+        {"s", "a", "b", "c", "t", " ", NULL}
     };
     char *tokens[3][SMALL] = {{NULL},{NULL},{NULL}};
     makeSingles();
@@ -430,7 +421,7 @@ void testSplitTokens() {
 }
 
 void testGatherStates() {
-    char *ts[2][SMALL] = {{"s0","?","s1","?",NULL}, {"s0","s2","?",NULL}};
+    char *ts[2][SMALL] = {{"s0","?","s1","X",NULL}, {"s0","s2","X",NULL}};
     char *states[10] = {NULL};
     char *expect[] = {"s0", "s1", "s2", NULL};
     gatherStates(2, ts, states);
@@ -438,11 +429,19 @@ void testGatherStates() {
 }
 
 void testGatherPatterns() {
-    char *ts[2][SMALL] = {{"s","x","s","?",NULL}, {"s","y","s","?",NULL}};
+    char *ts[2][SMALL] = {{"s","x","s","X",NULL}, {"s","y","s","X",NULL}};
     char *patterns[10] = {NULL};
     char *expect[] = {"x", "y", NULL};
     gatherPatterns(2, ts, patterns);
     assert(eq(patterns, expect));
+}
+
+void testGatherTypes() {
+    char *ts[2][SMALL] = {{"s","x","s","X",NULL}, {"s","y","s","Y",NULL}};
+    char *types[10] = {NULL};
+    char *expect[] = {".", " ", "X", "Y", NULL};
+    gatherTypes(2, ts, types);
+    assert(eq(types, expect));
 }
 
 void testSort() {
@@ -465,18 +464,15 @@ int main(int n, char const *args[n]) {
     testSplitTokens();
     testGatherStates();
     testGatherPatterns();
+    testGatherTypes();
     testSort();
     testExpandPatterns();
-    if (n != 2) crash("Use: ./compile language.txt", 0, "");
-    scanner *sc = buildScanner(args[1]);
-    char out[100];
-    strcpy(out, args[1]);
-    n = strlen(out);
-    strcpy(&out[n-3], "bin");
-    writeScanner(sc, out);
-    if (sc->ntags > 64) {
-        printf("Warning: number of tags > 64, no room for two flag bits\n");
-    }
+    if (n != 2) crash("Use: ./compile language", 0, "");
+    char path[100];
+    sprintf(path, "%s/rules.txt", args[1]);
+    scanner *sc = buildScanner(path);
+    sprintf(path, "%s/lang.bin", args[1]);
+    writeScanner(sc, path);
     free(sc);
     return 0;
 }

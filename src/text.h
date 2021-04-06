@@ -1,4 +1,4 @@
-// The Snipe editor is free and open source, see licence.txt.
+// Snipe text handling. Free and open source, see licence.txt.
 #include <stdbool.h>
 
 // A text object holds the UTF-8 content of a file. The text is kept clean so
@@ -15,14 +15,14 @@ typedef struct text text;
 enum { INSERT = 0, DELETE = 1, COPY = -1 };
 
 // Store an edit (insertion, deletion, copying or other operation such as a
-// cursor change). The op is one of the above, or other opcode defined
+// cursor change). The op is one of the above, or another opcode defined
 // elsewhere. The at and to fields are the start and end positions in the text
 // (0 <= at <= to <= length of text), and s holds n bytes (n <= max).
 struct edit { int op, at, to, n, max; char s[]; };
 typedef struct edit edit;
 
-// Get a edit structure big enough to hold n characters and a null. Pass in
-// an old edit to be reused, or NULL to get a fresh edit.
+// Get an edit structure big enough to hold n characters and a null. Pass in an
+// old edit structure to be reused, or NULL to get a fresh edit structure.
 edit *newEdit(int n, edit *old);
 
 // Create an empty text object.

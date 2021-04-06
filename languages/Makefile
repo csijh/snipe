@@ -7,8 +7,8 @@
 #DEBUG = -g
 DEBUG = -g -fsanitize=undefined -fsanitize=address -fsanitize=leak
 
-compile: compile.c
-	gcc -std=c11 -Wall -pedantic $(DEBUG) compile.c -o compile
+compile: src/compile.c
+	gcc -std=c11 -Wall -pedantic $(DEBUG) src/compile.c -o compile
 
-interpret: interpret.c
-	gcc -std=c11 -Wall -pedantic $(DEBUG) interpret.c -o interpret
+interpret: src/interpret.c
+	gcc -std=c11 -Wall -pedantic $(DEBUG) src/interpret.c -o interpret

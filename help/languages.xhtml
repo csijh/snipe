@@ -73,7 +73,7 @@ using bracket-matching techniques. For tokens which are inside comments or
 literals, their token types are temporarily overridden, e.g for syntax
 highlighting purposes.</p>
 
-<h2>Language descriptions</h2>
+<h2>Tokens</h2>
 
 <p>A language is described by a plain text file in the <kbd>languages</kbd>
 directory. For example, <code>c.txt</code> defines how <code>.c</code> files are
@@ -143,7 +143,7 @@ the <code>id</code> state.</p>
 <p>If two different strings match at one position in the input, the longer
 string takes precedence. For example:</p>
 
-<pre>start = start SYM
+<pre>start = start SIGN
 start == != start OP
 </pre>
 
@@ -225,7 +225,7 @@ Take a file inclusion in C for example:</p>
 <code>&lt;</code> or <code>&gt;</code> signs act as string quotes rather than as
 comparison operators. The rules could include these:</p>
 
-<pre>start # hash1 SYM
+<pre>start # hash1 SIGN
 ...
 
 hash1 include hash2 KEY
@@ -235,23 +235,42 @@ hash2 &lt; hash3
 ...
 
 hash3 !..= ?..~ hash3
-hash3 &gt; start STRING
+hash3 &gt; start QUOTE
+...
 </pre>
 
-<p>This is technically imperfect, because the C standard allows any character in
-the string other than <code>&gt;</code> or newline. These rules incorrectly
-disallow a space, and abnormally fail to divide the string into smaller
-fragments. However, they do correctly disallow a newline so, if a user is typing
-the inclusion line but hasn't reached the final <code>&gt;</code> character,
-scanning of lines below aren't affected. The only likely result of a case where
-a filename contains a space is that the line won't be correctly highlighted.</p>
+<p>This treats <code>&lt;stdio.h&gt;</code> as a single token. It is technically
+imperfect, because the C standard allows any character in the string other than
+<code>&gt;</code> or newline. These rules incorrectly disallow a space, and
+abnormally fail to divide the string into smaller fragments. However, they do
+correctly disallow a newline so, if a user is typing the inclusion line but
+hasn't reached the final <code>&gt;</code> character, scanning of lines below
+aren't affected. The only likely result of a case where a filename contains a
+space is that the line won't be correctly highlighted.</p>
+
+<p>If technical perfection is desired, these rules could be used:</p>
+
+<pre>start # hash1 SIGN
+...
+
+hash1 include hash2 KEY
+...
+
+hash2 &lt; start BRACKET
+...
+</pre>
+
+<p>This marks the opening <code>&lt;</code> as a bracket instead of an operator,
+then continues with normal scanning. Then, after scanning, bracket matching
+techniques can be used to match <code>&lt;</code> with <code>&gt;</code> as
+appropriate.</p>
 
 <h3>Example: reinterpretation</h3>
 
 <p>In C or a similar language, the text <code>"*/"//"</code> would be
 scanned as something like:</p>
 
-<pre>" STRING */ COMMENT " STRING // COMMENT " STRING
+<pre>" QUOTE */ COMMENT " QUOTE // COMMENT " QUOTE
 </pre>
 
 <p>After scanning, if there is no multiline comment in progress at the start of
@@ -259,45 +278,183 @@ the sequence, the first two quotes are matched, the one-line comment delimiter
 is matched with the end of the line, and the sequence is temporarily adjusted
 to:</p>
 
-<pre>" STRING */ STRING " STRING // COMMENT " COMMENT
+<pre>" QUOTE */ QUOTE " QUOTE // COMMENT " COMMENT
 </pre>
 
 <p>On the other hand, if a multiline comment is in progress, it ends at the
 <code>*/</code> delimiter, the last two quotes are matched, and the phrase is
 instead temporarily adjusted to:</p>
 
-<pre>" COMMENT */ COMMENT " STRING // STRING " STRING
+<pre>" COMMENT */ COMMENT " QUOTE // QUOTE " QUOTE
 </pre>
 
 <p>If bracket matching is incremental as well as scanning, then these
 readjustments can also be incremental, and the whole process need not be very
 expensive.</p>
 
+<h2>Matching</h2>
+
+<p>TODO: explain forward algorithm. Assume only brackets. As well as text, there
+are two stacks: unmatched and matched. (Picture with ... for cursor position.)
+The unmatched stack contains indexes of currently unmatched open brackets (as
+standard). The matched stack contains matched (open,close) pairs of indexes. The
+indexes of the close brackets are in text order. Changes as you add or remove a
+bracket at the cursor are very small and incremental and efficient.  Two
+mismatched brackets are treated as matched, except that they are both
+highlighted as invalid. Incremental.</p>
+
+<p>TODO: explain backward algorithm. Entirely symmetrical. Note that the indexes
+are measured leftwards from the end of the text, so that they remain stable as
+insertions and deletions happen at the cursor.</p>
+
+<p>TODO: explain inwards algorithm. The two stacks are compared inwards.
+Mismatching pairs are highlighted red. Remaining surplus brackets are
+highlighted red. Give examples showing 'just typed' effects.</p>
+
+<p>TODO: explain delimiters. Not same because (a) they are usually not nested
+and (b) they may be limited to one line (c) open and close may be the same or
+there may not be an explicit closer and (d) they affect the highlighting of the
+tokens in between. Nested comments same as brackets, non-nested comments more
+interesting. When inside a comment, an open comment delimiter is always the top
+opener on the unmatched stack. Ordinary tokens are included in algorithm, and
+have their highlighting overridden as you go past them, according to the top
+opener, but they don't end up on either stack. Unnested algorithm described
+below. Multiline literal (often """) similar, also unnested (can't nest if start
+and end delimiter are the same). Describe quotes and forward and backward.
+Describe one-line comment (memo). Must wait until found and then re-mark to end
+of line - not purely local but not bad.</p>
+
+<p>After scanning into tokens, a matching algorithm is used to pair up brackets
+and delimiters. Some aims of the Snipe approach are to:</p>
+
+<ul>
+<li>highlight unmatched brackets and delimiters</li>
+<li>have small edits produce small changes</li>
+<li>make the algorithm incremental</li>
+</ul>
+
+<p>If brackets don't match, there is an ambiguity about which brackets to mark
+as unmatched. For example, the sequence <code>(()</code> can be treated in
+either of these two ways:</p>
+
+<pre class="match">(<b>(</b>)
+<b>(</b>()
+</pre>
+
+<p>In the first case, the outer brackets are matched and the inner one is
+highlighted as unmatched. In the second case, the rightmost brackets are
+matched, and the leftmost one is marked as unmatched.</p>
+
+<p>If the user has just typed one of the two open brackets, that is the one that
+is most intuitively highlighted as unmatched. That suggests a matching algorithm
+based on the user's history. However, that would make it awkward to save and
+reopen files, and it could easily become counter-intuitive.</p>
+
+<p>Instead, Snipe uses a matching strategy which is based purely on the text
+together with the user's current cursor position. Brackets are matched forwards
+from the start of the text up to the cursor, and backwards from the end of the
+text to the cursor. Surplus brackets on either side of the cursor are then
+matched up from outermost to innermost. Using three dots to mark the cursor
+position, the three brackets above are handled like this:</p>
+
+<style>
+pre.match { color: black; }
+pre.match i { color:black; font-style: normal; background-color: lightgrey; }
+pre.match b { color: red; }
+pre.match u { color: green; text-decoration: none; }
+</style>
+
+<pre class="match">(<b>(</b><u>...</u>)
+<b>(</b><u>...</u>()
+</pre>
+
+<p>In the first case, there are two surplus brackets before the cursor and one
+after, and the outermost two are matched. In the second case, there are no
+surplus brackets after the cursor, so the leftmost bracket is mismatched.</p>
+
+<p>The situation is complicated by multiline comments. Let's suppose that they
+are delimited by <code>/*</code> and <code>*/</code> and that these don't nest,
+as in many C-like languages. These comments cause two main problems. One is that
+commenting out goes wrong when there is an inner comment. The other is that
+inserting or deleting a comment delimiter can cause a large amount of text to be
+re-scanned, which is sometimes inefficient enough to cause a noticeable and
+irritating delay. In any case, it causes a large amount of changed highlighting
+on screen, which can be annoying.</p>
+
+<p>The approach in Snipe, to avoid these problems, is to treat <code>/*</code>
+as illegal inside comments (as <code>*/</code> already is) and, as with
+brackets, use both forward and backward matching. In addition, the effect of an
+unmatched comment delimiter only extends as far as the cursor. For example:</p>
+
+<pre class="match"><i>/*...<b>/*</b>...*/</i>...<b>*/</b>
+<b>/*</b>...<i>/*...<b>*/</b>...*/</i>
+</pre>
+
+<p>In the first case, the cursor is beyond the text fragment. The first and
+third delimiters are matched, and the text between is highlighted as a comment.
+The second and fourth delimiters are highlighted as unmatched. This is as
+expected, except for the highlighting of the second delimiter.</p>
+
+<p>In the second case, the cursor is before the text fragment. Working
+backwards, the fourth and second delimiters are matched, with the text between
+them highlighted as a comment, leaving the third and first delimiters unmatched.
+Although this highlighting doesn't agree with the language conventions, it is a
+reasonable approach once internal delimiters are regarded as invalid, and the
+need for correction is clearly indicated.</p>
+
+<p>To see the full effect on highlighting, here is a sequence of user actions in
+which an attempt is made to comment out some text which already contains a
+comment:</p>
+
+<pre class="match"><u>:</u>...<i>/*...*/</i>...
+<i><b>/*</b></i><u>:</u>...<i>/*...*/</i>...
+<i><b>/*</b>...</i><u>:</u><i>/*...*/</i>...
+<i>/*...<b>/*</b></i><u>:</u><i>...*/</i>...
+<i>/*...<b>/*</b>...</i><u>:</u><i>*/</i>...
+<i>/*...<b>/*</b>...</i><i>*/</i><u>:</u>...
+<i>/*...<b>/*</b>...</i><i>*/</i>...<u>:</u>
+<i>/*...<b>/*</b>...</i><i>*/</i>...<b>*/</b><u>:</u>
+</pre>
+
+<p>At the first step, an opening delimiter is typed. At the second, the cursor
+is moved past some text, which becomes highlighted as comment. Then the cursor
+is moved past the second opening delimiter, which becomes highlighted as
+unmatched. The first and third delimiters match, as surplus delimiters either
+side of the cursor. Then the cursor is moved past some text which is unchanged,
+and a final delimiter is typed, which is immediately highlighted as
+unmatched.</p>
+
+<p>During the sequence, the only changes on the screen are immediately adjacent
+to the cursor, with possibly one change of highlighting to a delimiter further
+away. And the changes are, arguably, very intuitive.</p>
 
 <!--
 
 
 
 
-<p>. The action characters are listed here:</p>
+<p>The token types are:</p>
 
-<pre>$   newline (auto)
-B   bracket
-C   comment (including comment delimiter)
-E   escape sequence
-F   function
-I   identifier
-K   keyword
-L   label
-N   number
-O   operator
-P   property
-Q   quoted
-R   reserved word
-S   sign e.g. = , ;
-T   type
-W   word
-X   invalid?
+<pre>BAD
+COMMENT  (0=/*, 1=*/, 2, 3)
+ESCAPE sequence
+HANDLE (colon)
+IDENTIFIER (0,1,2,3,4 for normal, function, property, method, constant)
+KEYWORD (0,1 for alternative highlighting, e.g. reserved)
+LEFT (0,1,2)
+LINE
+MEMO  (//)
+NUMBER
+OPERATOR
+PARAGRAPH (e.g. """)
+RIGHT (3,4,5)
+QUOTE (0,1 for " ')
+SIGN (symbol e.g. = , ;)
+TYPE
+WORD
+
+order: LINE, BAD, MEMO, QUOTE first.
+important for bracketing: LINE BAD MEMO QUOTE BRACKET COMMENT
 </pre>
 
 <p>All actions other than accept terminate the current token with a type. Upper

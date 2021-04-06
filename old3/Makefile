@@ -1,8 +1,17 @@
-# Modules forming the editor's model.
+# Support modules. Support headers should only be included in .c files.
 unicode = unicode.c
+# Maybe generic event codes (for map settings).
+# Maybe generic token types (for style settings, language settings).
+# Maybe fonts.
+
+# The model. Accept actions, provide text.
 text = text.c $(unicode)
 history = history.c $(text)
+tokens = tokens.c $(text)
 
+# The view. Encapsulate use of graphics library.
+
+# The controller. Translate info between model and view.
 
 string = string.c
 cursors = cursors.c
@@ -10,7 +19,6 @@ cursors = cursors.c
 
 edit = edit.c $(unicode)
 lines = lines.c $(edit)
-tokens = tokens.c
 
 array = array.c
 

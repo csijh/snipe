@@ -1,8 +1,6 @@
-# TODO: undo the attempt to combine token type and state (but remember it).
 # TODO: remember state at each space/newline
 # TODO: default rule for a state must terminate token
 # TODO: a token ends either at a space or nl or at start of next token
-# TODO: allow the spelling of tokens to be used in matching
 # TODO: should decl recognition be a bracket matching or special thing?
 
 # The C language, according to the C11 standard

@@ -1,0 +1,5 @@
+Unicode characters:
+
+æ í ð ö þ ƶ ə β ᴈ ῷ ⁑ €
+
+How will Allegro handle them?

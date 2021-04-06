@@ -1,4 +1,4 @@
-// Unicode support. Free and open source, see licence.txt.
+// Snipe unicode support. Free and open source, see licence.txt.
 #include "unicode.h"
 #include <stdio.h>
 #include <assert.h>

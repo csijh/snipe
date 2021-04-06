@@ -1,4 +1,4 @@
-// The Snipe editor is free and open source, see licence.txt.
+// Snipe text handling. Free and open source, see licence.txt.
 #include "text.h"
 #include "unicode.h"
 #include <stdio.h>

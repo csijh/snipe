@@ -1,4 +1,4 @@
-// Unicode support. Free and open source, see licence.txt.
+// Snipe unicode support. Free and open source, see licence.txt.
 #include <stdbool.h>
 
 // Provide general category lookup for code points. Provide iteration through

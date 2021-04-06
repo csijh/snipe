@@ -1,0 +1,38 @@
+abc
+abcI
+
+(def)
+(B defI )B
+
+if (b) n = 1;
+K  BIB I S NS
+
+if (b) { n = 1; }
+K  BIB B I S NS B
+
+int n;
+K   IS
+
+string s;
+I      IS
+
+enum suit { Club, Diamond, Heart, Spade };
+K    I    B I   S I      S I    S I     BS
+
+int ns[] = { 1, 2, 34};
+K   I BB S B NS NS N BS
+
+char *s = "a\nb\0c\04d";
+K    OI S QIE IE IE  IQS
+
+char *s = "\037e\038f\xffg"
+K    OI S QE   IE  NIE   IQ
+
+/* abc "*/"//"
+C  I   QC QC Q
+
+obj.x, obj->x, f(x)
+I  SPS I  S PS IBIB
+
+#include <stdio.h>
+RR       Q
