@@ -13,43 +13,47 @@ typedef struct tags tags;
 // A tag is held in an unsigned byte.
 typedef unsigned char tag;
 
-// A tag value is one of these constants. There is a one-letter version of each,
-// for ease of testing and visualisation. The tag values are less than 32, so a
-// tag byte can accommodate three flag bits, e.g. to describe overriding. The
-// original value can be overridden by COMMENTED, QUOTED or BAD.
+// A tag value is one of these constants. For each tag, there is a short name
+// consisting of one ASCII character for ease of testing, visualisation and
+// table construction. This is a symbol for tags with more significance than
+// just syntax highlighting, and otherwise it is an upper case letter.  A tag
+// byte can accommodate flag bits to describe overriding. The original value can
+// be overridden by COMMENTED, QUOTED or BAD.
 enum tag {
-    GAP,       G = GAP,        // Space
-    ROUND0,    R = ROUND0,     // Open round bracket
-    ROUND1,    r = ROUND1,     // Close round bracket
-    ANGLE0,    A = ANGLE0,     // Open square bracket
-    ANGLE1,    a = ANGLE1,     // Close square bracket
-    WAVY0,     W = WAVY0,      // Open curly bracket or similar
-    WAVY1,     w = WAVY1,      // Close curly bracket or similar
-    COMMENT,   C = COMMENT,    // One-line comment
-    COMMENT0,  X = COMMENT0,   // Open delimiter, non-nesting multiline comment
-    COMMENT1,  x = COMMENT1,   // Close delimiter
-    COMMENT2,  Y = COMMENT2,   // Open delimiter, nesting multiline comment
-    COMMENT3,  y = COMMENT3,   // Close delimiter
-    COMMENTED, c = COMMENTED,  // Text inside (any kind of) comment
-    QUOTE,     Q = QUOTE,      // Single quote
-    DOUBLE,    D = DOUBLE,     // Double quote
-    TRIPLE,    T = TRIPLE,     // Multiline quote (often """)
-    QUOTED,    q = QUOTED,     // Text inside (any kind of) quotes
-    NEWLINE,   N = NEWLINE,    // End of line, treated as a token
-    HANDLE,    H = HANDLE,     // Label indicator, often colon
-    ESCAPE,    E = ESCAPE,     // Escape sequence
-    ID,        I = ID,         // Identifier
-    ID1,       i = ID,         // Alternative id (e.g. type name)
-    FUNCTION,  F = FUNCTION,   // Alternative id
-    PROPERTY,  P = PROPERTY,   // Alternative id
-    KEY,       K = KEY,        // Keyword (or key symbol)
-    KEY1,      k = KEY1,       // Alternative keyword (e.g. named constant)
-    VALUE,     V = VALUE,      // Numeric or other literal
-    OPERATOR,  O = OPERATOR,   // Unary or binary operator
-    SIGN,      S = SIGN,       // Symbol or punctuation
-    BAD,       B = BAD,        // Invalid/incomplete token
-    JOIN,      J = JOIN,       // Continuation of token
-    MISS,      M = MISS        // Continuation of grapheme
+    SKIP,           // ~ Continuation of character (grapheme)
+    MORE,           // - Continuation of token
+    GAP,            // _ Space
+    BAD,            // ? Invalid/incomplete/mismatched token
+    LEFT0,          // ( Open round bracket
+    RIGHT0,         // ) Close round bracket
+    LEFT1,          // [ Open square bracket
+    RIGHT1,         // ] Close square bracket
+    LEFT2,          // { Open curly bracket or similar
+    RIGHT2,         // } Close curly bracket or similar
+    COMMENT,        // # One-line comment
+    COMMENT0,       // < Open delimiter, non-nesting multiline comment
+    COMMENT1,       // > Close delimiter
+    COMMENT2,       // ^ Open delimiter, nesting multiline comment
+    COMMENT3,       // $ Close delimiter
+    COMMENTED,      // * Text inside (any kind of) comment
+    QUOTE,          // ' Single quote
+    DOUBLE,         // " Double quote
+    TRIPLE,         // @ Multiline quote (often """)
+    QUOTED,         // = Text inside (any kind of) quotes
+    NEWLINE,        // . End of line, treated as a token
+    LABEL,          // : Label indicator, often colon
+
+    ESCAPE,         // E Escape sequence
+    IDENTIFIER,     // I Identifier
+    TYPE,           // T Alternative id
+    FUNCTION,       // F Alternative id
+    PROPERTY,       // P Alternative id
+    KEYWORD,        // K Keyword (or key symbol)
+    RESERVED,       // R Alternative keyword (or named constant)
+    VALUE,          // V Numeric or other literal
+    OPERATOR,       // O Unary or binary operator
+    SIGN,           // S Symbol or punctuation
+    TAG_COUNT
 };
 
 // Create a tags object from a state machine table for a default language. Text
@@ -59,9 +63,11 @@ tags *newTags(void *table);
 // Free up a tags object.
 void freeTags(tags *ts);
 
-// Find a tag from its long or short name. Find a tag's full or one-letter name.
+// Find a tag from its long or short name, or return 255.
 tag findTag(char *name);
-char *longTagName(tag t);
+
+// Find a tag's full or short name.
+char const *longTagName(tag t);
 char shortTagName(tag t);
 
 // Get tag at position p. If tag is overridden, return the override value. If it

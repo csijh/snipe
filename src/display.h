@@ -4,12 +4,15 @@
 struct display;
 typedef struct display display;
 
+// A shade is a colour/color stored in RGB format.
+typedef unsigned int shade;
+
 // Each text byte is accompanied by a style byte. A style consists of a
-// foreground colour index in the bottom 5 bits (0x1F), a background colour in
+// foreground shade index in the bottom 5 bits (0x1F), a background shade in
 // the next two bits (0x60) and a flag in the top bit (0x80) to indicate that
-// the byte is preceded by a cursor.  In addition, a style value of 0xFF
-// indicates a byte which continues the current grapheme. (There are at most 31
-// foreground colours.) A grapheme is counted as a single column position.
+// the byte is preceded by a cursor. A foreground index of 31 indicates a
+// continuation character, drawn in the same foreground shade on top of the
+// previous character.
 typedef unsigned char style;
 
 // Create a new display.
@@ -23,3 +26,6 @@ void *getHandle(display *d);
 
 // Draw some text from its UTF8 bytes and their styles.
 void drawPage(display *d, char *bytes, style *styles);
+
+// Switch to the next available theme.
+void switchTheme(display *d);

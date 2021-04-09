@@ -1,4 +1,4 @@
-allegro = -lallegro -lallegro_main -lallegro_font -lallegro_ttf
+allegro = -lallegro -lallegro_main -lallegro_font -lallegro_ttf -lallegro_primitives
 display = display.c $(allegro)
 events = events.c $(allegro)
 
@@ -11,9 +11,9 @@ DEBUG = -g -fsanitize=undefined -fsanitize=address
 
 # Default rule for building and testing a module.
 %: %.c
-	gcc $(DEBUG) -D$@Test $(FLAGS) $($@) -o test
-	./test
+	clang $(DEBUG) -D$@Test $(FLAGS) $($@) -o test
+	LSAN_OPTIONS=suppressions=leaks.txt ./test
 	rm test
 
-snipe: snipe.c
-	gcc -std=c11 -Wall snipe.c $(files) display.c events.c $(allegro) -o snipe -fsanitize=undefined
+snipe: snipe.c display.c events.c
+	clang -std=c11 -Wall snipe.c $(files) display.c events.c $(allegro) -o snipe -fsanitize=undefined

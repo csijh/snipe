@@ -52,8 +52,8 @@ void printEvent(event e, int r, int c, char const *t, char *end);
 // In combinations with CTRL plus a text character, shift can be problematic, so
 // is ignored. For C_PLUS, technically you should hold CTRL and SHIFT. For
 // convenience on the majority of keyboards where + is above = the combination
-// CTRL and = and also CTRL and keypad plus are interpreted as C_PLUS. CTRL and
-// underscore, and CTRL and keypad minus are interpreted as C_MINUS.
+// CTRL and = is interpreted as C_PLUS, and so is CTRL and keypad plus. CTRL and
+// underscore, and CTRL and keypad minus, are interpreted as C_MINUS.
 
 enum event {
     CLICK, S_CLICK, C_CLICK, SC_CLICK,

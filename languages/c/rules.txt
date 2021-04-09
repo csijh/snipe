@@ -1,4 +1,4 @@
-# C language scanner, according to the C11 standard
+# C language scanner, based on the C11 standard
 # See http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1548.pdf
 
 # Potential keywords: go to key state to check if really identifiers
@@ -10,34 +10,34 @@ start  signed sizeof static struct switch true typedef union unsigned   key
 start  void volatile while                                              key
 
 # Operators and signs. An arrow may be followed by a field
-start != ! % && &= & *= * ++ += + -- -= - /= /  start OPERATOR
-start <<= << <= < == >= >>= >> > ^= ^ |= || | ~ start OPERATOR
+start != ! % && &= & *= * ++ += + -- -= - /= /  start OP
+start <<= << <= < == >= >>= >> > ^= ^ |= || | ~ start OP
 start ## %:%: %= , ... = ; ?? ? start SIGN
-start : start HANDLE
+start : start LABEL
 start -> field SIGN
 
 # Brackets.
-start ( start ROUND0
-start ) start ROUND1
-start [ <: start ANGLE0
-start ] :> start ANGLE1
-start { <% start WAVY0
-start } %> start WAVY1
+start ( start (
+start ) start )
+start [ <: start [
+start ] :> start ]
+start { <% start {
+start } %> start }
 
 # Identifiers, numbers, preprocessor lines
 start a..z A..Z _ \U \u id
 start 0..9 num
 start . dot
-start # %: hash KEYWORD1
+start # %: hash RESERVED
 
-# Quotes, escape sequences, comments, white space, illegal characters
-start ' start QUOTE
-start " start DOUBLE
+# Quotes, escape sequences, comments, illegal characters
+start ' start '
+start " start "
 start \ escape
-start // start COMMENT
-start /* start COMMENT0
-start */ start COMMENT1
-start start BAD
+start // start #
+start /* start <
+start */ start >
+start start ?
 
 # Potential keywords, if not followed by alphanumerics.
 key a..z A..Z 0..9 _ \U \u id
@@ -65,7 +65,7 @@ num start VALUE
 escape a..w y..z start ESCAPE
 escape x escapex
 escape 0..7 escape1
-escape start BAD
+escape start ?
 
 # Octal escape sequences: up to three digits.
 escape1 0..7 escape2
@@ -78,15 +78,14 @@ escapex 0..9 a..f A..F escapex
 escapex start ESCAPE
 
 # A hash is followed by a preprocessor keyword.
-hash include inclusion KEY1
-hash define elif else endif error if start KEY1
-hash ifdef ifndef line pragma undef start KEY1
-hash start KEY1
+hash include inclusion RESERVED
+hash define elif else endif error if start RESERVED
+hash ifdef ifndef line pragma undef start RESERVED
+hash start RESERVED
 
-# After #include, aim to scan <filename> as a string.
-# TODO doesn't this make <x> into a matchable quote?
+# After #include, treat <filename> as a single quoted token.
 inclusion < filename
-inclusion start QUOTED
-filename !..= ?..~ filename
-filename > start QUOTED
-filename start QUOTED
+inclusion start =
+filename > start =
+filename !..~ filename
+filename start ?

@@ -1,50 +1,41 @@
-// Snipe language interpreter. Free and open source. See license.txt.
+// Snipe language interpreter. Free and open source. See licence.txt.
 // Read in a compiled language description and execute it for testing. Type
 //
 //     ./interpret [-t] c
 //
-// to read in c.bin and execute tests from src/c.txt where -t means trace.
+// to read in c/table.txt and execute tests c/tests.txt where -t means trace.
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
 #include <assert.h>
 
-// A tag is an action in the transition table, or a label for a byte of the
-// text. It may be the index of a token type, to indicate the action of
-// terminating a token, and as a label for its first byte. As an action, it may
-// be Skip to indicate that the entry is not relevant to the current state, or
-// Accept to indicate the action of continuing the same token. As a label, it
-// may be Byte to label a continuation byte within a grapheme, or Char to label
-// a continuation character (grapheme) within a token, or (for a space or
-// newline) the index number of a state to enable re-scanning from that point.
-enum { Skip = 0, Accept = 1, Byte = 0, Char = 1 };
+// BIG is the limit on array sizes. It can be increased as necessary.
+// SMALL is the limit on arrays indexed by unsigned bytes.
+enum { BIG = 10000, SMALL = 256 };
 
-// Each table entry contains a tag representing an action, and a target state.
+// In the transition table, an action is a tag which represents a token type, or
+// SKIP to miss out that table entry or MORE to add to the current token. Each
+// byte of text read in is labelled with a tag which represents the token type,
+// or SKIP for a continuation byte of the current character (or grapheme) or
+// MORE for a continuation character of the current token. Spaces are tagged
+// with GAP, and newlines with NEWLINE.
 typedef unsigned char byte;
 struct entry { byte action, target; };
 typedef struct entry entry;
+enum { SKIP = '~', MORE = '-', GAP = '_', NEWLINE = '.' };
 
 // A scanner consists of a table[nstates][npatterns], an array of state names,
-// an array of pattern strings, and an array of token type names. The starters
-// array gives the first pattern starting with each character.
+// and an array of pattern strings. The starters array gives the first pattern
+// starting with each character.
 struct scanner {
-    short nstates, npatterns, ntypes;
-    entry *table;
-    char **states;
-    char **patterns;
-    char **types;
+    short nstates, npatterns;
+    entry table[SMALL][BIG];
+    char *states[SMALL];
+    char *patterns[BIG];
     short starters[128];
 };
 typedef struct scanner scanner;
-
-void freeScanner(scanner *sc) {
-    free(sc->table);
-    free(sc->states);
-    free(sc->patterns);
-    free(sc->types);
-    free(sc);
-}
 
 // Crash with a message.
 void crash(char *s) {
@@ -54,7 +45,7 @@ void crash(char *s) {
 
 // Read in a text file. Use binary mode, so that the number of bytes read
 // equals the file size.
-char *readTests(char *path) {
+char *readFile(char *path) {
     FILE *file = fopen(path, "rb");
     if (file == NULL) crash("Error: can't read file");
     fseek(file, 0, SEEK_END);
@@ -69,6 +60,94 @@ char *readTests(char *path) {
     return data;
 }
 
+static char *stateLabels =
+    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+// Split a line into an array of tokens, replacing spaces by null characters
+// as necessary, and return the number of tokens.
+int splitTokens(char *line, char *tokens[SMALL]) {
+    int ntokens = 0;
+    int start = 0, end = 0, len = strlen(line);
+    while (line[start] == ' ') start++;
+    while (start < len) {
+        end = start;
+        while (line[end] != ' ' && line[end] != '\0') end++;
+        line[end] = '\0';
+        char *token = &line[start];
+        tokens[ntokens++] = token;
+        start = end + 1;
+        while (start < len && line[start] == ' ') start++;
+    }
+    return ntokens;
+}
+
+
+void readStateNames(char *s, scanner *sc) {
+    sc->nstates = splitTokens(s, sc->states);
+    for (int i = 0; i < sc->nstates; i++) {
+        char *state = sc->states[i];
+        if (state[0] != stateLabels[i]) crash("Error: bad table");
+        if (state[1] != '=') crash("Error: bad table");
+        sc->states[i] = sc->states[i] + 2;
+    }
+}
+
+// Check header and return rest of table.
+char *readHeader(char *data, scanner *sc) {
+    char *tokens[SMALL];
+    char *s = strstr(data, "\n");
+    if (s == NULL) crash("Error: bad table");
+    s[0] = '\0';
+    int n = splitTokens(data, tokens);
+    if (n != sc->nstates) crash("Error: bad table header");
+    for (int i = 0; i < n; i++) {
+        if (strlen(tokens[i]) != 1) crash("Error: bad table header");
+        if (tokens[i][0] != stateLabels[i]) crash("Error: bad table header");
+    }
+    return s + 1;
+}
+
+// Read one row of the table.
+void readRow(int row, char *line, scanner *sc) {
+    char *tokens[SMALL];
+    int n = splitTokens(line, tokens);
+    if (n != sc->nstates + 1) crash("Error bad table row");
+    for (int i = 0; i < n-1; i++) {
+        sc->table[i][row].action = tokens[i][0];
+        char *s = strchr(stateLabels, tokens[i][1]);
+        sc->table[i][row].target = s - stateLabels;
+    }
+    if (strcmp(tokens[n-1], "default") == 0) sc->patterns[row] = "";
+    else sc->patterns[row] = tokens[n-1];
+}
+
+// Read the rows of the table.
+void readTable(char *data, scanner *sc) {
+    int p = 0, n = 0;
+    for (int i = 0; data[i] != '\0'; i++) {
+        if (data[i] != '\n') continue;
+        data[i]= '\0';
+        readRow(n, &data[p], sc);
+        n++;
+        p = i + 1;
+    }
+    sc->npatterns = n;
+    printf("rows %d\n", n);
+}
+
+// Read the state names and then the table from table.txt.
+void readScanner(char *data, scanner *sc) {
+    char *s = strstr(data, "\n\n");
+    if (s == NULL) crash("Error: no blank line");
+    s[0] = '\0';
+    for (int i = 0; i < strlen(data); i++) if (data[i] == '\n') data[i] = ' ';
+    readStateNames(data, sc);
+    data = s + 2;
+    data = readHeader(data, sc);
+    readTable(data, sc);
+}
+
+/*
 // Split the text of a test file into an array of lines, replacing each newline
 // by a null. Skip blank lines.
 char **splitLines(char *text) {
@@ -86,29 +165,6 @@ char **splitLines(char *text) {
     }
     lines[n] = NULL;
     return lines;
-}
-
-// Read in the scanner from a binary file.
-void readScanner(char const *path, scanner *sc) {
-    FILE *file = fopen(path, "rb");
-    if (file == NULL) crash("Error: can't read file");
-    fseek(file, 0, SEEK_END);
-    int size = ftell(file);
-    fseek(file, 0, SEEK_SET);
-    if (size < 0) crash("Error: can't find file size");
-    byte sizes[6];
-    int n = fread(sizes, 1, 6, file);
-    if (n != 6) crash("Error: reading file");
-    sc->nstates = (sizes[0] << 8) | sizes[1];
-    sc->npatterns = (sizes[2] << 8) | sizes[3];
-    sc->ntypes = (sizes[4] << 8) | sizes[5];
-    printf("ns=%d, np=%d, nt=%d\n", sc->nstates, sc->npatterns, sc->ntypes);
-    size = size - 6;
-    sc->table = malloc(size);
-    n = fread(sc->table, 1, size, file);
-    if (n != size) crash("Error: reading file");
-//    int tableSize = sc->nstates * sc->npatterns * sizeof(entry);
-    fclose(file);
 }
 
 // Build the scanner from the data read in.
@@ -207,8 +263,16 @@ int runTests(char**lines, scanner *sc, bool trace) {
     }
     return passes;
 }
-
+*/
 int main(int n, char const *args[n]) {
+    scanner *sc = malloc(sizeof(scanner));
+    char *data = readFile("c/table.txt");
+    readScanner(data, sc);
+
+    for (int i = 0; i < sc->nstates; i++) {
+        printf("%d %s\n", i, sc->states[i]);
+    }
+    /*
     char const *lang;
     bool trace = n > 2;
     if (n == 2) lang = args[1];
@@ -229,5 +293,8 @@ int main(int n, char const *args[n]) {
     free(testFile);
     freeScanner(sc);
     printf("Tests passed: %d\n", p);
+    */
+    free(sc);
+    free(data);
     return 0;
 }

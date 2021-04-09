@@ -1,5 +1,3 @@
-Unicode characters:
-
-æ í ð ö þ ƶ ə β ᴈ ῷ ⁑ €
-
-How will Allegro handle them?
+Unicode characters:         æ í ð ö þ ƶ ə β ᴈ ῷ ⁑ €
+Diaeresis as one char:      Raphaël
+Combining diaeresis:        Raphaël

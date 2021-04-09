@@ -28,61 +28,61 @@ bool openers[COUNT] = {
 // Make sure tags have no override flags when not on any of the stacks.
 // (Note indent MAYBE grapheme continuation of preceding NL).
 enum action {
-    X,  // Not relevant.
-    P,  // push next onto openers, then check it against closers
-    M,  // match with popped opener, push pair onto matched
-    E,  // excess: mark next as mismatched  (EQUALS G ???)
-    L,  // less: pop and mismatch opener, repeat
-    G,  // mismatch next (and push on matched ???)
-    I,  // incomplete (same as L, but don't touch NL)
-    S,  // skip past ordinary token
-    C,  // skip, and override as commented
-    Q,  // skip, and override as quoted
+    XX,  // Not relevant.
+    PU,  // push next onto openers, then check it against closers
+    MA,  // match with popped opener, push pair onto matched
+    EX,  // excess: mark next as mismatched  (EQUALS G ???)
+    LT,  // less: pop and mismatch opener, repeat
+    GT,  // mismatch next (and push on matched ???)
+    IN,  // incomplete (same as LT, but don't touch NL)
+    SK,  // skip past ordinary token
+    CO,  // skip, and override as commented
+    QU,  // skip, and override as quoted
 };
 
 // Table which compares the most recent opener with the next token, to decide
-// what action to take in forward matching.
+// what action to take in forward matching. Use M (MISS) for start of text.
 int table[COUNT][COUNT] = {
-    // No openers
-    [EN][L0]=P, [EN][L1]=P, [EN][L2]=P, [EN][R0]=E, [EN][R1]=E, [EN][R2]=E,
-    [EN][Q0]=P, [EN][Q1]=P, [EN][Q2]=P, [EN][C0]=P, [EN][C1]=P, [EN][C2]=E,
-    [EN][C3]=P, [EN][C4]=E, [EN][NL]=S, [EN][ID]=S,
+    // At start of text, no openers
+    [M][R]=PU, [M][A]=PU, [M][W]=PU, [M][r]=EX, [M][a]=EX, [M][w]=EX,
+    [M][Q]=PU, [M][D]=PU, [M][T]=PU, [M][C]=PU, [M][X]=PU, [M][x]=EX,
+    [M][Y]=PU, [M][y]=EX, [M][N]=SK, [M][I]=SK,
     // (
-    [L0][L0]=P, [L0][L1]=P, [L0][L2]=P, [L0][R0]=M, [L0][R1]=L, [L0][R2]=L,
-    [L0][Q0]=P, [L0][Q1]=P, [L0][Q2]=P, [L0][C0]=P, [L0][C1]=P, [L0][C2]=E,
-    [L0][C3]=P, [L0][C4]=E, [L0][NL]=S, [L0][ID]=S,
+    [R][R]=PU, [R][A]=PU, [R][W]=PU, [R][r]=MA, [R][a]=LT, [R][w]=LT,
+    [R][Q]=PU, [R][D]=PU, [R][T]=PU, [R][C]=PU, [R][X]=PU, [R][x]=EX,
+    [R][Y]=PU, [R][y]=EX, [R][N]=SK, [R][I]=SK,
     // [
-    [L1][L0]=P, [L1][L1]=P, [L1][L2]=P, [L1][R0]=G, [L1][R1]=M, [L1][R2]=L,
-    [L1][Q0]=P, [L1][Q1]=P, [L1][Q2]=P, [L1][C0]=P, [L1][C1]=P, [L1][C2]=E,
-    [L1][C3]=P, [L1][C4]=E, [L1][NL]=S, [L1][ID]=S,
+    [A][R]=PU, [A][A]=PU, [A][W]=PU, [A][r]=GT, [A][a]=MA, [A][w]=LT,
+    [A][Q]=PU, [A][D]=PU, [A][T]=PU, [A][C]=PU, [A][X]=PU, [A][x]=EX,
+    [A][Y]=PU, [A][y]=EX, [A][N]=SK, [A][I]=SK,
     // {
-    [L2][L0]=P, [L2][L1]=P, [L2][L2]=P, [L2][R0]=G, [L2][R1]=G, [L2][R2]=M,
-    [L2][Q0]=P, [L2][Q1]=P, [L2][Q2]=P, [L2][C0]=P, [L2][C1]=P, [L2][C2]=E,
-    [L2][C3]=P, [L2][C4]=E, [L2][NL]=S, [L2][ID]=S,
+    [W][R]=PU, [W][A]=PU, [W][W]=PU, [W][r]=GT, [W][a]=GT, [W][w]=MA,
+    [W][Q]=PU, [W][D]=PU, [W][T]=PU, [W][C]=PU, [W][X]=PU, [W][x]=EX,
+    [W][Y]=PU, [W][y]=EX, [W][N]=SK, [W][I]=SK,
     // '
-    [Q0][L0]=Q, [Q0][L1]=Q, [Q0][L2]=Q, [Q0][R0]=Q, [Q0][R1]=Q, [Q0][R2]=Q,
-    [Q0][Q0]=M, [Q0][Q1]=Q, [Q0][Q2]=Q, [Q0][C0]=Q, [Q0][C1]=Q, [Q0][C2]=Q,
-    [Q0][C3]=Q, [Q0][C4]=Q, [Q0][NL]=I, [Q0][ID]=Q,
+    [Q][R]=QU, [Q][A]=QU, [Q][W]=QU, [Q][r]=QU, [Q][a]=QU, [Q][w]=QU,
+    [Q][Q]=MA, [Q][D]=QU, [Q][T]=QU, [Q][C]=QU, [Q][X]=QU, [Q][x]=QU,
+    [Q][Y]=QU, [Q][y]=QU, [Q][N]=IN, [Q][I]=QU,
     // "
-    [Q1][L0]=Q, [Q1][L1]=Q, [Q1][L2]=Q, [Q1][R0]=Q, [Q1][R1]=Q, [Q1][R2]=Q,
-    [Q1][Q0]=Q, [Q1][Q1]=M, [Q1][Q2]=Q, [Q1][C0]=Q, [Q1][C1]=Q, [Q1][C2]=Q,
-    [Q1][C3]=Q, [Q1][C4]=Q, [Q1][NL]=I, [Q1][ID]=Q,
+    [D][R]=QU, [D][A]=QU, [D][W]=QU, [D][r]=QU, [D][a]=QU, [D][w]=QU,
+    [D][Q]=QU, [D][D]=MA, [D][T]=QU, [D][C]=QU, [D][X]=QU, [D][x]=QU,
+    [D][Y]=QU, [D][y]=QU, [D][N]=IN, [D][I]=QU,
     // """
-    [Q2][L0]=Q, [Q2][L1]=Q, [Q2][L2]=Q, [Q2][R0]=Q, [Q2][R1]=Q, [Q2][R2]=Q,
-    [Q2][Q0]=Q, [Q2][Q1]=Q, [Q2][Q2]=M, [Q2][C0]=Q, [Q2][C1]=Q, [Q2][C2]=Q,
-    [Q2][C3]=Q, [Q2][C4]=Q, [Q2][NL]=S, [Q2][ID]=Q,
+    [T][R]=QU, [T][A]=QU, [T][W]=QU, [T][r]=QU, [T][a]=QU, [T][w]=QU,
+    [T][Q]=QU, [T][D]=QU, [T][T]=MA, [T][C]=QU, [T][X]=QU, [T][x]=QU,
+    [T][Y]=QU, [T][y]=QU, [T][N]=SK, [T][I]=QU,
     // //
-    [C0][L0]=C, [C0][L1]=C, [C0][L2]=C, [C0][R0]=C, [C0][R1]=C, [C0][R2]=C,
-    [C0][Q0]=C, [C0][Q1]=C, [C0][Q2]=C, [C0][C0]=C, [C0][C1]=C, [C0][C2]=C,
-    [C0][C3]=C, [C0][C4]=C, [C0][NL]=M, [C0][ID]=C,
+    [C][R]=CO, [C][A]=CO, [C][W]=CO, [C][r]=CO, [C][a]=CO, [C][w]=CO,
+    [C][Q]=CO, [C][D]=CO, [C][T]=CO, [C][C]=CO, [C][X]=CO, [C][x]=CO,
+    [C][Y]=CO, [C][y]=CO, [C][N]=MA, [C][I]=CO,
     // /*
-    [C1][L0]=C, [C1][L1]=C, [C1][L2]=C, [C1][R0]=C, [C1][R1]=C, [C1][R2]=C,
-    [C1][Q0]=C, [C1][Q1]=C, [C1][Q2]=C, [C1][C0]=C, [C1][C1]=G, [C1][C2]=M,
-    [C1][C3]=C, [C1][C4]=C, [C1][NL]=S, [C1][ID]=C,
+    [X][R]=CO, [X][A]=CO, [X][W]=CO, [X][r]=CO, [X][a]=CO, [X][w]=CO,
+    [X][Q]=CO, [X][D]=CO, [X][T]=CO, [X][C]=CO, [X][X]=GT, [X][x]=MA,
+    [X][Y]=CO, [X][y]=CO, [X][N]=SK, [X][I]=CO,
     // {-
-    [C3][L0]=C, [C3][L1]=C, [C3][L2]=C, [C3][R0]=C, [C3][R1]=C, [C3][R2]=C,
-    [C3][Q0]=C, [C3][Q1]=C, [C3][Q2]=C, [C3][C0]=C, [C3][C1]=C, [C3][C2]=C,
-    [C3][C3]=P, [C3][C4]=M, [C3][NL]=S, [C3][ID]=C,
+    [Y][R]=CO, [Y][A]=CO, [Y][W]=CO, [Y][r]=CO, [Y][a]=CO, [Y][w]=CO,
+    [Y][Q]=CO, [Y][D]=CO, [Y][T]=CO, [Y][C]=CO, [Y][X]=CO, [Y][x]=CO,
+    [Y][Y]=PU, [Y][y]=MA, [Y][N]=SK, [Y][I]=CO,
 };
 
 // For each opener, check whether it has entries in the table for all tokens.
