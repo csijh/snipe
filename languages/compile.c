@@ -9,6 +9,13 @@
 // scanner, the tag for a token contains flags to indicate that the token type
 // is being overridden by ? or * or =, and the tag for a space contains the
 // scanner state, to allow for incremental re-scanning from that point.
+
+// TODO:
+// 1) check progress: initial state must be safe
+// 2) every start state with a lookahead rule must use a safe state as a target.
+// 3) add x? for every x as lookahead patterns TICK
+// 4) if s has lookaheads, have s _ s' where s' is lookahead only copy.
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -30,22 +37,19 @@ typedef struct entry entry;
 enum { SKIP = '~', MORE = '-'};
 
 // A scanner structure consists of the number of states and patterns (which
-// determines the size of the state transition table), then the table itself,
-// then a string store containing the state names followed by the patterns. The
-// remaining fields are for temporary use during construction. Many are NULL
+// determines the size of the state transition table), then the table itself.
+// The remaining fields are for temporary use during construction. Many are NULL
 // terminated arrays of strings.
 struct scanner {
     short nstates, npatterns;
     entry table[SMALL][BIG];
-    char strings[BIG];
 
+    short nstarts;
     char text[BIG];
     char *lines[BIG];
     char *tokens[BIG][SMALL];
     char *states[SMALL];
     char *patterns[BIG];
-    char *temp[BIG];
-    short nstrings;
 };
 typedef struct scanner scanner;
 
@@ -137,24 +141,35 @@ void splitLines(char *text, char *lines[]) {
 // Space for a one-character string for each ASCII character.
 char singles[128][2];
 
-// Create the single-character strings.
-void makeSingles() {
+// Space for a two-character lookahead string for each ASCII character.
+char doubles[128][3];
+
+// Create the singles and doubles strings.
+void makeSinglesDoubles() {
     for (int i = 0; i < 128; i++) {
         singles[i][0] = (char)i;
         singles[i][1] = '\0';
+        doubles[i][0] = (char)i;
+        doubles[i][1] = '?';
+        doubles[i][2] = '\0';
     }
 }
 
-// Check whether a pattern string is a range of characters.
+// Check whether a pattern string is a range of characters or a lookahead range.
 bool isRange(char *s) {
-    return strlen(s) == 4 && s[1] == '.' && s[2] == '.';
+    int n = strlen(s);
+    if (n == 4 || (n == 5 && s[4] == '?')) {
+        return s[1] == '.' && s[2] == '.';
+    }
+    return false;
 }
 
-// Expand a range x..y into an explicit series of one-character tokens. Add to
-// the tokens array.
+// Expand a range x..y or x..y? into an explicit series of one-character tokens.
+// Add to the tokens array.
 void expandRange(char *range, char *tokens[]) {
     for (int ch = range[0]; ch <= range[3]; ch++) {
-        add(singles[ch], tokens);
+        if (strlen(range) == 4) add(singles[ch], tokens);
+        else add(doubles[ch], tokens);
     }
 }
 
@@ -172,7 +187,7 @@ void validateTokens(int i, char *ts[]) {
     if (n < 3) crash("rule too short", i, "");
     char *last = ts[n-1];
     if ('a' <= last[0] && last[0] <= 'z') {
-        add("MORE", ts);
+        add(singles[MORE], ts);
         return;
     }
     bool ok = 'A' <= last[0] && last[0] <= 'Z';
@@ -184,8 +199,8 @@ void validateTokens(int i, char *ts[]) {
 }
 
 // Split each line into an array of tokens, replacing spaces by null characters
-// as necessary. Expand ranges into explicit one-character tokens. If there is
-// no token type, add an explicit MORE token.
+// as necessary. Expand ranges into explicit one- or two-character tokens. If
+// there is no token type, add an explicit MORE token.
 void splitTokens(char *lines[], char *tokens[][SMALL]) {
     int nlines = length(lines);
     for (int i = 0; i < nlines; i++) {
@@ -206,10 +221,10 @@ void splitTokens(char *lines[], char *tokens[][SMALL]) {
     }
 }
 
-// Gather states that can occur between tokens, so they come first. The position
-// of the state name in the array is the state number. Make sure there are no
-// more than 32 of them, so the state number can be packed into 5 bits.
-void gatherStartStates(int n, char *tokens[n][SMALL], char *states[]) {
+// Gather start states, that can occur between tokens, so they come first. The
+// position of the state name in the array is the state number. Make sure there
+// are no more than 32 of them, so the state number can be packed into 5 bits.
+int gatherStartStates(int n, char *tokens[n][SMALL], char *states[]) {
     find(tokens[0][0], states);
     for (int i = 0; i < n; i++) {
         int t = length(tokens[i]);
@@ -218,24 +233,30 @@ void gatherStartStates(int n, char *tokens[n][SMALL], char *states[]) {
         char *target = tokens[i][t-2];
         find(target, states);
     }
-    int s = length(states);
-    if (s > 32) crash("more than 32 start states", 0, "");
+    int n = length(states);
+    if (n > 32) crash("more than 32 start states", 0, "");
+    return n;
 }
 
 // Gather distinct state names from the tokens. Make sure the total number
-// states is at most 62, so they can be numbered using 0..9a..zA..Z.
-void gatherStates(int n, char *tokens[n][SMALL], char *states[]) {
-    gatherStartStates(n, tokens, states);
+// states is at most 62, so they can be numbered using 0..9a..zA..Z. Return the
+// number of start states.
+int gatherStates(int n, char *tokens[n][SMALL], char *states[]) {
+    int nstarts = gatherStartStates(n, tokens, states);
     for (int i = 0; i < n; i++) {
         int t = length(tokens[i]);
         find(tokens[i][0], states);
         find(tokens[i][t-2], states);
     }
     if (length(states) > 62) crash("more than 62 states", 0, "");
+    return nstarts;
 }
 
-// Gather pattern strings.
+// Gather pattern strings, including single character lookahead strings.
 void gatherPatterns(int n, char *tokens[n][SMALL], char *patterns[]) {
+    find(" ?", patterns);
+    find("\n?", patterns);
+    for (int ch = '!'; ch <= '~'; ch++) find(doubles[ch], patterns);
     for (int i = 0; i < n; i++) {
         for (int t = 1; t < length(tokens[i])-2; t++) {
             find(tokens[i][t], patterns);
@@ -245,20 +266,23 @@ void gatherPatterns(int n, char *tokens[n][SMALL], char *patterns[]) {
 
 // ----- Sorting --------------------------------------------------------------
 
-// Check if string s is a prefix of string t.
-bool prefix(char const *s, char const *t) {
-    return strncmp(s, t, strlen(s)) == 0;
-}
-
-// Compare two strings in ASCII order, except prefer longer strings.
+// Compare two strings in ASCII order, except prefer longer strings and
+// non-lookaheads.
 int compare(char *s, char *t) {
-    int c = strcmp(s, t);
-    if (c < 0 && prefix(s, t)) return 1;
-    if (c > 0 && prefix(t, s)) return -1;
-    return c;
+    for (int i = 0; ; i++) {
+        if (s[i] == '\0' && i > 0 && t[i] == '?') return -1;
+        if (s[i] == '\0' && t[i] != '\0') return 1;
+        if (s[i] == '\0') return 0;
+        if (t[i] == '\0' && i > 0 && s[i] == '?') return 1;
+        if (t[i] == '\0') return -1;
+        if (i > 0 && s[i] == '?') return 1;
+        if (i > 0 && t[i] == '?') return -1;
+        if (s[i] < t[i]) return -1;
+        if (s[i] > t[i]) return 1;
+    }
 }
 
-// Sort the patterns, with longer patterns preferred.
+// Sort the patterns.
 void sort(char *patterns[]) {
     int n = length(patterns);
     for (int i = 1; i < n; i++) {
@@ -272,21 +296,6 @@ void sort(char *patterns[]) {
     }
 }
 
-// Add an empty pattern string after each run of patterns starting with the same
-// character.
-void expandPatterns(char *patterns[], char *temp[]) {
-    int n = length(patterns);
-    for (int i = 0; i <= n; i++) temp[i] = patterns[i];
-    int p = 0, t = 0;
-    patterns[p++] = "";
-    for (int i = 0; i < 128; i++) {
-        if (t < n && i >= temp[t][0]) {
-            while (t < n && temp[t][0] == i) patterns[p++] = temp[t++];
-            patterns[p++] = "";
-        }
-    }
-}
-
 // ----- Building -------------------------------------------------------------
 
 // Fill a non-default rule into the table.
@@ -297,7 +306,7 @@ void fillRule(
     byte action = (byte) tokens[n-1][0];
     byte state = (byte) find(tokens[0], states);
     byte target = (byte) find(tokens[n-2], states);
-    for (int i = 1; i < n-1; i++) {
+    for (int i = 1; i < n-2; i++) {
         short p = (short) find(tokens[i], patterns);
         byte oldAction = table[state][p].action;
         if (oldAction != SKIP) continue;
@@ -313,8 +322,12 @@ void fillDefault(
     byte action = (byte) tokens[2][0];
     byte state = (byte) find(tokens[0], states);
     byte target = (byte) find(tokens[1], states);
-    for (int p = 0; p < length(patterns); p++) {
-        if (strlen(patterns[p]) != 0) continue;
+    char s[3] = "x?";
+    for (int ch = 0; ch < 128; ch++) {
+        if (ch < ' ' && ch != '\n') continue;
+        if (ch == 127) continue;
+        s[0] = ch;
+        int p = find(s, patterns);
         table[state][p].action = action;
         table[state][p].target = target;
     }
@@ -325,11 +338,9 @@ void checkMissing(
     entry table[][BIG], char *states[], char *patterns[]
 ) {
     for (int s = 0; s < length(states); s++) {
-        for (int p = 0; p < length(patterns); p++) {
-            if (table[s][p].action != SKIP) continue;
-            if (strlen(patterns[p]) != 0) continue;
-            crash("Default rule needed for state", 0, states[s]);
-        }
+        int n = length(patterns) - 1;
+        if (table[s][n].action != SKIP) continue;
+        crash("Default rule needed for state", 0, states[s]);
     }
 }
 
@@ -353,41 +364,34 @@ scanner *buildScanner(char const *path) {
     scanner *sc = calloc(1, sizeof(scanner));
     readFile(path, sc->text);
     splitLines(sc->text, sc->lines);
-    makeSingles();
+    makeSinglesDoubles();
     splitTokens(sc->lines, sc->tokens);
     int nlines = length(sc->lines);
-    gatherStates(nlines, sc->tokens, sc->states);
+    sc->nstarts = gatherStates(nlines, sc->tokens, sc->states);
     gatherPatterns(nlines, sc->tokens, sc->patterns);
     sort(sc->patterns);
-    expandPatterns(sc->patterns, sc->temp);
     sc->nstates = length(sc->states);
     sc->npatterns = length(sc->patterns);
     fillTable(sc->table, nlines, sc->tokens, sc->states, sc->patterns);
     return sc;
 }
 
+// Write out a row of state names (for tracing) then a row per pattern with the
+// pattern string on the end, and finally the defaults row.
 void writeScanner(scanner *sc, char const *path) {
     FILE *fp = fopen(path, "w");
-    char *states =
+    char *stateLabels =
         "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    int col = 0;
     for (int i = 0; i < sc->nstates; i++) {
         char *s = sc->states[i];
-        if (col + 3 + strlen(s) > 80) { fprintf(fp, "\n"); col = 0; }
-        if (col > 0) fprintf(fp, " ");
-        fprintf(fp, "%c=%s", states[i], s);
-        col += 3 + strlen(s);
-    }
-    fprintf(fp, "\n");
-    fprintf(fp, "\n");
-    for (int s = 0; s < sc->nstates; s++) {
-        fprintf(fp, "%c  ", states[s]);
+        if (i > 0) fprintf(fp, " ");
+        fprintf(fp, "%s", s);
     }
     fprintf(fp, "\n");
     for (int p = 0; p < sc->npatterns; p++) {
         for (int s = 0; s < sc->nstates; s++) {
             char action = (char) sc->table[s][p].action;
-            char target = states[sc->table[s][p].target];
+            char target = stateLabels[sc->table[s][p].target];
             fprintf(fp, "%c%c ", action, target);
         }
         if (strlen(sc->patterns[p]) == 0) fprintf(fp, " default\n");
@@ -420,13 +424,13 @@ void testSplitTokens() {
     char s4[20] = "s a t X";
     char *lines[5] = {s1, s2, s3, s4, NULL};
     char *expect[4][8] = {
-        {"s", "a", "b", "c", "t", "MORE", NULL},
-        {"s", "\\s", "\\b", "t", "MORE", NULL},
-        {"s", "a", "b", "c", "t", "MORE", NULL},
+        {"s", "a", "b", "c", "t", "-", NULL},
+        {"s", "\\s", "\\b", "t", "-", NULL},
+        {"s", "a", "b", "c", "t", "-", NULL},
         {"s", "a", "t", "X", NULL},
     };
     char *tokens[4][SMALL] = {{NULL},{NULL},{NULL},{NULL}};
-    makeSingles();
+    makeSinglesDoubles();
     splitTokens(lines, tokens);
     assert(eq(tokens[0], expect[0]));
     assert(eq(tokens[1], expect[1]));
@@ -444,24 +448,25 @@ void testGatherStates() {
 
 void testGatherPatterns() {
     char *ts[2][SMALL] = {{"s","x","s","X",NULL}, {"s","y","s","X",NULL}};
-    char *patterns[10] = {NULL};
-    char *expect[] = {"x", "y", NULL};
+    char *patterns[200] = {NULL};
     gatherPatterns(2, ts, patterns);
-    assert(eq(patterns, expect));
+    assert(strcmp(patterns[96],"x") == 0);
+    assert(strcmp(patterns[97],"y") == 0);
 }
 
 void testSort() {
-    char *patterns[] = { "", "<", "<=", "!", NULL };
-    char *expect[] = {"!", "<=", "<", "", NULL};
-    sort(patterns);
-    assert(eq(patterns, expect));
-}
+    assert(compare("!","<") == -1);
+    assert(compare("<=","<") == -1);
+    assert(compare("<","<=") == 1);
+    assert(compare("<","<?") == -1);
+    assert(compare("<?","<") == 1);
+    assert(compare("<=","<?") == -1);
+    assert(compare("<?","<=") == 1);
 
-void testExpandPatterns() {
-    char *patterns[] = { "!", "<=", "<", NULL, NULL, NULL, NULL, NULL };
-    char *temp[10];
-    char *expect[] = {"", "!", "", "<=", "<", "", NULL};
-    expandPatterns(patterns, temp);
+    char *patterns[] = { "<?", "", "<", "<=", "!", NULL, NULL };
+    char *expect[] = {"!", "<=", "<", "<?", "", NULL };
+    sort(patterns);
+    printf("p=%s %s\n", patterns[2], patterns[3]);
     assert(eq(patterns, expect));
 }
 
@@ -471,7 +476,7 @@ int main(int n, char const *args[n]) {
     testGatherStates();
     testGatherPatterns();
     testSort();
-    testExpandPatterns();
+    /*
     if (n != 2) crash("Use: ./compile language", 0, "");
     char path[100];
     sprintf(path, "%s/rules.txt", args[1]);
@@ -479,5 +484,6 @@ int main(int n, char const *args[n]) {
     sprintf(path, "%s/table.txt", args[1]);
     writeScanner(sc, path);
     free(sc);
+    */
     return 0;
 }

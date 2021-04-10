@@ -12,7 +12,7 @@
 
 // BIG is the limit on array sizes. It can be increased as necessary.
 // SMALL is the limit on arrays indexed by unsigned bytes.
-enum { BIG = 10000, SMALL = 256 };
+enum { BIG = 500, SMALL = 256 };
 
 // In the transition table, an action is a tag which represents a token type, or
 // SKIP to miss out that table entry or MORE to add to the current token. Each
@@ -27,13 +27,15 @@ enum { SKIP = '~', MORE = '-', GAP = '_', NEWLINE = '.' };
 
 // A scanner consists of a table[nstates][npatterns], an array of state names,
 // and an array of pattern strings. The starters array gives the first pattern
-// starting with each character.
+// starting with each character. The lookahead array says whether a pattern is a
+// lookahead pattern or not.
 struct scanner {
     short nstates, npatterns;
     entry table[SMALL][BIG];
     char *states[SMALL];
     char *patterns[BIG];
     short starters[128];
+    char lookahead[BIG];
 };
 typedef struct scanner scanner;
 
@@ -60,8 +62,20 @@ char *readFile(char *path) {
     return data;
 }
 
-static char *stateLabels =
-    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+// ---------- Read in table ----------------------------------------------------
+
+// Split the text into an array of lines. Return the number of lines.
+int splitLines(char *text, char *lines[]) {
+    int p = 0, n = 0;
+    for (int i = 0; text[i] != '\0'; i++) {
+        if (text[i] == '\r') text[i] = ' ';
+        if (text[i] != '\n') continue;
+        text[i]= '\0';
+        lines[n++] = &text[p];
+        p = i + 1;
+    }
+    return n;
+}
 
 // Split a line into an array of tokens, replacing spaces by null characters
 // as necessary, and return the number of tokens.
@@ -81,31 +95,8 @@ int splitTokens(char *line, char *tokens[SMALL]) {
     return ntokens;
 }
 
-
-void readStateNames(char *s, scanner *sc) {
-    sc->nstates = splitTokens(s, sc->states);
-    for (int i = 0; i < sc->nstates; i++) {
-        char *state = sc->states[i];
-        if (state[0] != stateLabels[i]) crash("Error: bad table");
-        if (state[1] != '=') crash("Error: bad table");
-        sc->states[i] = sc->states[i] + 2;
-    }
-}
-
-// Check header and return rest of table.
-char *readHeader(char *data, scanner *sc) {
-    char *tokens[SMALL];
-    char *s = strstr(data, "\n");
-    if (s == NULL) crash("Error: bad table");
-    s[0] = '\0';
-    int n = splitTokens(data, tokens);
-    if (n != sc->nstates) crash("Error: bad table header");
-    for (int i = 0; i < n; i++) {
-        if (strlen(tokens[i]) != 1) crash("Error: bad table header");
-        if (tokens[i][0] != stateLabels[i]) crash("Error: bad table header");
-    }
-    return s + 1;
-}
+char *stateLabels =
+    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 // Read one row of the table.
 void readRow(int row, char *line, scanner *sc) {
@@ -117,34 +108,81 @@ void readRow(int row, char *line, scanner *sc) {
         char *s = strchr(stateLabels, tokens[i][1]);
         sc->table[i][row].target = s - stateLabels;
     }
-    if (strcmp(tokens[n-1], "default") == 0) sc->patterns[row] = "";
-    else sc->patterns[row] = tokens[n-1];
+    sc->patterns[row] = tokens[n-1];
 }
 
-// Read the rows of the table.
-void readTable(char *data, scanner *sc) {
-    int p = 0, n = 0;
-    for (int i = 0; data[i] != '\0'; i++) {
-        if (data[i] != '\n') continue;
-        data[i]= '\0';
-        readRow(n, &data[p], sc);
-        n++;
-        p = i + 1;
-    }
-    sc->npatterns = n;
-    printf("rows %d\n", n);
-}
-
-// Read the state names and then the table from table.txt.
+// Read the state names and then the table from table.txt. Fill in the starters.
+// Fill in the lookaheads and take the question mark off lookahead patterns.
 void readScanner(char *data, scanner *sc) {
-    char *s = strstr(data, "\n\n");
-    if (s == NULL) crash("Error: no blank line");
-    s[0] = '\0';
-    for (int i = 0; i < strlen(data); i++) if (data[i] == '\n') data[i] = ' ';
-    readStateNames(data, sc);
-    data = s + 2;
-    data = readHeader(data, sc);
-    readTable(data, sc);
+    char *lines[BIG];
+    int nlines = splitLines(data, lines);
+    sc->nstates = splitTokens(lines[0], sc->states);
+    sc->npatterns = nlines - 1;
+    for (int i = 0; i < sc->npatterns; i++) readRow(i, lines[i+1], sc);
+    int p = 0;
+    for (int ch = 0; ch < 128; ch++) {
+        while (p < sc->npatterns-1 && ch > sc->patterns[p][0]) p++;
+        sc->starters[ch] = p;
+    }
+    for (int p = 0; p < sc->npatterns; p++) {
+        char *s = sc->patterns[p];
+        int n = strlen(s);
+        sc->lookahead[p] = (n > 1 && s[n-1] == '?');
+        if (sc->lookahead[p]) s[n-1] = '\0';
+    }
+}
+
+// --------- Scan --------------------------------------------------------------
+
+// Check if a string starts with a pattern. Return the length or 0.
+static inline int match(char *s, char *p) {
+    int i;
+    for (i = 0; p[i] != '\0'; i++) {
+        if (s[i] != p[i]) return 0;
+    }
+    return i;
+}
+
+// Scan a line, tagging each byte in the tags array.
+void scan(char *line, char *tags, scanner *sc, bool trace) {
+    int state = 0, start, i = 0, lineLength = strlen(line);
+    while (line[i] == ' ') tags[i++] = GAP;
+    start = i;
+    while (i < lineLength || start < i) {
+        printf("i %d start %d\n", i, start);
+        int ch = line[i], action, len, target = -1, p, lookingahead = false;
+        if (ch == ' ') {
+            while (line[i] == ' ') tags[i++] = GAP;
+            lookingahead = true;
+        }
+        for (p = sc->starters[ch]; sc->patterns[p][0] == ch; p++) {
+            action = sc->table[state][p].action;
+            if (action == SKIP) continue;
+            len = match(&line[i], sc->patterns[p]);
+            if (len == 0) continue;
+            if (lookingahead && ! sc->lookahead[p]) continue;
+            if (sc->lookahead[p]) lookingahead = true;
+            target = sc->table[state][p].target;
+            break;
+        }
+        if (target < 0) {
+            p = sc->npatterns-1;
+            action = sc->table[state][p].action;
+            target = sc->table[state][p].target;
+        }
+        if (trace) {
+            printf("%d %s '%s' %c\n", i, sc->states[state], sc->patterns[p], action);
+        }
+        if (! lookingahead) {
+            for (int j = 0; j<len; j++) tags[i++] = MORE;
+        }
+        if (action != MORE) {
+            if (i > start) tags[start] = action;
+            start = i;
+            while (line[i] == ' ') tags[i++] = GAP;
+        }
+        state = target;
+    }
 }
 
 /*
@@ -199,50 +237,6 @@ void construct(scanner *sc) {
     }
 }
 
-// Check if a string starts with a pattern. Return the length or -1.
-static inline int match(char *s, char *p) {
-    int i;
-    for (i = 0; p[i] != '\0'; i++) {
-        if (s[i] != p[i]) return -1;
-    }
-    return i;
-}
-
-// Scan a line, tagging each byte in the tags array. Make a local table variable
-// of effective type entry[h][w] even though h and w are dynamic.
-void scan(char *line, char *tags, scanner *sc, bool trace) {
-    entry (*table)[sc->npatterns] = (entry(*)[sc->npatterns]) sc->table;
-    int state = 0, start = 0, i = 0;
-    while (line[i] == ' ') i++;
-    while (i < strlen(line) || start < i) {
-        int ch = line[i], action, len, target, p;
-        for (p = sc->starters[ch]; ; p++) {
-            action = table[state][p].action;
-            target = table[state][p].target;
-            if (action == Skip) continue;
-            len = match(&line[i], sc->patterns[p]);
-            if (len >= 0) break;
-        }
-        if (trace) {
-            printf(
-                "%d %s '%s' %s\n",
-                i, sc->states[state], sc->patterns[p], sc->types[action]
-            );
-        }
-        if (action == Accept) i += len;
-        else {
-            i += len;
-            if (i > start) tags[start] = sc->types[action][0];
-            start = i;
-            while (line[i] == ' ') {
-                if (i > start) tags[start] = sc->types[Char][0];
-                i++;
-                start = i;
-            }
-        }
-        state = target;
-    }
-}
 
 // Run the tests from the test file.
 int runTests(char**lines, scanner *sc, bool trace) {
@@ -268,10 +262,10 @@ int main(int n, char const *args[n]) {
     scanner *sc = malloc(sizeof(scanner));
     char *data = readFile("c/table.txt");
     readScanner(data, sc);
-
-    for (int i = 0; i < sc->nstates; i++) {
-        printf("%d %s\n", i, sc->states[i]);
-    }
+    char line[] = "abc";
+    char tags[] = "???";
+    scan(line, tags, sc, true);
+    printf("tags %s\n", tags);
     /*
     char const *lang;
     bool trace = n > 2;
