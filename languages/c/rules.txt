@@ -61,21 +61,23 @@ num e+ e- E+ E- num
 num p+ p- P+ P- num
 num start VALUE
 
-# Escape sequences: single character, hex, octal
-escape a..w y..z start ESCAPE
+# Escape sequences: single character, hex, octal.
+# The default for an escape sequence is ? but gets overridden by = if the
+# sequence is inside quotes.
+escape a..w y..z start ?
 escape x escapex
 escape 0..7 escape1
 escape start ?
 
 # Octal escape sequences: up to three digits.
 escape1 0..7 escape2
-escape1 start ESCAPE
-escape2 0..7 start ESCAPE
-escape2 start ESCAPE
+escape1 start ?
+escape2 0..7 start ?
+escape2 start ?
 
 # Hex escape sequences: any number of digits
 escapex 0..9 a..f A..F escapex
-escapex start ESCAPE
+escapex start ?
 
 # A hash is followed by a preprocessor keyword.
 hash include inclusion RESERVED
@@ -85,7 +87,7 @@ hash start RESERVED
 
 # After #include, treat <filename> as a single quoted token.
 inclusion < filename
-inclusion start =
+inclusion start
 filename > start =
 filename !..~ filename
 filename start ?

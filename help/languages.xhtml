@@ -95,23 +95,24 @@ determines the initial state of the scanner.</p>
 
 <p>When the scanner is in the base state of a rule and one of the strings in the
 list is matched, the scanner moves past the matched string in the input, and
-goes into the target state. If there is a tag representing a token type, the
-token is terminated after the matched characters and given that type. If there
-is no token type, scanning of the current token is continued.</p>
+goes into the target state. If there is a token type, the token is terminated
+after the matched characters and given that type. If there is no token type,
+scanning of the current token is continued.</p>
 
 <p>With the above rule, if the scanner is in the <code>start</code> state and
-either of the equality symbols <code>==</code> or <code>!=</code>  appears next,
+either of the equality symbols <code>==</code> or <code>!=</code> appears next,
 then the scanner moves past the symbol, gives it the token type
 <code>OP</code>, and remains in the <code>start</code> state.</p>
 
-<p>A pattern string in a rule is plain text. There are no quoting or escape
-conventions. A pattern may not contain spaces, newlines, control characters, or
-non-ASCII characters. However, non-ASCII Unicode characters are allowed in the
-text being scanned, and are treated the same as letters. This covers most common
-cases where such characters are allowed by programming languages, in comments,
-strings or identifiers. Spaces and newlines cannot be matched explicitly. A
-token is always terminated at a space or newline, and the scanner deals with any
-sequence of spaces or newlines before entering the next target state.</p>
+<p>A pattern string in a rule is plain text. There are no quoting conventions. A
+pattern must be non-empty and may not contain spaces, newlines, control
+characters, or non-ASCII characters. Although non-ASCII characters cannot be
+explicitly matched, they are accepted in the text being scanned, and are
+implicitly treated the same as letters. This covers most common cases where such
+characters are allowed by programming languages, in comments, strings or
+identifiers. Spaces and newlines cannot be matched explicitly or included in
+tokens. but are handled automatically by the scanner. A space is tagged as a gap
+between tokens, and a newline is tagged as a one-character token.</p>
 
 <p>As an abbreviation, if a pattern string consists of two characters separated
 by two dots, it represents a range of one-character strings, e.g.
@@ -125,23 +126,114 @@ digit appears next in the input, the scanner matches the digit and goes into the
 <code>number</code> state. There is no token type attached to the rule, so the
 current token is not terminated, and scanning of the token continues.</p>
 
-<p>If a pattern has a question mark attached at the end, the pattern string is
-matched, but not included in the token. (A question mark on its own is a normal
-pattern.) The rule must have a token type in this case. This provides a limited
-lookahead facility. For example:</p>
+<p>If a pattern string is prefixed by two dots, the pattern is matched, but not
+included in the token. This provides a limited lookahead facility. For
+example:</p>
 
-<pre>id (? start FUNCTION
+<pre>id ..( start FUNCTION
 </pre>
 
 <p>This rule says that if an open bracket appears next in the input text, a
-non-empty identifier at this point is terminated and marked as a function
-without including the bracket. The scanner then goes to the <code>start</code>
-state. There may be spaces between the end of the token and the open bracket.
-Thus the type of a token may be affected by the next token, but no more than
-that. To scan incrementally in the editor, when a token is altered, the editor
-needs to go back at least as far as the beginning of the previous token before
-the changed one, and find what state the scanner was in at that point, to start
-re-scanning.</p>
+non-empty token at this point is terminated and given type
+<code>FUNCTION</code> without including the bracket. The scanner then goes to
+the <code>start</code> state to deal with the bracket. There may be spaces
+between the end of the token and the open bracket.</p>
+
+<p>If a rule has no patterns, it is a default lookahead rule which indicates
+what happens if the next character is one which has not yet been handled. For
+example:</p>
+
+<pre>id start ID
+</pre>
+
+<p>This default rule ensures that if an identifier is not followed by an open
+bracket, it is given the type <code>ID</code>. The rule is similar to:</p>
+
+<pre>id ..!..~ start ID
+</pre>
+
+<p>The pattern <code>..!..~</code> is an abbreviation for a sequence of
+one-character lookahead patterns <code>..!</code> <code>.."</code> etc. This
+rule would say what happens if the token is followed by any printable character
+other than an open bracket, possibly after spaces. However, the default rule
+additionally specifies what happens if the token is followed by a newline or the
+end of the text, possibly after spaces.</p>
+
+<p>A rule with a lookahead pattern, or default rule, need not include a token
+type. For example:</p>
+
+<pre>inclusion &lt; filename
+inclusion start
+</pre>
+
+<p>These rules handle a filename in angle brackets in the special context of a
+file inclusion. The first rule matches the open angle bracket and goes to the
+<code>filename</code> state to match the rest of the filename. The default rule
+says that if anything else appears next in the input, the scanner reverts to the
+<code>start</code> state to handle it. Since a lookahead with no token type
+makes no obvious progress in the scanner, the compiler for language descriptions
+checks that the target of such a rule is a state which makes progress by
+accepting the explicit lookahead pattern or implicit one-character lookahead
+patterns in the rule.</p>
+
+<p>If two dots ever need to be matched explicitly, an extra rule can be added so
+that they are matched one by one:</p>
+
+<pre>start . dot
+dot . start SIGN
+</pre>
+
+<p>A token type may be a name starting with an upper case letter. Any names can
+be used, but only the first letter is significant, and used to determine syntax
+highlighting. Typical names might be:</p>
+
+<pre>FUNCTION ID KEY OP PROPERTY RESERVED SIGN TYPE VALUE
+</pre>
+
+<p>Alternatively, a token type may be a symbol consisting of a single printable
+but non-alphanumeric ASCII character. A symbol indicates a token type which has
+some further significance in Snipe, e.g. for bracket or delimiter matching or
+indenting, as well as syntax highlighting. The symbols and their meanings
+are:</p>
+
+<pre>(   Open level 0 bracket
+)   Close level 0 bracket
+[   Open level 1 bracket
+]   Close level 1 bracket
+{   Open level 2 bracket
+}   Close level 2 bracket
+&lt;   Open level 3 bracket
+>   Close level 3 bracket
+#   Start of one-line comment, e.g. # or //
+/   Start of multiline comment (non-nesting), e.g. /*
+\   End of multiline comment (non-nesting), e.g. */
+^   Start of multiline comment (nesting), e.g. {-
+$   End of multiline comment (nesting), e.g. -}
+*   Token inside (any kind of) comment
+'   Single quote delimiter
+"   Double quote delimiter
+@   Multiline quote delimiter, e.g. """
+=   Token inside (any kind of) quotes
+:   Label indicator (affects indenting)
+?   Invalid, incomplete, mismatched or unwise token
+</pre>
+
+<p>There are further symbols used internally by the scanner as tags for spaces,
+newlines, characters which continue a token, and bytes which continue a
+character. Examples of using symbols as token types are:</p>
+
+<pre>escape n start ?
+
+filename > start =
+</pre>
+
+<p>The <code>escape</code> state might be used to mark escape sequences such as
+<code>\\n</code> as error tokens. If an escape sequence is inside quotes, then
+later delimiter matching will override the type as <code>=</code> to indicate
+that it has been quoted. The filename rule might be used to recognise an
+inclusion filename in the C language between angle quotes as a single token and
+give it the type <code>=</code> to indicate that it should be highlighted as if
+it were a normal quoted string.</p>
 
 <p>There may be multiple rules for the same state. If a string mentioned in any
 one of the rules matches, that rule is applied. For example:</p>
@@ -150,9 +242,9 @@ one of the rules matches, that rule is applied. For example:</p>
 start a..z A..Z id
 </pre>
 
-<p>In the start state, if an equality symbol appears next in the input, it is
-marked as an operator token. If a letter appears, the scanner moves to the
-<code>id</code> state.</p>
+<p>In the <code>start</code> state, if an equality symbol appears next in the
+input, it is marked as an operator token. If a letter appears, the scanner moves
+to the <code>id</code> state.</p>
 
 <p>If two different strings match at one position in the input, the longer
 string takes precedence. For example:</p>
@@ -167,7 +259,7 @@ the first. If there is only a single equal sign, the first rule applies.</p>
 <p>If the same string is mentioned in multiple rules, the earlier rule takes
 precedence. Thus later rules act as defaults. For example:</p>
 
-<pre>filename > start VALUE
+<pre>filename > start =
 filename !..~ filename
 </pre>
 
@@ -177,26 +269,6 @@ even though the <code>></code> is also matched by the second rule. The pattern
 <code>!..~</code> in the second rule represents all printable ASCII characters,
 so if any character other than <code>></code> is matched, the token is
 continued.</p>
-
-<p>If a rule has no pattern strings at all, it matches the empty string, and so
-defines a default action to be taken if nothing else matches, or if the input
-position is at the end of the text. For example, the last rule for identifiers
-could be:</p>
-
-<pre>id start ID
-</pre>
-
-<p>A default rule like this is an implicit lookahead rule. It is roughly
-equivalent to:</p>
-
-<pre>id !..~? start ID
-</pre>
-
-<p>This says that if any printable character not already matched appears next in
-the input, the token is terminated without including it. The difference between
-this and a default rule with no patterns is that a default rule also implicitly
-applies to spaces and newlines. To scan text without failing, every state should
-have a default rule, to make sure that all situations are covered.</p>
 
 <p>Since a token is not marked until the end of the token is reached, decisions
 about which type to use can be delayed. For example, rules like these can be
@@ -214,93 +286,82 @@ id start ID
 
 <p>Suppose the keyword <code>for</code> appears next in the input. Since
 <code>for</code> is longer than the single letter <code>f</code>, the second
-rule for the <code>start</code> state applies rather than the first. Then, in
-the <code>key</code> state, if the keyword is followed by a letter or digit,
-<code>form</code> for example, the scanner goes into the <code>id</code> state
-and the token ends up being marked as an identifier. Otherwise, <code>for</code>
-is marked as a keyword.</p>
+rule for the <code>start</code> state applies rather than the first and the
+scanner goes to the <code>key</code> state which gives the token the type
+<code>KEY</code>.</p>
 
-<p>A token type may be a name starting with an upper case letter. Any names can
-be used, but only the first letter is significant. Typical names might be:</p>
+<p>Suppose instead that the identifier <code>form</code> appears next in the
+input. The prefix <code>for</code> is matched and the scanner goes into the
+<code>key</code> state. Then the <code>m</code> is matched and the scanner goes
+into the <code>id</code> state and the token ends up being given type
+<code>ID</code>.</p>
 
-<pre>ESCAPE FUNCTION ID KEY OP PROPERTY RESERVED SIGN TYPE VALUE
+<p>Every state is either a start state, which the scanner can be in between
+tokens, or a continuation state, where there is a non-empty current token. The
+compiler for language descriptions checks that each state is treated
+consistently as one or the other. The start states are the initial state, and
+any state which appears as a target in a rule which has a token type. Examples
+are:</p>
+
+<pre>start # hash KEY
+
+html &lt;% java <
+
+java %> html >
 </pre>
 
-<p>For example, <code>ESCAPE</code> might be used for any escape sequence such
-as <code>\n</code> forming a token on its own whether or not it appears inside
-quotes. The first letter of the name is used to determine syntax
-highlighting.</p>
+<p>The first rule might be used in the C language, to recognise <code>#
+include</code>. After the <code>#</code> token, <code>include</code> is a
+keyword rather than an identifier, and the <code>hash</code> state is a start
+state for recognising such keywords only in this limited context. The other two
+rules might be used in a language such as <code>JSP</code> where html text can
+contain Java code between <code>&lt;%</code> and <code>%></code> brackets. The
+<code>html</code> and <code>java</code> states are start states which recognize
+each of the sublanguages.</p>
 
-<p>Alternatively, a token type may be a symbol consisting of a single printable
-but non-alphanumeric ASCII character. A symbol indicates a token type which has
-a significance in Snipe beyond syntax highlighting. The symbols and their
-meanings are:</p>
+<p>The default behaviour for a start state, for any situation not explicitly
+handled, is to accept the next character as a one-character error token and stay
+in the same state, as if default rules were added of this form:</p>
 
-<pre>(   Open level 0 bracket
-)   Close level 0 bracket
-[   Open level 1 bracket
-]   Close level 1 bracket
-{   Open level 2 bracket
-}   Close level 2 bracket
-#   Start of one-line comment, e.g. # or //
-&lt;   Start of multiline comment delimiter (non-nesting), e.g. /*
->   End of multiline comment delimiter (non-nesting), e.g. */
-^   Start of multiline comment delimiter (nesting), e.g. {-
-$   End of multiline comment delimiter (nesting), e.g. -}
-*   Tokens inside (any kind of) comment
-'   Single quote delimiter
-"   Double quote delimiter
-@   Multiline quote delimiter, e.g. """
-=   Tokens inside (any kind of) quotes
-:   Label indicator (affects indenting)
-?   Invalid, incomplete, mismatched or unwise token
-.   Newline (delimits one-line comments or incomplete quotes)
-~   Continuation byte of Unicode character, or start of joiner
--   Continuation character of token
-_   Space
+<pre>start !..~ start ?
+start start
 </pre>
 
-<p>The last four symbols are handled automatically by the scanner, and used as
-tags for bytes other than the first byte of a token. They cannot appear
-explicitly in language description rules.</p>
+<p>The last rule ensures that if a space or newline appears next, it is handled
+automatically, and the scanner remains in the <code>start</code> state.</p>
+
+<p>The default behaviour for a continuation state <code>continue</code>, say,
+for any situation not explicitly handled, is to terminate the current token as
+an error token and go into the initial state, as if a default rule was added of
+this form:</p>
+
+<pre>continue start ?
+</pre>
 
 <p>In awkward cases, it may be necessary to choose an imperfect compromise. Take
-a file inclusion in C for example:</p>
+a file inclusion string <code>&lt;stdio.h</code> in C for example. Technically,
+the C language allows the filename string to contain spaces, but that would
+involve awkward language-dependent handling during later delimiter matching,
+since <code>&lt;</code> and <code>></code> are not uniformly treated as string
+quotes in the C language. To avoid that, the rules for the C language could
+include these:</p>
 
-<pre>#include &lt;stdio.h&gt;
-</pre>
-
-<p>In this context only, following a <code>#</code> sign, the word
-<code>include</code> is a keyword rather than an identifier, and the
-<code>&lt;</code> and <code>&gt;</code> signs act as string quotes round a file
-path rather than as comparison operators. Technically, the string can contain
-spaces, but that would involve treating the string as multiple tokens and
-handling <code>&lt;</code> and <code>&gt;</code> in some language-dependent way
-during a later delimiter matching algorithm. To avoid that, the rules for the C
-language could include these:</p>
-
-<pre>start # hash1 SIGN
-...
-
-hash1 include hash2 KEY
-...
-
-hash2 &lt; hash3
-...
-
-hash3 &gt; start =
-hash3 !..~ hash3
-hash3 start ?
-...
+<pre>filename &gt; start =
+filename !..~ filename
+filename start ?
 </pre>
 
 <p>This treats <code>&lt;stdio.h&gt;</code> as a single token, without spaces,
-tagged with <code>=</code> to indicate quoted (or <code>?</code> to indicate
-incomplete). A file path containing spaces in this context is vanishingly rare,
-and the only consequence is incorrect syntax highlighting on one line.</p>
+of type <code>=</code> to indicate quoted text, or <code>?</code> to indicate an
+incomplete token. A file path containing spaces in this context is vanishingly
+rare, and the only consequence is incorrect syntax highlighting on one line, so
+the imperfection seems acceptable.</p>
 
 <p>As well as making sure that scanning cannot fail, it is also important to
-make sure that it always makes progress, without getting stuck in a loop. To
+make sure that it always makes progress, without getting stuck in a loop.
+
+
+ To
 ensure this, the initial state should normally include a rule such as:</p>
 
 <pre>start !..~ start ?
@@ -328,6 +389,12 @@ example:</p>
 struct *point = { x, (y+1) }; int ns = [(n+2),3];
 K-----_SI----_S_{_IS_(ION)_}S_K--_I-_S_[(ION)SN]S.
 </pre>
+
+<p>Thus the type of a token may be affected by the next token, but no more than
+that. To scan incrementally in the editor, when a token is altered, the editor
+needs to go back at least as far as the beginning of the previous token before
+the changed one, and find what state the scanner was in at that point, to start
+re-scanning.</p>
 
 <h3>Scanner operation</h3>
 
