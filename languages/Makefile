@@ -5,7 +5,7 @@
 #    ./interpret x
 
 #DEBUG = -g
-DEBUG = -g -fsanitize=undefined
+DEBUG = -g -fsanitize=undefined -fsanitize=address -fsanitize=leak
 
 compile: compile.c
 	gcc -std=c11 -Wall -pedantic $(DEBUG) compile.c -o compile

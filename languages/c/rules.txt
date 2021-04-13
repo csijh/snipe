@@ -30,36 +30,40 @@ start 0..9 num
 start . dot
 start # %: hash RESERVED
 
-# Quotes, escape sequences, comments, illegal characters
+# Quotes, escape sequences, comments
 start ' start '
 start " start "
 start \ escape
 start // start #
 start /* start <
 start */ start >
-start start ?
+
+# An illegal character is a one-character error token
+start !..~ start ?
 
 # Potential keywords, if not followed by alphanumerics.
 key a..z A..Z 0..9 _ \U \u id
-key start KEY
+key.. start KEY
 
 # Identifiers
 id a..z A..Z 0..9 _ \U \u id
-id start ID
+id.. start ID
 
 # A dot starts a number, or is a sign possibly followed by a property.
 dot 0..9 num
-dot field SIGN
+dot.. field SIGN
 
 # A field is an identifier following a dot or arrow
-field a..z A..Z 0..9 _ \U \u field
-field start PROPERTY
+field a..z A..Z 0..9 _ \U \u field2
+field.. start
+field2 a..z A..Z 0..9 _ \U \u field2
+field2.. start PROPERTY
 
 # Numbers with possible exponents.
 num . 0..9 num
 num e+ e- E+ E- num
 num p+ p- P+ P- num
-num start VALUE
+num.. start VALUE
 
 # Escape sequences: single character, hex, octal.
 # The default for an escape sequence is ? but gets overridden by = if the
@@ -67,27 +71,27 @@ num start VALUE
 escape a..w y..z start ?
 escape x escapex
 escape 0..7 escape1
-escape start ?
+escape.. start ?
 
 # Octal escape sequences: up to three digits.
 escape1 0..7 escape2
-escape1 start ?
+escape1.. start ?
 escape2 0..7 start ?
-escape2 start ?
+escape2.. start ?
 
 # Hex escape sequences: any number of digits
 escapex 0..9 a..f A..F escapex
-escapex start ?
+escapex.. start ?
 
 # A hash is followed by a preprocessor keyword.
 hash include inclusion RESERVED
 hash define elif else endif error if start RESERVED
 hash ifdef ifndef line pragma undef start RESERVED
-hash start RESERVED
+hash.. start
 
 # After #include, treat <filename> as a single quoted token.
 inclusion < filename
-inclusion start
+inclusion.. start
 filename > start =
 filename !..~ filename
-filename start ?
+filename.. start ?
