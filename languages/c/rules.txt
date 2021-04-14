@@ -1,7 +1,7 @@
-# C language scanner, based on the C11 standard
-# See http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1548.pdf
+// C language scanner, based on the C11 standard
+// See http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1548.pdf
 
-# Potential keywords: go to key state to check if really identifiers
+// Potential keywords: go to key state to check if really identifiers
 start  _Alignas _Atomic _Bool _Complex _Generic _Imaginary _Noreturn    key
 start  _Static_assert _Thread_Local alignof auto bool break case char   key
 start  const continue default do double else enum extern false float    key
@@ -9,14 +9,14 @@ start  for goto if inline int long register restrict return short       key
 start  signed sizeof static struct switch true typedef union unsigned   key
 start  void volatile while                                              key
 
-# Operators and signs. An arrow may be followed by a field
+// Operators and signs. An arrow may be followed by a field
 start != ! % && &= & *= * ++ += + -- -= - /= /  start OP
 start <<= << <= < == >= >>= >> > ^= ^ |= || | ~ start OP
 start ## %:%: %= , ... = ; ?? ? start SIGN
 start : start LABEL
 start -> field SIGN
 
-# Brackets.
+// Brackets.
 start ( start (
 start ) start )
 start [ <: start [
@@ -24,13 +24,13 @@ start ] :> start ]
 start { <% start {
 start } %> start }
 
-# Identifiers, numbers, preprocessor lines
+// Identifiers, numbers, preprocessor lines
 start a..z A..Z _ \U \u id
 start 0..9 num
 start . dot
 start # %: hash RESERVED
 
-# Quotes, escape sequences, comments
+// Quotes, escape sequences, comments
 start ' start '
 start " start "
 start \ escape
@@ -38,60 +38,60 @@ start // start #
 start /* start <
 start */ start >
 
-# An illegal character is a one-character error token
+// An illegal character is a one-character error token
 start !..~ start ?
 
-# Potential keywords, if not followed by alphanumerics.
+// Potential keywords, if not followed by alphanumerics.
 key a..z A..Z 0..9 _ \U \u id
-key.. start KEY
+KEY key start
 
-# Identifiers
+// Identifiers
 id a..z A..Z 0..9 _ \U \u id
-id.. start ID
+ID id start
 
-# A dot starts a number, or is a sign possibly followed by a property.
+// A dot starts a number, or is a sign possibly followed by a property.
 dot 0..9 num
-dot.. field SIGN
+SIGN dot field
 
-# A field is an identifier following a dot or arrow
+// A field is an identifier following a dot or arrow
 field a..z A..Z 0..9 _ \U \u field2
-field.. start
+field start
 field2 a..z A..Z 0..9 _ \U \u field2
-field2.. start PROPERTY
+PROPERTY field2 start
 
-# Numbers with possible exponents.
+// Numbers with possible exponents.
 num . 0..9 num
 num e+ e- E+ E- num
 num p+ p- P+ P- num
-num.. start VALUE
+VALUE num start
 
-# Escape sequences: single character, hex, octal.
-# The default for an escape sequence is ? but gets overridden by = if the
-# sequence is inside quotes.
+// Escape sequences: single character, hex, octal.
+// The default for an escape sequence is ? but gets overridden by = if the
+// sequence is inside quotes.
 escape a..w y..z start ?
 escape x escapex
 escape 0..7 escape1
-escape.. start ?
+? escape start
 
-# Octal escape sequences: up to three digits.
+// Octal escape sequences: up to three digits.
 escape1 0..7 escape2
-escape1.. start ?
+? escape1 start
 escape2 0..7 start ?
-escape2.. start ?
+? escape2 start
 
-# Hex escape sequences: any number of digits
+// Hex escape sequences: any number of digits
 escapex 0..9 a..f A..F escapex
-escapex.. start ?
+? escapex start
 
-# A hash is followed by a preprocessor keyword.
+// A hash is followed by a preprocessor keyword.
 hash include inclusion RESERVED
 hash define elif else endif error if start RESERVED
 hash ifdef ifndef line pragma undef start RESERVED
-hash.. start
+hash start
 
-# After #include, treat <filename> as a single quoted token.
+// After #include, treat <filename> as a single quoted token.
 inclusion < filename
-inclusion.. start
+inclusion start
 filename > start =
 filename !..~ filename
-filename.. start ?
+? filename start
