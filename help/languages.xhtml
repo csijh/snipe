@@ -219,6 +219,54 @@ filename !..~ filename
 brackets as a single token, a <code>></code> character terminates the token,
 even though the <code>></code> is also matched by the second rule.</p>
 
+<p>A limited form of lookahead is provided. A lookahead rule has a token type at
+the beginning of the line, before the base state. For example:</p>
+
+<pre>FUNCTION id ( start
+</pre>
+
+<p>This rule says that, in state <code>id</code>, if an open bracket appears
+next in the input text, the current token at this point is terminated and given
+type <code>FUNCTION</code>, without including the bracket. The scanner then goes
+to the <code>start</code> state to deal with the bracket. There may be spaces
+between the current token and the bracket, so this is effectively a lookahead to
+the next token.</p>
+
+<p>A lookahead rule can be a continuation. For example:</p>
+
+<pre>- start . number
+</pre>
+
+<p>This says that in the <code>start</code> state, if a dot occurs next in the
+input, it is not immediately included in the current token. The target state
+<code>number</code> is responsible for handling the dot, and could include it in
+the token. The minus sign symbol cannot be omitted in this case, as it indicates
+a lookahead rule rather than a normal one.</p>
+
+<p>A rule may have no patterns, in which case it is a default rule to indicate
+what happens in any situation which has not yet been handled. For example:</p>
+
+<pre>id start ID
+</pre>
+
+<p>This can be thought of as matching the empty string. It can equally be
+thought of as looking ahead for the empty string, so the tag can be at either
+end of the rule:</p>
+
+<pre>ID id start
+</pre>
+
+<p>Either version of the rule ensures that if an identifier is not followed by
+anything handled in previous rules, it is given the type <code>ID</code>. The
+rule applies to all printable characters, as if explicitly written as a
+lookahead rule:</p>
+
+<pre>ID id !..~ start
+</pre>
+
+<p>However, the default rule additionally specifies what happens if the token is
+followed by optional spaces and a newline.</p>
+
 <p>Since a token is not marked until the end of the token is reached, decisions
 about which type to use can be delayed. For example, rules like these can be
 used for a language where an identifier is allowed to start with a keyword:</p>
@@ -245,49 +293,8 @@ input. The prefix <code>for</code> is matched and the scanner goes into the
 into the <code>id</code> state and the token ends up being given type
 <code>ID</code>.</p>
 
-<p>A limited form of lookahead is provided. A lookahead rule has a token type at
-the beginning of the line, before the base state. For example:</p>
-
-<pre>FUNCTION id ( start
-</pre>
-
-<p>This rule says that, in state <code>id</code>, if an open bracket appears
-next in the input text, the current token at this point is terminated and given
-type <code>FUNCTION</code>, without including the bracket. The scanner then goes
-to the <code>start</code> state to deal with the bracket. There may be spaces
-between the current token and the bracket, so this is effectively a lookahead to
-the next token.</p>
-
-<p>A lookahead rule may have no patterns, in which case it is a default rule to
-indicate what happens if the next character is one which has not yet been
-handled. For example:</p>
-
-<pre>ID id start
-</pre>
-
-<p>This default rule ensures that if an identifier is not followed by an open
-bracket, it is given the type <code>ID</code>. The rule applies to all printable
-characters, as if written explicitly as:</p>
-
-<pre>ID id !..~ start
-</pre>
-
-<p>However, the default rule additionally specifies what happens if the token is
-followed by optional spaces then a newline.</p>
-
-<p>A lookahead rule can be a continuation. For example:</p>
-
-<pre>- start . number
-</pre>
-
-<p>This says that in the <code>start</code> state, if a dot occurs next in the
-input, it is not immediately included in a token. The target state
-<code>number</code> is responsible for handling the dot. Note that the minus
-sign symbol is essential in this case. It can't be omitted, otherwise the rule
-would be a normal one, not a lookahead rule. However, for a default rule with no
-patterns, no tag is required because the rule is implicitly a lookahead rule. It
-is effectively an unconditional transfer of control to another state. For
-example:</p>
+<p>If a default rule has no tag (or has a minus sign at either end), it is
+effectively an unconditional jump to another state. For example:</p>
 
 <pre>inclusion &lt; filename
 inclusion start
@@ -299,32 +306,34 @@ file inclusion. The first rule matches the open angle bracket and goes to the
 says that if anything else appears next in the input, the scanner reverts to the
 <code>start</code> state to handle it.</p>
 
-<p>A lookahead rule with no token type involves no obvious progress, so there is
-a check that the target of such a rule is a state which makes progress by
-accepting the next character.</p>
+<p>A lookahead or default rule with no token type makes no immediate progress,
+so there is a check that in any situation where the default rule is reached, the
+target state will, eventually, accept the next character.</p>
 
 <p>Every state is either a start state, which the scanner can be in between
-tokens, or a continuation state, where there is a non-empty current token. Each
-state is checked to ensure that it is treated consistently as one or the other.
-The start states are the initial state, and any state which appears as a target
-in a rule which has a token type. Examples are:</p>
+tokens, or a continuation state, where there is a non-empty current token.
+Checks are made to ensure that each state is treated consistently as one or the
+other. The start states are the initial state, and any state which appears as a
+target in a rule which has a token type. For example:</p>
 
 <pre>start # hash KEY
+</pre>
 
-html &lt;% java &lt;
+<p>This rule might be used in the C language, to recognise
+<code>#include</code>. After the <code>#</code> token and optional spaces,
+<code>include</code> is a keyword rather than an identifier. The
+<code>hash</code> state is a start state for recognising such keywords only in
+this limited context. Another example is:</p>
+
+<pre>html &lt;% java &lt;
 
 java %> html >
 </pre>
 
-<p>The first rule might be used in the C language, to recognise <code>#
-include</code>. After the <code>#</code> token, <code>include</code> is a
-keyword rather than an identifier, and the <code>hash</code> state is a start
-state for recognising such keywords only in this limited context. The
-<code>html</code> and <code>java</code> rules might be used in a language such
-as <code>JSP</code> where html text can contain Java code between
-<code>&lt;%</code> and <code>%></code> brackets. The <code>html</code> and
-<code>java</code> states are start states which recognize each of the two
-sublanguages.</p>
+<p>These rules might be used in a language such as <code>JSP</code> where html
+text can contain Java code between <code>&lt;%</code> and <code>%></code>
+brackets. The <code>html</code> and <code>java</code> states are start states
+which recognize each of the two sublanguages.</p>
 
 <p>Inconsistency between start and continuation states can cause an error
 message. For example:</p>
@@ -333,17 +342,18 @@ message. For example:</p>
 SIGN dot a..z A..Z prop
 
 prop a..z A..Z 0..9 prop
-PROPERTY prop start
+prop start PROPERTY
 </pre>
 
-<p>The idea behind these rules is that if a dot is followed by an identifier, it
-should be highlighted differently, as a <code>PROPERTY</code>. Since the
-<code>dot</code> state has already checked the first letter, it seems fine for
-the first <code>prop</code> rule to include digits. However, these rules would
-cause an error message. That is because the <code>prop</code> state is
-determined to be a start state, because it follows the termination of a
+<p>The idea behind these rules is that if a dot is followed by an identifier,
+the identifier should be highlighted differently, as a <code>PROPERTY</code>.
+Since the <code>dot</code> state checks by lookahead for the first letter, it
+seems harmless for the first <code>prop</code> rule to include digits. However,
+these rules would cause an error message. That is because the <code>prop</code>
+state is determined to be a start state, because it follows the termination of a
 <code>SIGN</code> token in the second <code>dot</code> rule. On the other hand,
-it appears to be a continuation state, because it terminates a
+it appears to be a continuation state, both because it is the target of its
+first rule, a continuation rule, and because it terminates a
 <code>PROPERTY</code> token in its second rule. This can be corrected by
 writing:</p>
 
@@ -351,16 +361,15 @@ writing:</p>
 SIGN dot a..z A..Z prop
 
 prop a..z A..Z prop2
-- prop start
+prop start
 
 prop2 a..z A..Z 0..9 prop2
-PROPERTY prop2 start
+prop2 start PROPERTY
 </pre>
 
-<p>Now, <code>prop</code> is a start state which transfers to the
-<code>start</code> state without terminating a token if it doesn't match a
-letter, and <code>prop2</code> is a continuation state which recognizes the rest
-of the token.</p>
+<p>Now, <code>prop</code> is a start state which matches only the first letter,
+and <code>prop2</code> is a continuation state which recognizes the rest of the
+token.</p>
 
 <p>The default behaviour for a start state, for any situation not explicitly
 handled, is to accept the next character as a one-character error token and stay
@@ -375,7 +384,7 @@ tagging them suitably, though this can't be expressed explicitly.</p>
 <p>The default behaviour for a continuation state <code>s</code>, say,
 for any situation not explicitly handled, is to terminate the current token as
 an error token and go into the initial state, as if a default rule was added of
-this form:</p>
+the form:</p>
 
 <pre>? s start
 </pre>

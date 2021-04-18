@@ -1,4 +1,4 @@
-// C language scanner, based on the C11 standard
+// C language definition, based on the C11 standard
 // See http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1548.pdf
 
 // Potential keywords: go to key state to check if really identifiers

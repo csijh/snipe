@@ -12,30 +12,31 @@
 
 // BIG is the limit on array sizes. It can be increased as necessary.
 // SMALL is the limit on arrays indexed by unsigned bytes.
-enum { BIG = 500, SMALL = 256 };
+enum { BIG = 1000, SMALL = 256 };
 
-// In the transition table, an action is a tag which represents a token type, or
-// SKIP to miss out that table entry or MORE to add to the current token. Each
-// byte of text read in is labelled with a tag which represents the token type,
-// or SKIP for a continuation byte of the current character (or grapheme) or
-// MORE for a continuation character of the current token. Spaces are tagged
-// with GAP, and newlines with NEWLINE.
-typedef unsigned char byte;
-struct entry { byte action, target; };
-typedef struct entry entry;
+// The state machine transition table contains actions consisting of a tag and
+// state index, each of one byte.
+// typedef unsigned char byte;
+struct action { unsigned char tag, target; };
+typedef struct action action;
+
+// A tag represents a token type, or SKIP to miss out that table entry or MORE
+// to add to the current token. Each byte of text read in is labelled with a tag
+// which represents the token type, or SKIP for a continuation byte of the
+// current character (or grapheme) or MORE for a continuation character of the
+// current token. Spaces are tagged with GAP, and newlines with NEWLINE.
 enum { SKIP = '~', MORE = '-', GAP = '_', NEWLINE = '.' };
 
-// A scanner consists of a table[nstates][npatterns], an array of state names,
-// and an array of pattern strings. The starters array gives the first pattern
-// starting with each character. The lookahead array says whether a pattern is a
-// lookahead pattern or not.
+// A scanner consists of the raw actions, a table which indexes the actions as
+// table[state][pattern], an array of state names, an array of pattern strings,
+// and an array of start positions in the patterns array for each character
+// which might appear next in the input.
 struct scanner {
-    short nstates, npatterns;
-    entry table[SMALL][BIG];
+    action actions[SMALL*BIG];
+    action *table[SMALL];
     char *states[SMALL];
     char *patterns[BIG];
     short starters[128];
-    char lookahead[BIG];
 };
 typedef struct scanner scanner;
 
@@ -44,6 +45,8 @@ void crash(char *s) {
     fprintf(stderr, "%s\n", s);
     exit(1);
 }
+
+// ---------- Read in data -----------------------------------------------------
 
 // Read in a text file. Use binary mode, so that the number of bytes read
 // equals the file size.
@@ -61,8 +64,6 @@ char *readFile(char *path) {
     fclose(file);
     return data;
 }
-
-// ---------- Read in table ----------------------------------------------------
 
 // Split the text into an array of lines. Return the number of lines.
 int splitLines(char *text, char *lines[]) {
@@ -95,9 +96,7 @@ int splitTokens(char *line, char *tokens[SMALL]) {
     return ntokens;
 }
 
-char *stateLabels =
-    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-
+/*
 // Read one row of the table.
 void readRow(int row, char *line, scanner *sc) {
     char *tokens[SMALL];
@@ -110,13 +109,15 @@ void readRow(int row, char *line, scanner *sc) {
     }
     sc->patterns[row] = tokens[n-1];
 }
-
+*/
 // Read the state names and then the table from table.txt. Fill in the starters.
 // Fill in the lookaheads and take the question mark off lookahead patterns.
 void readScanner(char *data, scanner *sc) {
     char *lines[BIG];
     int nlines = splitLines(data, lines);
-    sc->nstates = splitTokens(lines[0], sc->states);
+    int nstates = splitTokens(lines[0], sc->states);
+    printf("read %d %d\n", nstates, nlines);
+    /*
     sc->npatterns = nlines - 1;
     for (int i = 0; i < sc->npatterns; i++) readRow(i, lines[i+1], sc);
     int p = 0;
@@ -130,10 +131,12 @@ void readScanner(char *data, scanner *sc) {
         sc->lookahead[p] = (n > 1 && s[n-1] == '?');
         if (sc->lookahead[p]) s[n-1] = '\0';
     }
+    */
 }
 
 // --------- Scan --------------------------------------------------------------
 
+/*
 // Check if a string starts with a pattern. Return the length or 0.
 static inline int match(char *s, char *p) {
     int i;
@@ -184,7 +187,7 @@ void scan(char *line, char *tags, scanner *sc, bool trace) {
         state = target;
     }
 }
-
+*/
 /*
 // Split the text of a test file into an array of lines, replacing each newline
 // by a null. Skip blank lines.
@@ -264,7 +267,7 @@ int main(int n, char const *args[n]) {
     readScanner(data, sc);
     char line[] = "abc";
     char tags[] = "???";
-    scan(line, tags, sc, true);
+//    scan(line, tags, sc, true);
     printf("tags %s\n", tags);
     /*
     char const *lang;
