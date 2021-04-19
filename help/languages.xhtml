@@ -234,14 +234,14 @@ the next token.</p>
 
 <p>A lookahead rule can be a continuation. For example:</p>
 
-<pre>- start . number
+<pre>- start . start2
 </pre>
 
 <p>This says that in the <code>start</code> state, if a dot occurs next in the
 input, it is not immediately included in the current token. The target state
-<code>number</code> is responsible for handling the dot, and could include it in
-the token. The minus sign symbol cannot be omitted in this case, as it indicates
-a lookahead rule rather than a normal one.</p>
+<code>start2</code> is responsible for handling the dot. The minus sign symbol
+cannot be omitted in this case, as it indicates a lookahead rule rather than a
+normal one.</p>
 
 <p>A rule may have no patterns, in which case it is a default rule to indicate
 what happens in any situation which has not yet been handled. For example:</p>

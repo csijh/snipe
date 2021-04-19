@@ -22,8 +22,8 @@
 // target. Lookahead is handled by differentiating between normal patterns and
 // lookahead patterns. The states are sorted with start states first, and the
 // number of start states is limited to 32 so they can be cached by the scanner
-// (in the tag bytes for spaces). The total number of states is limited to 256
-// so a state index can be held in one byte. The patterns are sorted, with
+// (in the tag bytes for spaces). The total number of states is limited to 128
+// so a state index can be held in a char. The patterns are sorted, with
 // longer ones before shorter ones, and normal patterns before lookahead
 // patterns, so the next character in the text can be used to find the range of
 // patterns to check. Each entry has a tag as an action, and a target state. The
@@ -40,9 +40,10 @@
 #include <ctype.h>
 #include <assert.h>
 
-// LIST is the fixed capacity of a list of pointers, including a terminating
-// NULL. NAME is the capacity of a state name or pattern string or tag name.
-enum { LIST = 1000, NAME = 100 };
+// BIG is the fixed capacity of a list of pointers, including a terminating
+// NULL. Increase as necessary. SMALL is the capacity of a state name or pattern
+// string or tag name.
+enum { BIG = 1000, SMALL = 128 };
 
 // These are the tag symbols currently accepted in descriptions.
 char const symbols[] = "()[]{}<>#/\\^$*'\"@=:?-";
@@ -67,7 +68,7 @@ typedef struct action action;
 // A pattern has a name and a lookahead flag. Normal patterns and lookahead
 // patterns are considered to be different. An index is added after sorting.
 struct pattern {
-    char name[NAME];
+    char name[SMALL];
     bool looks;
     int index;
 };
@@ -80,12 +81,12 @@ typedef struct pattern pattern;
 // actions for the state are added after that. The visiting and visited flags
 // are used during progress checking.
 struct state {
-    char name[NAME];
+    char name[SMALL];
     bool starts;
     int proof;
-    struct rule *rules[LIST];
+    struct rule *rules[BIG];
     int index;
-    action actions[LIST];
+    action actions[BIG];
     bool visiting, visited;
 };
 typedef struct state state;
@@ -96,7 +97,7 @@ typedef struct state state;
 struct rule {
     int row;
     state *base, *target;
-    pattern *patterns[LIST];
+    pattern *patterns[BIG];
     char tag;
     bool looks, defaults;
 };
@@ -104,9 +105,9 @@ typedef struct rule rule;
 
 // A language description has lists of rules, states and patterns.
 struct language {
-    rule *rules[LIST];
-    state *states[LIST];
-    pattern *patterns[LIST];
+    rule *rules[BIG];
+    state *states[BIG];
+    pattern *patterns[BIG];
 };
 typedef struct language language;
 
@@ -129,7 +130,7 @@ void addPattern(pattern *list[], pattern *p) {
     int n = 0;
     while (list[n] != NULL) n++;
     list[n++] = p;
-    if (n >= LIST) crash("Too many patterns", 0, "");
+    if (n >= BIG) crash("Too many patterns", 0, "");
     list[n] = NULL;
 }
 
@@ -137,7 +138,7 @@ void addState(state *list[], state *s) {
     int n = 0;
     while (list[n] != NULL) n++;
     list[n++] =s;
-    if (n >= LIST) crash("Too many states", 0, "");
+    if (n >= BIG) crash("Too many states", 0, "");
     list[n] = NULL;
 }
 
@@ -145,7 +146,7 @@ void addRule(rule *list[], rule *r) {
     int n = 0;
     while (list[n] != NULL) n++;
     list[n++] = r;
-    if (n >= LIST) crash("Too many rules", 0, "");
+    if (n >= BIG) crash("Too many rules", 0, "");
     list[n] = NULL;
 }
 
@@ -153,7 +154,7 @@ void addString(char *list[], char *s) {
     int n = 0;
     while (list[n] != NULL) n++;
     list[n++] = s;
-    if (n >= LIST) crash("Too many strings", 0, "");
+    if (n >= BIG) crash("Too many strings", 0, "");
     list[n] = NULL;
 }
 
@@ -193,6 +194,7 @@ pattern *findPattern(language *lang, char *name, bool looks) {
     }
     pattern *p = malloc(sizeof(pattern));
     addPattern(lang->patterns, p);
+    if (strlen(name) >= SMALL) crash("name too long", 0, name);
     strcpy(p->name, name);
     p->looks = looks;
     return p;
@@ -212,6 +214,7 @@ state *findState(language *lang, char *name) {
     }
     state *s = malloc(sizeof(state));
     addState(lang->states, s);
+    if (strlen(name) >= SMALL) crash("name too long", 0, name);
     strcpy(s->name, name);
     s->proof = 0;
     s->rules[0] = NULL;
@@ -364,7 +367,7 @@ void splitTokens(language *lang, int row, char *line, char *tokens[]) {
 
 // Convert the list of lines into rules.
 void readRules(language *lang, char *lines[]) {
-    char **tokens = malloc(LIST * sizeof(char *));
+    char **tokens = malloc(BIG * sizeof(char *));
     tokens[0] = NULL;
     for (int i = 0; lines[i] != NULL; i++) {
         char *line = lines[i];
@@ -377,7 +380,7 @@ void readRules(language *lang, char *lines[]) {
 
 // Read a language description from text.
 language *readLanguage(char *text) {
-    char **lines = malloc(LIST * sizeof(char *));
+    char **lines = malloc(BIG * sizeof(char *));
     lines[0] = NULL;
     splitLines(text, lines);
     language *lang = newLanguage();
@@ -424,14 +427,22 @@ void findStartStates(language *lang) {
     s0->proof = lang->rules[0]->row;
     for (int i = 0; lang->rules[i] != NULL; i++) {
         rule *r = lang->rules[i];
-        if (r->tag != MORE) {
-            setStart(r->target, true, r->row);
-        }
-        if (! r->looks && r->tag == MORE) {
-            setStart(r->target, false, r->row);
-        }
-        if (r->looks && r->tag != MORE) {
-            setStart(r->base, false, r->row);
+        if (r->tag != MORE) setStart(r->target, true, r->row);
+        if (! r->looks && r->tag == MORE) setStart(r->target, false, r->row);
+        if (r->looks && r->tag != MORE) setStart(r->base, false, r->row);
+    }
+}
+
+// Check that an explicit lookahead rule in a continuation state has a token
+// type (because there may be a space which must terminate the current token.)
+void checkLookaheads(language *lang) {
+    for (int i = 0; lang->rules[i] != NULL; i++) {
+        rule *r = lang->rules[i];
+        if (! r->base->starts && r->looks && ! r->defaults && r->tag == MORE) {
+            fprintf(stderr, "Error in rule on line %d\n", r->row);
+            fprintf(stderr, "an explicit default rule in a ");
+            fprintf(stderr, "continuation state must end the current token\n");
+            exit(1);
         }
     }
 }
@@ -444,10 +455,18 @@ void checkTransfers(language *lang) {
         if (! (r->looks || r->defaults) || r->tag != MORE) continue;
         if (r->base->starts == r->target->starts) continue;
         fprintf(stderr, "Error in rule on line %d\n", r->row);
-        fprintf(stderr, "%s is a ", r->base->name);
-        if (r->base->starts) fprintf(stderr, "start");
-        else fprintf(stderr, "continuation");
-        fprintf(stderr, " state but %s isn't\n", r->target->name);
+        if (r->base->starts) {
+            fprintf(stderr, "%s is a start state ", r->base->name);
+            fprintf(stderr, "(line %d)\n", r->base->proof);
+            fprintf(stderr, "but %s is a continuation state ", r->target->name);
+            fprintf(stderr, "(line %d)\n", r->target->proof);
+        }
+        else {
+            fprintf(stderr, "%s is a continuation state ", r->base->name);
+            fprintf(stderr, "(line %d)\n", r->base->proof);
+            fprintf(stderr, "but %s is a start state ", r->target->name);
+            fprintf(stderr, "(line %d)\n", r->target->proof);
+        }
         exit(1);
     }
 }
@@ -468,7 +487,7 @@ void checkAccessible(language *lang) {
 // ----- Sorting --------------------------------------------------------------
 
 // Sort the states so that the start states come before the continuation states.
-// Limit the number of start states to 32, and the total number to 256. Add
+// Limit the number of start states to 32, and the total number to 128. Add
 // indexes.
 void sortStates(state *states[]) {
     for (int i = 1; states[i] != NULL; i++) {
@@ -484,7 +503,7 @@ void sortStates(state *states[]) {
     for (int i = 0; states[i] != NULL; i++) {
         state *s = states[i];
         if (s->starts && i >= 32) crash("more than 32 start states", 0, "");
-        if (i >= 256) crash("more than 256 states", 0, "");
+        if (i >= 128) crash("more than 128 states", 0, "");
         s->index = i;
     }
 }
@@ -670,6 +689,8 @@ language *buildLanguage(char *text) {
     language *lang = readLanguage(text);
     checkDefined(lang);
     findStartStates(lang);
+    checkLookaheads(lang);
+    checkTransfers(lang);
     checkAccessible(lang);
     sortStates(lang->states);
     sortPatterns(lang->patterns);
@@ -711,6 +732,33 @@ void writeTable(language *lang, char const *path) {
         if (p->name[0] == '\n') fprintf(fp, "nl\n");
         else if (p->name[0] == ' ') fprintf(fp, "sp\n");
         else fprintf(fp, "%s\n", p->name);
+    }
+    fclose(fp);
+}
+
+// Write out a binary file containing the names of the states, each name being a
+// string preceded by a length byte, then a zero byte, then the pattern strings,
+// each preceded by a length byte with the top bit set for a lookahead pattern,
+// then a zero byte, then the array of actions for each state.
+void writeTable2(language *lang, char const *path) {
+    FILE *fp = fopen(path, "wb");
+    for (int i = 0; lang->states[i] != NULL; i++) {
+        state *s = lang->states[i];
+        int n = strlen(s->name);
+        fprintf(fp, "%c%s%c", n, s->name, 0);
+    }
+    fprintf(fp, "%c", 0);
+    for (int i = 0; lang->patterns[i] != NULL; i++) {
+        pattern *p = lang->patterns[i];
+        int n = strlen(p->name);
+        if (p->looks) n = n | 0x80;
+        fprintf(fp, "%c%s%c", n, p->name, 0);
+    }
+    fprintf(fp, "%c", 0);
+    int np = countPatterns(lang->patterns);
+    for (int i = 0; lang->states[i] != NULL; i++) {
+        state *s = lang->states[i];
+        fwrite(s->actions, 2, np, fp);
     }
     fclose(fp);
 }
@@ -842,19 +890,14 @@ char *eg7[] = {
     "ID id ; start", NULL
 };
 
-// A lookahead rule can be a continuation.
+// A lookahead rule can be a continuation. It is a jump to another state.
 char *eg8[] = {
-    "- start . number\n"
-    "number . number\n"
-    "number 0..9 number\n"
-    "NUM number start\n",
+    "start a start ID\n"
+    "- start . start2\n"
+    "start2 . start2 DOT\n"
+    "start2 start\n",
     //-------------------
-    "- start . number",
-    "number . number -",
-    "number 0 number -",
-    "number 5 number -",
-    "number 9 number -",
-    "NUM number ; start", NULL
+    "- start . start2", NULL
 };
 
 // Identifier may start with keyword. A default rule ("matching the empty
@@ -875,14 +918,14 @@ char *eg9[] = {
 
 // A default rule with no tag is an unconditional jump.
 char *eg10[] = {
-    "start #include inclusion\n"
+    "start #include inclusion KEY\n"
     "inclusion < filename\n"
     "inclusion start\n"
     "filename > start QUOTED\n"
     "filename !..~ filename\n"
     "filename start ?\n",
     //--------------
-    "start #include inclusion -",
+    "start #include inclusion K",
     "inclusion < filename -",
     "- inclusion ! start",
     "- inclusion x start",
@@ -951,8 +994,28 @@ char *eg14[] = {
     "dot 0 start N", NULL
 };
 
+// CAUSES ERROR. An explicit lookahead rule in a continuation state must end the
+// current token.
+char *eg15[] = {
+    "start a id\n"
+    "- id ( id2\n"
+    "id2 a id2\n"
+    "id2 start ID\n",
+    //----------------------
+    "- id ( id2", NULL
+};
 
-// Run all the tests.
+// CAUSES ERROR. An explicit lookahead rule in a start state must not end the
+// current token.
+char *eg16[] = {
+    "DOT start . start2\n"
+    "start2 start\n",
+    //----------------------
+    "DOT start . start2", NULL
+};
+
+// Run all the tests. Keep the last few commented out during normal operation
+// because they test error messages.
 void runTests() {
     runExample("eg1", eg1);
     runExample("eg2", eg2);
@@ -968,6 +1031,8 @@ void runTests() {
     runExample("eg12", eg12);
 //    runExample("eg13", eg13);
 //    runExample("eg14", eg14);
+//    runExample("eg15", eg15);
+//    runExample("eg16", eg16);
 }
 
 int main(int n, char const *args[n]) {
@@ -979,6 +1044,8 @@ int main(int n, char const *args[n]) {
     language *lang = buildLanguage(text);
     sprintf(path, "%s/table.txt", args[1]);
     writeTable(lang, path);
+    sprintf(path, "%s/table.bin", args[1]);
+    writeTable2(lang, path);
     freeLanguage(lang);
     free(text);
     return 0;
