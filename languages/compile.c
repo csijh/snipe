@@ -1,36 +1,45 @@
+// TODO sort out lookahead past spaces (state')
+// TODO override only if normal AND lookahead not set.
+// TODO three-way rule type.
+// TODO go back to a flag in the tag to say lookahead action.
+// TODO wait until action generation to expand ranges?
+// BUT how express as a pattern? Left with spare patterns?
+// SORT -> put ranges last and then ignore.
+
 // Snipe language compiler. Free and open source. See licence.txt.
-// TODO consider binary again.
-// TODO sort out lookahead past spaces.
 
-// Compile a language description in .../rules.txt into a scanner table in
-// .../table.txt. The program interpret.c can be used to test the table. A rule
-// has a base state, patterns, a target state, and an optional tag at the
-// beginning or end. A pattern may be a range such as 0..9 of single characters.
-// A tag at the beginning of a rule indicates a lookahead rule, and a lack of
-// patterns indicates a default lookahead rule.
+// Type  ./compile x  to compile a description of language x in x/rules.txt into
+// a scanner table in x/table.bin. The program interpret.c can be used to test
+// the table. A rule has a base state, patterns, a target state, and an optional
+// tag at the beginning or end. A pattern may be a range such as 0..9
+// representing many single-character patterns. A tag at the beginning of a rule
+// indicates a lookahead rule, and a lack of patterns indicates a default rule.
 
-// Each state must consistently be either a start state between tokens, or a
-// continuation state within tokens. The default for a start state is to accept
-// and suitably tag a space or newline, or to accept any other single character
-// as an error token, and stay in the same state. The default for a continuation
-// state is to terminate the current token as an error token and go to the
-// initial state. If a lookahead rule has no tag, its target state must accept
-// at least one character in any situation where the lookahead rule applies, to
-// ensure progress.
+// Each state must consistently be either a starting state between tokens, or a
+// continuing state within tokens. A default rule is treated as a lookahead for
+// any single-character patterns not already covered, so that the state machine
+// operation is uniformly driven by the next input character. The implicit
+// default, if there is no explicit one, for a starting state is to accept and
+// suitably tag a space or newline, or to accept any other single character as
+// an error token, and stay in the same state. The implicit default for a
+// continuing state is to terminate the current token as an error token and go
+// to the initial state. There is a search for cycles which make no progress.
 
 // The resulting table has an entry for each state and pattern, with a tag and a
-// target. Lookahead is handled by differentiating between normal patterns and
-// lookahead patterns. The states are sorted with start states first, and the
-// number of start states is limited to 32 so they can be cached by the scanner
-// (in the tag bytes for spaces). The total number of states is limited to 128
-// so a state index can be held in a char. The patterns are sorted, with
-// longer ones before shorter ones, and normal patterns before lookahead
-// patterns, so the next character in the text can be used to find the range of
-// patterns to check. Each entry has a tag as an action, and a target state. The
-// actions give a token type to the first character of a token, or indicate
-// skipping the table entry, or looking ahead past spaces, or classify a text
-// byte as a continuation byte of a character, a continuation character of a
-// token, a space, or a newline.
+// target. The tag is a token type to label and terminate the current token, or
+// indicates continuing the token, skipping the table entry, or classifying a
+// text byte as a continuing byte of a character or a continuing character
+// of a token or a space or a newline. The tag has its top bit set to indicate
+// lookahead behaviour rather than normal matching behaviour.
+
+// The states are sorted with starting states first, and the number of starting
+// states is limited to 32 so they can be cached by the scanner (in the tag
+// bytes for spaces). The total number of states is limited to 128 so a state
+// index can be held in a char. The patterns are sorted, with longer ones before
+// shorter ones. The next character in the input is used to find the first
+// pattern starting with that character. The patterns are searched linearly,
+// skipping the ones where the table entry has SKIP, to find the first match.
+// The defaults ensure that the search always succeeds.
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -48,41 +57,41 @@ enum { BIG = 1000, SMALL = 128 };
 // These are the tag symbols currently accepted in descriptions.
 char const symbols[] = "()[]{}<>#/\\^$*'\"@=:?-";
 
-// A tag is an upper case letter or one of the above symbols, which include MORE
+// A tag is an upper case name or one of the above symbols, which include MORE
 // to indicate continuing the current token and BAD to indicate an error token.
 // A tag can also be SKIP to mean ignore a table entry as not relevant to the
 // current state (also used later in the scanner to tag bytes which continue a
 // character), or GAP to tag a space as a gap between tokens or NEWLINE to tag a
 // newline as a token.
-enum { MORE = '-', BAD = '?', SKIP = '~', GAP = '_', NEWLINE = '.'};
+enum tag { MORE = '-', BAD = '?', SKIP = '~', GAP = '_', NEWLINE = '.'};
+
+// A rule is a matching rule, a lookahead rule (tag on left), or a default rule
+// (no patterns).
+enum type { MATCHING, LOOKAHEAD, DEFAULT };
 
 // --------- Structures --------------------------------------------------------
 
 // An action contains a tag and a target state, each stored in one byte.
 struct action {
-    char tag;
-    unsigned char target;
+    unsigned char tag, target;
 };
 typedef struct action action;
 
-// A pattern has a name and a lookahead flag. Normal patterns and lookahead
-// patterns are considered to be different. An index is added after sorting.
+// A pattern is a string, with an index added after sorting. Also used for tags.
 struct pattern {
     char name[SMALL];
-    bool looks;
     int index;
 };
 typedef struct pattern pattern;
 
-// A state has a name, a flag to indicate whether it is a start state or a
-// continuation state, and a proof (i.e. the line number of the rule where the
-// flag was established, or 0 if the flag hasn't been established yet). The
-// rules which define the state are listed. An index is added after sorting. The
-// actions for the state are added after that. The visiting and visited flags
-// are used during progress checking.
+// A state has a name, a flag to indicate whether it is a starting state or a
+// continuing state, and a proof (i.e. the line number of the rule where the
+// flag was set, or 0 if the flag hasn't been set yet). The rules which define
+// the state are listed. Later, an index is assigned, actions are added, and the
+// visiting and visited flags are used.
 struct state {
     char name[SMALL];
-    bool starts;
+    bool starting;
     int proof;
     struct rule *rules[BIG];
     int index;
@@ -92,26 +101,33 @@ struct state {
 typedef struct state state;
 
 // A rule has a row (line number), a base state, patterns, a target state, and a
-// tag. The default for a missing tag is MORE. There are flags to indicate if it
-// is a lookahead rule (tag at start) or a default rule (no patterns).
+// tag. The default for a missing tag is MORE. The type indicates if the rule is
+// a lookahead (tag at start) or a default (no patterns). The ending flag says
+// if the rule ends a token (the tag is a token type) or extends the token (tag
+// MORE).
 struct rule {
     int row;
     state *base, *target;
     pattern *patterns[BIG];
-    char tag;
-    bool looks, defaults;
+    pattern *tag;
+    int type;
+    bool ending;
 };
 typedef struct rule rule;
 
-// A language description has lists of rules, states and patterns.
+// A language description has lists of rules, states, patterns and tags, and a
+// few named tags.
 struct language {
     rule *rules[BIG];
     state *states[BIG];
     pattern *patterns[BIG];
+    pattern *tags[BIG];
+    pattern *more, *bad, *skip, *gap, *newline;
 };
 typedef struct language language;
 
 // ----- Lists -----------------------------------------------------------------
+// It would be nice to have generic functions, but in C that is too ugly.
 
 // Crash with an error message and possibly a line number or string.
 void crash(char *e, int row, char const *s) {
@@ -124,38 +140,41 @@ void crash(char *e, int row, char const *s) {
 }
 
 // Add an item to a list. Lists are NULL-terminated, to make them easy to
-// initialize, and to iterate through without needing the length. (It would be
-// nice to have generic functions, but in C the result is too ugly).
-void addPattern(pattern *list[], pattern *p) {
+// initialize, and to iterate through without needing the length.
+int addPattern(pattern *list[], pattern *p) {
     int n = 0;
     while (list[n] != NULL) n++;
-    list[n++] = p;
-    if (n >= BIG) crash("Too many patterns", 0, "");
-    list[n] = NULL;
+    list[n] = p;
+    if (n+1 >= BIG) crash("Too many patterns", 0, "");
+    list[n+1] = NULL;
+    return n;
 }
 
-void addState(state *list[], state *s) {
+int addState(state *list[], state *s) {
     int n = 0;
     while (list[n] != NULL) n++;
-    list[n++] =s;
-    if (n >= BIG) crash("Too many states", 0, "");
-    list[n] = NULL;
+    list[n] =s;
+    if (n+1 >= BIG) crash("Too many states", 0, "");
+    list[n+1] = NULL;
+    return n;
 }
 
-void addRule(rule *list[], rule *r) {
+int addRule(rule *list[], rule *r) {
     int n = 0;
     while (list[n] != NULL) n++;
-    list[n++] = r;
-    if (n >= BIG) crash("Too many rules", 0, "");
-    list[n] = NULL;
+    list[n] = r;
+    if (n+1 >= BIG) crash("Too many rules", 0, "");
+    list[n+1] = NULL;
+    return n;
 }
 
-void addString(char *list[], char *s) {
+int addString(char *list[], char *s) {
     int n = 0;
     while (list[n] != NULL) n++;
-    list[n++] = s;
-    if (n >= BIG) crash("Too many strings", 0, "");
-    list[n] = NULL;
+    list[n] = s;
+    if (n+1 >= BIG) crash("Too many strings", 0, "");
+    list[n+1] = NULL;
+    return n;
 }
 
 // Find the length of a list.
@@ -185,26 +204,24 @@ int countStrings(char *list[]) {
 
 // ----- Construction ----------------------------------------------------------
 
-// Find a pattern by name and lookahead flag, or create a new one.
-pattern *findPattern(language *lang, char *name, bool looks) {
+// Find a pattern, or create a new one. Also used for tags.
+pattern *findPattern(language *lang, char *name) {
     for (int i = 0; lang->patterns[i] != NULL; i++) {
         pattern *p = lang->patterns[i];
-        if (strcmp(name,p->name) != 0) continue;
-        if (p->looks == looks) return p;
+        if (strcmp(name, p->name) == 0) return p;
     }
     pattern *p = malloc(sizeof(pattern));
     addPattern(lang->patterns, p);
     if (strlen(name) >= SMALL) crash("name too long", 0, name);
     strcpy(p->name, name);
-    p->looks = looks;
     return p;
 }
 
 // Find a one-character pattern, or create a new one.
-pattern *findPattern1(language *lang, char ch, bool looks) {
+pattern *findPattern1(language *lang, char ch) {
     char name[2] = "x";
     name[0] = ch;
-    return findPattern(lang, name, looks);
+    return findPattern(lang, name);
 }
 
 // Find a state by name, or create a new one.
@@ -221,29 +238,36 @@ state *findState(language *lang, char *name) {
     return s;
 }
 
-// Find a tag character from a rule's token type.
-char findTag(int row, char *name) {
-    if ('A' <= name[0] && name[0] <= 'Z') return name[0];
-    if (strlen(name) != 1) crash("bad token type", row, name);
+// Find a tag, returning its index. Report an error if two alphabetic names have
+// the same first letter, or if a symbol is not one of the allowed ones.
+pattern *findTag(language *lang, int row, char *name) {
+    for (int i = 0; lang->tags[i] != NULL; i++) {
+        pattern *p = lang->tags[i];
+        if (p->name[0] != name[0]) continue;
+        if (strcmp(p->name, name) == 0) return p;
+        char tags[SMALL*2];
+        sprintf(tags, "%s %s", name, p->name);
+        crash("tags disagree in first letter", row, tags);
+    }
+    pattern *tag = malloc(sizeof(pattern));
+    addPattern(lang->tags, tag);
+    if ('A' <= name[0] && name[0] <= 'Z') return tag;
+    if (strlen(name) > 1) crash("tag is more than one symbol", row, name);
     if (strchr(symbols, name[0]) == NULL) crash("bad token type", row, name);
-    return name[0];
+    return tag;
 }
 
-// Check whether a pattern string is a range of characters.
-bool isRange(char *s) {
-    return strlen(s) == 4 && s[1] == '.' && s[2] == '.';
+// Find a one-character tag.
+pattern *findTag1(language *lang, int row, char ch) {
+    char name[] = "x";
+    name[0] = ch;
+    return findTag(lang, row, name);
 }
 
-// Add a token as a pattern for a rule, or a range x..y as multiple patterns.
+// Add a pattern to a rule.
 void readPattern(language *lang, rule *r, char *token) {
-    if (! isRange(token)) {
-        pattern *p = findPattern(lang, token, r->looks);
-        addPattern(r->patterns, p);
-    }
-    else for (int ch = token[0]; ch <= token[3]; ch++) {
-        pattern *p = findPattern1(lang, ch, r->looks);
-        addPattern(r->patterns, p);
-    }
+    pattern *p = findPattern(lang, token);
+    addPattern(r->patterns, p);
 }
 
 // Read a rule, if any, from the tokens on a given line.
@@ -253,22 +277,24 @@ void readRule(language *lang, int row, char *tokens[]) {
     rule *r = malloc(sizeof(rule));
     addRule(lang->rules, r);
     r->row = row;
-    r->looks = r->defaults = false;
-    r->tag = GAP;
+    r->type = MATCHING;
+    r->tag = NULL;
     int first = 0, last = countStrings(tokens) - 1;
     if (first >= last) crash("rule too short", row, "");
     if (! islower(tokens[first][0])) {
-        r->tag = findTag(row, tokens[first]);
-        r->looks = true;
+        r->tag = findTag(lang, row, tokens[first]);
+        r->type = LOOKAHEAD;
         first++;
     }
     if (! islower(tokens[last][0])) {
-        if (r->tag != GAP) crash("rule has a tag first and last", row, "");
-        r->tag = findTag(row, tokens[last]);
+        if (r->tag != NULL) crash("rule has a tag first and last", row, "");
+        r->tag = findTag(lang, row, tokens[last]);
         last--;
     }
-    if (r->tag == GAP) r->tag = MORE;
-    if (last == first + 1) r->looks = r->defaults = true;
+    if (r->tag == NULL) r->tag = lang->more;
+    r->ending = true;
+    if (r->tag == lang->more) r->ending = false;
+    if (last == first + 1) r->type = DEFAULT;
     char *s = tokens[first];
     if (! islower(s[0])) crash("expecting state name", row, s);
     r->base = findState(lang, tokens[first++]);
@@ -282,20 +308,20 @@ void readRule(language *lang, int row, char *tokens[]) {
     }
 }
 
-// Create a language structure and add one-character patterns.
+// Create a language structure and add one-character patterns, and special tags.
 language *newLanguage() {
     language *lang = malloc(sizeof(language));
     lang->rules[0] = NULL;
     lang->states[0] = NULL;
     lang->patterns[0] = NULL;
-    findPattern(lang, "\n", false);
-    findPattern(lang, "\n", true);
-    findPattern(lang, " ", false);
-    findPattern(lang, " ", true);
-    for (int ch = '!'; ch <= '~'; ch++) {
-        findPattern1(lang, ch, false);
-        findPattern1(lang, ch, true);
-    }
+    findPattern(lang, "\n");
+    findPattern(lang, " ");
+    for (int ch = '!'; ch <= '~'; ch++) findPattern1(lang, ch);
+    lang->more = findTag1(lang, 0, MORE);
+    lang->bad = findTag1(lang, 0, BAD);
+    lang->skip = findTag1(lang, 0, SKIP);
+    lang->gap = findTag1(lang, 0, GAP);
+    lang->newline = findTag1(lang, 0, NEWLINE);
     return lang;
 }
 
@@ -305,6 +331,16 @@ void freeLanguage(language *lang) {
     for (int i = 0; lang->rules[i] != NULL; i++) free(lang->rules[i]);
     free(lang);
 }
+
+/*
+// Find a tag character from a rule's token type.
+char findTag(int row, char *name) {
+    if ('A' <= name[0] && name[0] <= 'Z') return name[0];
+    if (strlen(name) != 1) crash("bad token type", row, name);
+    if (strchr(symbols, name[0]) == NULL) crash("bad token type", row, name);
+    return name[0];
+}
+*/
 
 // ----- Reading in  -----------------------------------------------------------
 
@@ -400,71 +436,77 @@ void checkDefined(language *lang) {
     }
 }
 
-// Set state s to be a start state or continuation state according to the flag.
+// Set state s to be a starting state or continuing state according to the flag.
 // Give error message if already found out to be the opposite.
-void setStart(state *s, bool starts, int row) {
-    if (s->proof > 0 && s->starts != starts) {
+void setStart(state *s, bool starting, int row) {
+    if (s->proof > 0 && s->starting != starting) {
         fprintf(stderr, "Error: %s is a ", s->name);
-        if (s->starts) fprintf(stderr, "start");
-        else fprintf(stderr, "continuation");
+        if (s->starting) fprintf(stderr, "starting");
+        else fprintf(stderr, "continuing");
         fprintf(stderr, " state because of line %d\n", s->proof);
-        if (starts) fprintf(stderr, "but can occur between tokens");
+        if (starting) fprintf(stderr, "but can occur between tokens");
         else fprintf(stderr, "but can occur within a token");
         fprintf(stderr, " because of line %d\n", row);
         exit(1);
     }
-    s->starts = starts;
+    s->starting = starting;
     s->proof = row;
 }
 
-// Find start states and continuation states, and check consistency.
-// Any rule with a token type has a start state as its target.
-// A normal rule with no token type has a continuation state as its target.
-// A lookahead rule with a token type has a continuation state as its base.
+// Find starting states and continuing states, and check consistency.
+// Any ending rule has a starting state as its target.
+// A normal extending rule has a continuing state as its target.
+// An ending lookahead or default rule has a continuing state as its base.
 void findStartStates(language *lang) {
     state *s0 = lang->rules[0]->base;
-    s0->starts = true;
+    s0->starting = true;
     s0->proof = lang->rules[0]->row;
     for (int i = 0; lang->rules[i] != NULL; i++) {
         rule *r = lang->rules[i];
-        if (r->tag != MORE) setStart(r->target, true, r->row);
-        if (! r->looks && r->tag == MORE) setStart(r->target, false, r->row);
-        if (r->looks && r->tag != MORE) setStart(r->base, false, r->row);
+        if (r->ending) {
+            setStart(r->target, true, r->row);
+        }
+        if (r->type == MATCHING && ! r->ending) {
+            setStart(r->target, false, r->row);
+        }
+        if (r->type != MATCHING && r->ending) {
+            setStart(r->base, false, r->row);
+        }
     }
 }
 
-// Check that an explicit lookahead rule in a continuation state has a token
+// Check that an explicit lookahead rule in a continuing state has a token
 // type (because there may be a space which must terminate the current token.)
 void checkLookaheads(language *lang) {
     for (int i = 0; lang->rules[i] != NULL; i++) {
         rule *r = lang->rules[i];
-        if (! r->base->starts && r->looks && ! r->defaults && r->tag == MORE) {
+        if (! r->base->starting && r->type == LOOKAHEAD && ! r->ending) {
             fprintf(stderr, "Error in rule on line %d\n", r->row);
-            fprintf(stderr, "an explicit default rule in a ");
-            fprintf(stderr, "continuation state must end the current token\n");
+            fprintf(stderr, "an explicit lookahead rule in a ");
+            fprintf(stderr, "continuing state must end the current token\n");
             exit(1);
         }
     }
 }
 
-// Check that a lookahead or default rule with no token type (i.e. a jump rule)
-// has base and target states which are both start states or both continuations.
+// Check that an extending lookahead or default rule (i.e. a jump rule)
+// has base and target states which are both starting states or both continuing.
 void checkTransfers(language *lang) {
     for (int i = 0; lang->rules[i] != NULL; i++) {
         rule *r = lang->rules[i];
-        if (! (r->looks || r->defaults) || r->tag != MORE) continue;
-        if (r->base->starts == r->target->starts) continue;
+        if (r->type == MATCHING || r->ending) continue;
+        if (r->base->starting == r->target->starting) continue;
         fprintf(stderr, "Error in rule on line %d\n", r->row);
-        if (r->base->starts) {
-            fprintf(stderr, "%s is a start state ", r->base->name);
+        if (r->base->starting) {
+            fprintf(stderr, "%s is a starting state ", r->base->name);
             fprintf(stderr, "(line %d)\n", r->base->proof);
-            fprintf(stderr, "but %s is a continuation state ", r->target->name);
+            fprintf(stderr, "but %s is a continuing state ", r->target->name);
             fprintf(stderr, "(line %d)\n", r->target->proof);
         }
         else {
-            fprintf(stderr, "%s is a continuation state ", r->base->name);
+            fprintf(stderr, "%s is a continuing state ", r->base->name);
             fprintf(stderr, "(line %d)\n", r->base->proof);
-            fprintf(stderr, "but %s is a start state ", r->target->name);
+            fprintf(stderr, "but %s is a starting state ", r->target->name);
             fprintf(stderr, "(line %d)\n", r->target->proof);
         }
         exit(1);
@@ -478,23 +520,142 @@ void checkAccessible(language *lang) {
         bool hasDefault = false;
         for (int j = 0; s->rules[j] != NULL; j++) {
             rule *r = s->rules[j];
-            if (countPatterns(r->patterns) == 0) hasDefault = true;
+            if (r->type == DEFAULT) hasDefault = true;
             else if (hasDefault) crash("inaccessible rule", r->row, "");
         }
     }
 }
 
+// ----- Defaults --------------------------------------------------------------
+
+// Add implicit defaults for a starting state. All starting states have space
+// and newline rules added. If there is an explicit default rule (an
+// unconditional jump to another starting state) or a rule which mentions the
+// range !..~ then all other characters are covered. If not, add a rule which
+// accepts any single character as an error token.
+void addStartingDefaults(language *lang) {
+    for (int i = 0; lang->states[i] != NULL; i++) {
+        state *s = lang->states[i];
+        if (! s->starting) continue;
+        char *sp[] = { s->name, " ", s->name, lang->gap->name, NULL};
+        readRule(lang, 0, sp);
+        char *nl[] = { s->name, "\n", s->name, lang->newline->name, NULL};
+        readRule(lang, 0, nl);
+        bool ok = false;
+        for (int j = 0; s->rules[j] != NULL; j++) {
+            rule *r = s->rules[j];
+            if (r->type == DEFAULT) ok = true;
+            if (strcmp(r->patterns[0]->name, "!..~") == 0) ok = true;
+        }
+        if (ok) continue;
+        char *bad[] = { s->name, "!..~", s->name, lang->bad->name, NULL};
+        readRule(lang, 0, bad);
+    }
+}
+
+// Make a new related state with a name that isn't already being used.
+state *freshState(language *lang, state *s) {
+    char name[SMALL+20];
+    int n = countStates(lang->states);
+    for (int i = 1; ; i++) {
+        sprintf(name, "%s%d", s->name, i);
+        state *s = findState(lang, name);
+        if (countStates(lang->states) > n) return s;
+    }
+}
+
+// Copy a rule with base state s to form a rule with base state s1 and add it.
+void copyRule(language *lang, rule *r, state *s, state *s1) {
+    rule *r1 = malloc(sizeof(rule));
+    *r1 = *r;
+    r1->row = 0;
+    r1->base = s1;
+    addRule(lang->rules, r1);
+    addRule(s1, r1);
+}
+
+// =============================================================================
+
+// Add a new state s1 to deal with any lookahead rules in state s. The tag and
+// target are from the default rule for s. State s1 has copies of the lookahead
+// rules from state s, plus "s1 \n s1 .", "s1 \s s1 _" and "D s1 d".
+state *addLookaheadState(language *lang, state *s, pattern *tag, state *t) {
+    state *s1 = freshState(language *lang, state *s);
+    for (int i = 0; s->rules[i] != NULL; i++) {
+        rule *r = s->rules[i];
+        if (r->type != LOOKAHEAD) continue;
+        copyRule(lang, r, s, s1);
+    }
+    char *nl[] = { s1->name, "\n", s1->name, lang->newline->name, NULL};
+    readRule(lang, 0, nl);
+    char *sp[] = { s1->name, " ", s1->name, lang->gap->name, NULL};
+    readRule(lang, 0, sp);
+    char *df[] = { tag->name, s1->name, t->->name, NULL};
+    return s1;
+}
+
+// Add implicit defaults for a continuing rule. If there is no explicit default,
+// add "? s start". Add "D s \n d" (where D and d are from the default rule). If
+// there are no explicit lookahead rules, add "D s \s d". Otherwise, add a new
+// state s1, a rule "D s \s s1".
+void addContinuingDefaults(language *lang) {
+    for (int i = 0; lang->states[i] != NULL; i++) {
+        state *s = lang->states[i];
+        if (s->starting) continue;
+        int n = countRules(s->rules);
+        rule *d = s->rules[n-1];
+        if (d->type != DEFAULT) {
+            state *s0 = lang->states[0];
+            char *df[] = { lang->bad->name, s->name, s0->name, NULL };
+            readRule(lang, 0, df);
+            d = s->rules[n];
+        }
+        char *nl[] = { d->tag->name, s->name, "\n", d->target->name, NULL };
+        readRule(lang, 0, nl);
+        bool hasLookaheads = false;
+        for (int j = 0; s->rules[j] != NULL; j++) {
+            rule *r = s->rules[j];
+            if (r->type == LOOKAHEAD) hasLookaheads = true;
+        }
+        if (! hasLookaheads) {
+            char *df = { d->tag->name, s->name, " ", d->target->name, NULL };
+            readRule(lang, df);
+        }
+        else {
+            state *s1 = addLookaheadState(lang, s);
+            char *df = {};
+        }
+    }
+}
+/*
+// =============================================================================
+// Add defaults for starting states:
+// Add "start \n start ." and "start \s start _".
+// If no explicit default, add "start !..~ start"
+// (An explicit default is a jump to another starting state eg "start start2").
+//
+// Add defaults for a continuing state:
+// If no explicit default, add "? id start", establishing a default tag.
+// If state has an explicit (non-default) lookahead rule, add state id' with
+// rules "X id \s id'", "id' \s id' GAP", "F id' ( start" [i.e. lookahead rules
+// from id] and "X id' start" where
+// Check whether a pattern string is a range of characters.
+bool isRange(char *s) {
+    return strlen(s) == 4 && s[1] == '.' && s[2] == '.';
+}
+
+
 // ----- Sorting --------------------------------------------------------------
 
-// Sort the states so that the start states come before the continuation states.
-// Limit the number of start states to 32, and the total number to 128. Add
-// indexes.
+// Sort the states so that the starting states come before the continuing
+// states. Limit the number of starting states to 32, and the total number to
+// 128. Add indexes.
 void sortStates(state *states[]) {
     for (int i = 1; states[i] != NULL; i++) {
         state *s = states[i];
         int j = i - 1;
-        if (! s->starts) continue;
-        while (j >= 0 && ! states[j]->starts) {
+        if (! s->starting) continue;
+        while (j >= 0 && ! states[j]->starting) {
             states[j + 1] = states[j];
             j--;
         }
@@ -502,7 +663,7 @@ void sortStates(state *states[]) {
     }
     for (int i = 0; states[i] != NULL; i++) {
         state *s = states[i];
-        if (s->starts && i >= 32) crash("more than 32 start states", 0, "");
+        if (s->starting && i>=32) crash("more than 32 starting states", 0, "");
         if (i >= 128) crash("more than 128 states", 0, "");
         s->index = i;
     }
@@ -519,8 +680,8 @@ int compare(pattern *p, pattern *q) {
         if (s[i] < t[i]) return -1;
         if (s[i] > t[i]) return 1;
     }
-    if (! p->looks && q->looks) return -1;
-    if (p->looks && ! q->looks) return 1;
+    if (! p->looking && q->looking) return -1;
+    if (p->looking && ! q->looking) return 1;
     return 0;
 }
 
@@ -551,8 +712,8 @@ void fillSkipActions(language *lang) {
     }
 }
 
-// Fill in the implicit defaults for a start state, for all match characters not
-// already handled.
+// Fill in the implicit defaults for a starting state, for all match characters
+// not already handled.
 void fillMatchActions(language *lang, state *s) {
     for (char ch = '\n'; ch <= '~'; ch++) {
         if ('\n' < ch && ch < ' ') continue;
@@ -567,7 +728,7 @@ void fillMatchActions(language *lang, state *s) {
 }
 
 // Fill in actions for an explicit default rule, or the implicit defaults for a
-// continuation state, for all lookahead characters not already handled.
+// continuing state, for all lookahead characters not already handled.
 void fillDefaultActions(language *lang, state *base, state *target, char tag) {
     for (char ch = '\n'; ch <= '~'; ch++) {
         if ('\n' < ch && ch < ' ') continue;
@@ -601,7 +762,7 @@ void fillActions(language *lang) {
     }
     for (int i = 0; lang->states[i] != NULL; i++) {
         state *s = lang->states[i];
-        if (s->starts) fillMatchActions(lang, s);
+        if (s->starting) fillMatchActions(lang, s);
         else fillDefaultActions(lang, s, lang->states[0], BAD);
     }
 }
@@ -640,7 +801,7 @@ bool visit(language *lang, state *s, char ch) {
     for (int i = n; lang->patterns[i] != NULL; i++) {
         pattern *p = lang->patterns[i];
         if (p->name[0] != ch) break;
-        if (p->looks) {
+        if (p->looking) {
             bool ok = visit(lang, lang->states[s->actions[i].target], ch);
             if (! ok) return false;
         }
@@ -727,7 +888,7 @@ void writeTable(language *lang, char const *path) {
             writeIndex(fp, target);
             fprintf(fp, "  ");
         }
-        if (p->looks) fprintf(fp, "|");
+        if (p->looking) fprintf(fp, "|");
         else fprintf(fp, "-");
         if (p->name[0] == '\n') fprintf(fp, "nl\n");
         else if (p->name[0] == ' ') fprintf(fp, "sp\n");
@@ -751,7 +912,7 @@ void writeTable2(language *lang, char const *path) {
     for (int i = 0; lang->patterns[i] != NULL; i++) {
         pattern *p = lang->patterns[i];
         int n = strlen(p->name);
-        if (p->looks) n = n | 0x80;
+        if (p->looking) n = n | 0x80;
         fprintf(fp, "%c%s%c", n, p->name, 0);
     }
     fprintf(fp, "%c", 0);
@@ -890,7 +1051,7 @@ char *eg7[] = {
     "ID id ; start", NULL
 };
 
-// A lookahead rule can be a continuation. It is a jump to another state.
+// A lookahead rule can be a continuing. It is a jump to another state.
 char *eg8[] = {
     "start a start ID\n"
     "- start . start2\n"
@@ -934,7 +1095,7 @@ char *eg10[] = {
     "- inclusion \\s start", NULL
 };
 
-// Can have multiple start states. Check that the default is to accept any
+// Can have multiple starting states. Check that the default is to accept any
 // single character as an error token and stay in the same state.
 char *eg11[] = {
     "start # hash KEY\n"
@@ -982,8 +1143,8 @@ char *eg13[] = {
     "dot 0 number -", NULL
 };
 
-// CAUSES ERROR. The prop state is a start state because
-// of line 3, and continuation state because of lines 4/5.
+// CAUSES ERROR. The prop state is a starting state because
+// of line 3, and continuing state because of lines 4/5.
 char *eg14[] = {
     "start . dot\n"
     "dot 0..9 start NUM\n"
@@ -994,7 +1155,7 @@ char *eg14[] = {
     "dot 0 start N", NULL
 };
 
-// CAUSES ERROR. An explicit lookahead rule in a continuation state must end the
+// CAUSES ERROR. An explicit lookahead rule in a continuing state must end the
 // current token.
 char *eg15[] = {
     "start a id\n"
@@ -1005,7 +1166,7 @@ char *eg15[] = {
     "- id ( id2", NULL
 };
 
-// CAUSES ERROR. An explicit lookahead rule in a start state must not end the
+// CAUSES ERROR. An explicit lookahead rule in a starting state must not end the
 // current token.
 char *eg16[] = {
     "DOT start . start2\n"
@@ -1034,9 +1195,10 @@ void runTests() {
 //    runExample("eg15", eg15);
 //    runExample("eg16", eg16);
 }
-
+*/
 int main(int n, char const *args[n]) {
     if (n != 2) crash("Use: ./compile language", 0, "");
+/*
     char path[100];
     runTests();
     sprintf(path, "%s/rules.txt", args[1]);
@@ -1048,5 +1210,6 @@ int main(int n, char const *args[n]) {
     writeTable2(lang, path);
     freeLanguage(lang);
     free(text);
+    */
     return 0;
 }

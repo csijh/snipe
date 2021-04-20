@@ -310,10 +310,10 @@ says that if anything else appears next in the input, the scanner reverts to the
 so there is a check that in any situation where the default rule is reached, the
 target state will, eventually, accept the next character.</p>
 
-<p>Every state is either a start state, which the scanner can be in between
-tokens, or a continuation state, where there is a non-empty current token.
-Checks are made to ensure that each state is treated consistently as one or the
-other. The start states are the initial state, and any state which appears as a
+<p>Every state is either a starting state, which the scanner can be in between
+tokens, or a continuing state, where there is a non-empty current token. Checks
+are made to ensure that each state is treated consistently as one or the other.
+The starting states are the initial state, and any state which appears as a
 target in a rule which has a token type. For example:</p>
 
 <pre>start # hash KEY
@@ -322,8 +322,8 @@ target in a rule which has a token type. For example:</p>
 <p>This rule might be used in the C language, to recognise
 <code>#include</code>. After the <code>#</code> token and optional spaces,
 <code>include</code> is a keyword rather than an identifier. The
-<code>hash</code> state is a start state for recognising such keywords only in
-this limited context. Another example is:</p>
+<code>hash</code> state is a starting state for recognising such keywords only
+in this limited context. Another example is:</p>
 
 <pre>html &lt;% java &lt;
 
@@ -332,10 +332,10 @@ java %> html >
 
 <p>These rules might be used in a language such as <code>JSP</code> where html
 text can contain Java code between <code>&lt;%</code> and <code>%></code>
-brackets. The <code>html</code> and <code>java</code> states are start states
+brackets. The <code>html</code> and <code>java</code> states are starting states
 which recognize each of the two sublanguages.</p>
 
-<p>Inconsistency between start and continuation states can cause an error
+<p>Inconsistency between starting and continuing states can cause an error
 message. For example:</p>
 
 <pre>dot 0..9 number
@@ -350,10 +350,10 @@ the identifier should be highlighted differently, as a <code>PROPERTY</code>.
 Since the <code>dot</code> state checks by lookahead for the first letter, it
 seems harmless for the first <code>prop</code> rule to include digits. However,
 these rules would cause an error message. That is because the <code>prop</code>
-state is determined to be a start state, because it follows the termination of a
-<code>SIGN</code> token in the second <code>dot</code> rule. On the other hand,
-it appears to be a continuation state, both because it is the target of its
-first rule, a continuation rule, and because it terminates a
+state is determined to be a starting state, because it follows the termination
+of a <code>SIGN</code> token in the second <code>dot</code> rule. On the other
+hand, it appears to be a continuing state, both because it is the target of
+its first rule, a continuation rule, and because it terminates a
 <code>PROPERTY</code> token in its second rule. This can be corrected by
 writing:</p>
 
@@ -367,11 +367,11 @@ prop2 a..z A..Z 0..9 prop2
 prop2 start PROPERTY
 </pre>
 
-<p>Now, <code>prop</code> is a start state which matches only the first letter,
-and <code>prop2</code> is a continuation state which recognizes the rest of the
-token.</p>
+<p>Now, <code>prop</code> is a starting state which matches only the first
+letter, and <code>prop2</code> is a continuing state which recognizes the rest
+of the token.</p>
 
-<p>The default behaviour for a start state, for any situation not explicitly
+<p>The default behaviour for a starting state, for any situation not explicitly
 handled, is to accept the next character as a one-character error token and stay
 in the same state, as if a default rule were added of this form:</p>
 
@@ -381,7 +381,7 @@ in the same state, as if a default rule were added of this form:</p>
 <p>Spaces and newlines are handled similarly and automatically, by accepting and
 tagging them suitably, though this can't be expressed explicitly.</p>
 
-<p>The default behaviour for a continuation state <code>s</code>, say,
+<p>The default behaviour for a continuing state <code>s</code>, say,
 for any situation not explicitly handled, is to terminate the current token as
 an error token and go into the initial state, as if a default rule was added of
 the form:</p>
