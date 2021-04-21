@@ -16,7 +16,7 @@ enum { BIG = 1000, SMALL = 128 };
 
 // The state machine transition table contains actions consisting of a tag and
 // state index.
-struct action { char tag, target; };
+struct action { unsigned char tag, target; };
 typedef struct action action;
 
 // A tag represents a token type, or SKIP to miss out that table entry or MORE
@@ -29,11 +29,10 @@ enum { SKIP = '~', MORE = '-', GAP = '_', NEWLINE = '.' };
 // A scanner consists of a current state, current input position, current
 // position in the tags, current start of token position in the tags, the array
 // of state names, the array of actions for each state, the array of indexes of
-// the patterns starting with each character, pointers to the pattern strings
-// starting with each character, and a reference to the whole of the data read
-// in from the file.
+// the patterns starting with each character, the array of pattern strings, and
+// a reference to the whole of the data read in from the file.
 struct scanner {
-    char state;
+    int state;
     char *input;
     char *tags;
     char *token;
@@ -53,8 +52,7 @@ void crash(char *s) {
 
 // ---------- Read in data -----------------------------------------------------
 
-// Read in a text file. Use binary mode, so that the number of bytes read
-// equals the file size.
+// Read in a text or binary file. Add a final newline and null in case text.
 char *readFile(char *path) {
     FILE *file = fopen(path, "rb");
     if (file == NULL) crash("Error: can't read file");
@@ -62,98 +60,126 @@ char *readFile(char *path) {
     int size = ftell(file);
     fseek(file, 0, SEEK_SET);
     if (size < 0) crash("Error: can't find file size");
-    char *data = malloc(size + 1);
+    char *data = malloc(size+2);
     int n = fread(data, 1, size, file);
     if (n != size) { free(data); fclose(file); crash("Error: read failed"); }
-    data[n] = '\0';
+    data[n] = '\n';
+    data[n+1] = '\0';
     fclose(file);
     return data;
 }
 
-// Read the scanner from a file. The file contains the names of the states, each
-// name being a string preceded by a length byte, then a zero byte, then the
-// pattern strings, each preceded by a length byte with the top bit set for a
-// lookahead pattern, then a zero byte, then a table of actions indexed by state
-// and pattern.
+// Read the transition table from a file to form a scanner. The file contains
+// the names of the states, a null, the pattern strings, a null, and a table of
+// actions indexed by state and pattern.
 void readScanner(char *path, scanner *sc) {
     char *d = readFile(path);
     sc->data = d;
     int p = 0, nstates = 0, npatterns = 0;
     while (d[p] != 0) {
-        int len = d[p++];
         sc->states[nstates++] = &d[p];
-        p = p + len + 1;
+        while (d[p] != '\0') p++;
+        p++;
     }
     p++;
     while (d[p] != 0) {
-        int len = (d[p] & 0x7F);
         sc->patterns[npatterns++] = &d[p];
-        p = p + len + 2;
+        while (d[p] != '\0') p++;
+        p++;
     }
     p++;
     int i = 0;
     for (int ch = 0; ch < SMALL; ch++) {
         sc->indexes[ch] = i;
-        while (i < npatterns && sc->patterns[i][1] == ch) i++;
+        while (i < npatterns && sc->patterns[i][0] == ch) i++;
     }
     for (int s = 0; s < nstates; s++) {
         sc->actions[s] = (action *) &d[p + s * npatterns * sizeof(action)];
     }
-    printf("#states=%d #patterns=%d\n", nstates, npatterns);
-//    for (int i = 0; i <= 181; i++) {
-//        printf("%c%d\n", sc->actions[0][i].tag, sc->actions[0][i].target);
-//    }
+    printf("%d states, %d patterns\n", nstates, npatterns);
 }
 
 // --------- Scan --------------------------------------------------------------
 
-// Match a string with a pattern. Return the length of the pattern, or 0 for a
-// lookahead pattern, or -1 if there is no match.
+// Match a string with a pattern. Return the length of the pattern, or 0 if
+// there is no match.
 static inline int match(char *s, char *p) {
-    int n = p[0] & 0x7F;
-    bool lookahead = (p[0] & 0x80) != 0;
-    p++;
-    for (int i = 0; i < n; i++) if (s[i] != p[i]) return -1;
-    if (lookahead) return 0;
-    return n;
+    int i;
+    for (i = 0; p[i] != '\0'; i++) if (s[i] != p[i]) return 0;
+    return i;
 }
 
 // Print out a trace of a scan step, in the style of the original rules, with
 // \n and \s for newline and space.
-void trace(scanner *sc, int base, char *p, int target, char tag) {
-    bool lookahead = (p[0] & 0x80) != 0;
+static void trace(scanner *sc, int base, char *p, int target, char tag) {
+    bool lookahead = (tag & 0x80) != 0;
+    tag = tag & 0x7F;
     if (lookahead) printf("%c ", tag);
     printf("%s ", sc->states[base]);
-    if (p[1] == '\n') printf("\\n ");
-    else if (p[1] == ' ') printf("\\s ");
-    else printf("%s ", (p+1));
+    if (p[0] == '\n') printf("\\n ");
+    else if (p[0] == ' ') printf("\\s ");
+    else printf("%s ", p);
     printf("%s", sc->states[target]);
     if (! lookahead) printf(" %c", tag);
     printf("\n");
 }
 
-// Given a state and the current position in the input, find the pattern that
-// matches (which should never fail) and mark the matched characters with MORE.
-// Update the state and input position.
-void step(scanner *sc, bool tracing) {
-    int s = sc->state;
-    action *actions = sc->actions[s];
+// After skipping spaces, search for a match, but ignore non-lookahead actions.
+static int lookahead(scanner *sc) {
+    action *actions = sc->actions[sc->state];
+    char *input = sc->input;
+    while (input[0] == ' ') input++;
+    int ch = input[0];
+    int index = sc->indexes[ch];
+    int len = 0;
+    char *p;
+    while (len == 0) {
+        p = sc->patterns[index];
+        int tag = actions[index].tag;
+        if (tag == SKIP) continue;
+        if ((tag & 0x80) == 0) continue;
+        len = match(input, p);
+        if (len == 0) index++;
+    }
+    return index;
+}
+
+// Do a normal search for a match (for a non-lookahead action, or a lookahead
+// action with no intervening spaces). If not a lookahead, move forward.
+static int search(scanner *sc) {
+    action *actions = sc->actions[sc->state];
     int ch = sc->input[0];
     int index = sc->indexes[ch];
-    int m = -1;
+    int len = 0;
     char *p;
-    while (m < 0) {
+    while (len == 0) {
         p = sc->patterns[index];
-        if (actions[index].tag != SKIP) m = match(sc->input, p);
-        if (m < 0) index++;
+        if (actions[index].tag != SKIP) len = match(sc->input, p);
+        if (len == 0) index++;
     }
-    for (int i = 0; i < m; i++) {
+    if ((actions[index].tag & 0x80) == 0) for (int i = 0; i < len; i++) {
         *sc->tags++ = MORE;
         sc->input++;
     }
+    return index;
+}
+
+// Given a state and the current position in the input, find the pattern that
+// matches (which should never fail) and mark the matched characters with MORE.
+// Update the state and input position.
+static void step(scanner *sc, bool tracing) {
+    int index = search(sc);
+    action *actions = sc->actions[sc->state];
     char tag = actions[index].tag;
     char target = actions[index].target;
-    if (tracing) trace(sc, sc->state, p, target, tag);
+    if (tracing) trace(sc, sc->state, sc->patterns[index], target, tag);
+    if (tag == (GAP | 0x80)) {
+        index = lookahead(sc);
+        tag = actions[index].tag;
+        target = actions[index].target;
+        if (tracing) trace(sc, sc->state, sc->patterns[index], target, tag);
+    }
+    tag = tag & 0x7F;
     if (tag != MORE) {
         sc->token[0] = tag;
         sc->token = sc->tags;
@@ -161,147 +187,87 @@ void step(scanner *sc, bool tracing) {
     sc->state = target;
 }
 
-// Scan a line, tagging each byte in the tags array.
+// ---------- Testing ----------------------------------------------------------
+
+// Scan a line, tagging each byte in the tags array, stopping after \n.
 void scan(scanner *sc, char *line, char *tags, bool tracing) {
     sc->state = 0;
     sc->input = line;
     sc->tags = tags;
     sc->token = tags;
-    while (sc->input[0] != '\0') step(sc, tracing);
+    while (sc->input[0] != '\n') step(sc, tracing);
+    step(sc, tracing);
 }
 
-/*
-    int state = 0, start, i = 0, lineLength = strlen(line);
-    while (line[i] == ' ') tags[i++] = GAP;
-    start = i;
-    while (i < lineLength || start < i) {
-        printf("i %d start %d\n", i, start);
-        int ch = line[i], action, len, target = -1, p, lookingahead = false;
-        if (ch == ' ') {
-            while (line[i] == ' ') tags[i++] = GAP;
-            lookingahead = true;
-        }
-        for (p = sc->starters[ch]; sc->patterns[p][0] == ch; p++) {
-            action = sc->table[state][p].action;
-            if (action == SKIP) continue;
-            len = match(&line[i], sc->patterns[p]);
-            if (len == 0) continue;
-            if (lookingahead && ! sc->lookahead[p]) continue;
-            if (sc->lookahead[p]) lookingahead = true;
-            target = sc->table[state][p].target;
-            break;
-        }
-        if (target < 0) {
-            p = sc->npatterns-1;
-            action = sc->table[state][p].action;
-            target = sc->table[state][p].target;
-        }
-        if (trace) {
-            printf("%d %s '%s' %c\n", i, sc->states[state], sc->patterns[p], action);
-        }
-        if (! lookingahead) {
-            for (int j = 0; j<len; j++) tags[i++] = MORE;
-        }
-        if (action != MORE) {
-            if (i > start) tags[start] = action;
-            start = i;
-            while (line[i] == ' ') tags[i++] = GAP;
-        }
-        state = target;
-    }
-}
-*/
-/*
-// Split the text of a test file into an array of lines, replacing each newline
-// by a null. Skip blank lines.
+// Split the text into a list of lines, replacing each newline by a null.
+// Skip blank lines or lines starting with two symbols.
 char **splitLines(char *text) {
-    int n = 0;
-    for (int i = 0; text[i] != '\0'; i++) if (text[i] == '\n') n++;
-    char **lines = malloc((n+1) * sizeof(char *));
-    int p = 0;
-    n = 0;
+    int nlines = 0;
+    for (int i = 0; text[i] != '\0'; i++) if (text[i] == '\n') nlines++;
+    char **lines = malloc((nlines + 1) * sizeof(char *));
+    int p = 0, row = 0;
     for (int i = 0; text[i] != '\0'; i++) {
-        if (text[i] == '\r') text[i] = '\0';
         if (text[i] != '\n') continue;
         text[i]= '\0';
-        if (text[p] != '\0') lines[n++] = &text[p];
+        if (text[p] != '\0' && (isalnum(text[p]) || isalnum(text[p+1]))) {
+            lines[row++] = &text[p];
+        }
         p = i + 1;
     }
-    lines[n] = NULL;
+    lines[nlines] = NULL;
     return lines;
 }
 
-// Build the scanner from the data read in.
-void construct(scanner *sc) {
-    sc->states = malloc(sc->nstates * sizeof(char *));
-    sc->patterns = malloc(sc->npatterns * sizeof(char *));
-    sc->types = malloc(sc->ntypes * sizeof(char *));
-    int tableSize = sc->nstates * sc->npatterns * sizeof(entry);
-    char *strings = (char *)(sc->table) + tableSize;
-    for (int i = 0; i < sc->nstates; i++) {
-        sc->states[i] = strings;
-        strings += strlen(strings) + 1;
-    }
-    for (int i = 0; i < sc->npatterns; i++) {
-        sc->patterns[i] = strings;
-        strings += strlen(strings) + 1;
-    }
-    for (int i = 0; i < sc->ntypes; i++) {
-        sc->types[i] = strings;
-        strings += strlen(strings) + 1;
-    }
-    int p = 0;
-    for (int i = 0; i < 128; i++) {
-        if (p >= sc->npatterns - 1 || i < sc->patterns[p+1][0]) {
-            sc->starters[i] = p;
-        }
-        else {
-            p++;
-            sc->starters[i] = p;
-            while (sc->patterns[p][0] != '\0') p++;
-        }
-    }
+// Run a test from the test file.
+void runTest(scanner *sc, char *line, char *expected, bool tracing) {
+    char actual[100];
+    scan(sc, line, actual, tracing);
+    int n = strlen(line);
+    actual[n] = '\0';
+    if (strcmp(actual, expected) == 0) return;
+    fprintf(stderr, "Error:\n");
+    fprintf(stderr, "%s\n", line);
+    fprintf(stderr, "%s (expected)\n", expected);
+    fprintf(stderr, "%s (actual)\n", actual);
+    exit(1);
 }
 
-
 // Run the tests from the test file.
-int runTests(char**lines, scanner *sc, bool trace) {
+int runTests(scanner *sc, char *tests, bool tracing) {
+    char line[100];
     char tags[100];
     int passes = 0;
+    char **lines = splitLines(tests);
     for (int i = 0; lines[i] != NULL; i = i + 2) {
-        for (int i = 0; i < 100; i++) tags[i] = ' ';
-        tags[strlen(lines[i])] = '\0';
-        scan(lines[i], tags, sc, trace);
-        int n = strlen(tags);
-        while (n > 0 && tags[n-1] == ' ') tags[--n] = '\0';
-        if (strcmp(tags, lines[i+1]) == 0) { passes++; continue; }
-        fprintf(stderr, "Error:\n");
-        fprintf(stderr, "%s\n", lines[i]);
-        fprintf(stderr, "%s\n", lines[i+1]);
-        fprintf(stderr, "%s\n", tags);
-        exit(1);
+        if (lines[i+1] == NULL) break;
+        strcpy(line, lines[i]);
+        strcat(line, "\n");
+        strcpy(tags, lines[i+1]);
+        strcat(tags, "\n");
+        runTest(sc, line, tags, tracing);
+        passes++;
     }
     return passes;
 }
-*/
+
 int main(int n, char const *args[n]) {
-    scanner *sc = malloc(sizeof(scanner));
-    readScanner("c/table.bin", sc);
-    char line[] = "abc\n";
-    char tags[] = "???\n";
-    scan(sc, line, tags, true);
-    printf("tags %s\n", tags);
-    /*
     char const *lang;
-    bool trace = n > 2;
+    bool tracing = n > 2;
     if (n == 2) lang = args[1];
     else if (n == 3 && strcmp(args[1], "-t") == 0) lang = args[2];
     else if (n == 3 && strcmp(args[2], "-t") == 0) lang = args[1];
     else crash("Use: ./interpret [-t] lang\n"
-        "to read lang.bin and run tests from tests/lang.txt");
-    scanner *sc = malloc(sizeof(scanner));
+        "to read lang/table.bin and run tests from lang/tests.txt");
     char path[100];
-    sprintf(path, "%s/lang.bin", lang);
+    sprintf(path, "%s/table.bin", lang);
+    scanner *sc = malloc(sizeof(scanner));
+    readScanner(path, sc);
+    sprintf(path, "%s/tests.txt", lang);
+    char *tests = readFile(path);
+    runTests(sc, tests, tracing);
+
+    /*
+    scanner *sc = malloc(sizeof(scanner));
     readScanner(path, sc);
     construct(sc);
     sprintf(path, "%s/tests.txt", lang);
@@ -313,6 +279,7 @@ int main(int n, char const *args[n]) {
     freeScanner(sc);
     printf("Tests passed: %d\n", p);
     */
+    free(tests);
     free(sc->data);
     free(sc);
     return 0;

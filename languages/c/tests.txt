@@ -1,20 +1,26 @@
+// Simple id.
 abc
-abcI
+I--.
 
+// Brackets
 (def)
-(B defI )B
+(I--).
 
+// Statement, with spaces.
 if (b) n = 1;
-K  BIB I S NS
+K-_(I)_I_S_VS.
 
+// Statement with block.
 if (b) { n = 1; }
-K  BIB B I S NS B
+K-_(I)_{_I_S_VS_}.
 
+// Type keyword followed by id.
 int n;
-K   IS
+K--_IS.
 
+// Programmer defined type followed by id.
 string s;
-I      IS
+I-----_IS.
 
 enum suit { Club, Diamond, Heart, Spade };
 K    I    B I   S I      S I    S I     BS
@@ -28,8 +34,8 @@ K    OI S QIE IE IE  IQS
 char *s = "\037e\038f\xffg"
 K    OI S QE   IE  NIE   IQ
 
-/* abc "*/"//"
-C  I   QC QC Q
+n = 1; /* abc "*/"//"
+I_S_VS_C  I   QC QC Q
 
 obj.x, obj->x, f(x)
 I  SPS I  S PS IBIB
