@@ -43,27 +43,28 @@ start !..~ start ?
 
 // Potential keywords, if not followed by alphanumerics.
 key a..z A..Z 0..9 _ \U \u id
-KEY key start
+key start KEY
 
 // Identifiers
 id a..z A..Z 0..9 _ \U \u id
-ID id start
+FUN id ( start
+id start ID
 
 // A dot starts a number, or is a sign possibly followed by a property.
 dot 0..9 num
-SIGN dot field
+dot field SIGN
 
 // A field is an identifier following a dot or arrow
 field a..z A..Z 0..9 _ \U \u field2
 field start
 field2 a..z A..Z 0..9 _ \U \u field2
-PROPERTY field2 start
+field2 start PROPERTY
 
 // Numbers with possible exponents.
 num . 0..9 num
 num e+ e- E+ E- num
 num p+ p- P+ P- num
-VALUE num start
+num start VALUE
 
 // Escape sequences: single character, hex, octal.
 // The default for an escape sequence is ? but gets overridden by = if the
@@ -71,17 +72,17 @@ VALUE num start
 escape a..w y..z start ?
 escape x escapex
 escape 0..7 escape1
-? escape start
+escape start ?
 
 // Octal escape sequences: up to three digits.
 escape1 0..7 escape2
-? escape1 start
+escape1 start ?
 escape2 0..7 start ?
-? escape2 start
+escape2 start ?
 
 // Hex escape sequences: any number of digits
 escapex 0..9 a..f A..F escapex
-? escapex start
+escapex start ?
 
 // A hash is followed by a preprocessor keyword.
 hash include inclusion RESERVED
@@ -94,4 +95,4 @@ inclusion < filename
 inclusion start
 filename > start =
 filename !..~ filename
-? filename start
+filename start ?
