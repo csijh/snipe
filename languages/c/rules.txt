@@ -35,8 +35,8 @@ start ' start '
 start " start "
 start \ escape
 start // start #
-start /* start <
-start */ start >
+start /* start /
+start */ start \
 
 // An illegal character is a one-character error token
 start !..~ start ?

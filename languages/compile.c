@@ -545,10 +545,10 @@ void addStartingDefaults(language *lang, state *s) {
     readRule(lang, 0, nl);
 }
 
-// Add implicit defaults for a continuing rule. If necessary add "s start ?". If
-// there are no explicit lookahead rules, add "D s \s d" (where D and d are from
-// the default rule). Otherwise, add "_ s \s d" to indicate looking ahead past
-// spaces. Add "D s \n d".
+// Add implicit defaults for a continuing rule. If necessary add "s start ?".
+// Add "D s \s d" and "D s \n d" where D and d are from the default rule. Note
+// that in the scanner, if a space or newline is next, a search is made for any
+// other lookahead rule that might apply.
 void addContinuingDefaults(language *lang, state *s) {
     int n = countRules(s->rules);
     rule *d = s->rules[n-1];
@@ -558,19 +558,8 @@ void addContinuingDefaults(language *lang, state *s) {
         readRule(lang, 0, df);
         d = s->rules[n];
     }
-    bool hasLookaheads = false;
-    for (int j = 0; s->rules[j] != NULL; j++) {
-        rule *r = s->rules[j];
-        if (r->type == LOOKAHEAD) hasLookaheads = true;
-    }
-    if (! hasLookaheads) {
-        char *df[] = { d->tag->name, s->name, " ", d->target->name, NULL };
-        readRule(lang, 0, df);
-    }
-    else {
-        char *df[] = { lang->gap->name, s->name, " ", d->target->name, NULL };
-        readRule(lang, 0, df);
-    }
+    char *df[] = { d->tag->name, s->name, " ", d->target->name, NULL };
+    readRule(lang, 0, df);
     char *nl[] = { d->tag->name, s->name, "\n", d->target->name, NULL };
     readRule(lang, 0, nl);
 }
@@ -1073,7 +1062,7 @@ char *eg13[] = {
     "FUN id ( start\n"
     "id start ID\n",
     //--------------
-    "_ id \\s start",
+    "ID id \\s start",
     "ID id \\n start", NULL
 };
 

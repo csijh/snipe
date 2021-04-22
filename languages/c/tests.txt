@@ -1,12 +1,12 @@
-// Simple id.
+// 1: Simple id.
 abc
 I--.
 
-// Brackets
+// 2: Brackets
 (def)
 (I--).
 
-// Statement, with spaces.
+// 3: Statement, with spaces.
 if (b) n = 1;
 K-_(I)_I_S_VS.
 
@@ -22,23 +22,30 @@ K--_IS.
 string s;
 I-----_IS.
 
+// Curly bracket initlializer.
 enum suit { Club, Diamond, Heart, Spade };
-K    I    B I   S I      S I    S I     BS
+K---_I---_{_I---S_I------S_I----S_I----_}S.
 
+// Numbers.
 int ns[] = { 1, 2, 34};
-K   I BB S B NS NS N BS
+K--_I-[]_S_{_VS_VS_V-}S.
 
+// String quotes and escapes. Escapes are (temporarily) marked as error tokens.
 char *s = "a\nb\0c\04d";
-K    OI S QIE IE IE  IQS
+K---_OI_S_"I?-I?-I?--I"S.
 
+// Three-digit and two-digit octal escape, hex escape.
 char *s = "\037e\038f\xffg"
-K    OI S QE   IE  NIE   IQ
+K---_OI_S_"?---I?--VI?---I".
 
-n = 1; /* abc "*/"//"
-I_S_VS_C  I   QC QC Q
+// Comment sequence with two interpretations. Same tokens either way.
+s = "*/"//"; /* abc "*/"//"
+I_S_"\-"#-"S_/-_I--_"\-"#-".
 
+// Properties and functions as alternatively highlighted ids.
 obj.x, obj->x, f(x)
-I  SPS I  S PS IBIB
+I--SPS_I--S-PS_F(I).
 
+// Inclusion. Filename string marked as quoted.
 #include <stdio.h>
-RR       Q
+RR------_=--------.

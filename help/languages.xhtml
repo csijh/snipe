@@ -89,31 +89,33 @@ example:</p>
 </pre>
 
 <p>A rule consists of a base state name, a list of pattern strings to match, a
-target state name, and an optional tag. These are all separated by spaces. The
-tag is often a token type. A state name must begin with a lower case letter. The
-base state of the first rule in the description is the initial state of the
-scanner.</p>
+target state name, and an optional tag. These are all separated by spaces. A
+state name begins with a lower case letter. A pattern is an arbitrary string of
+ASCII characters, excluding control characters or spaces or newlines. A tag
+starts with an upper case letter or is a single symbol character. A tag often
+represents a token type. The base state of the first rule in the description is
+the initial state of the scanner.</p>
 
 <p>When the scanner is in the base state of a rule and one of the strings in the
 list is matched, the scanner moves past the matched string in the input, and
-goes into the target state. If there is a tag representing a token type, the
-token is terminated after the matched characters and given that type. If there
-is no tag, scanning of the current token is continued.</p>
+goes into the target state. If it is a <dfn>completion</dfn> rule, i.e. if the
+tag represents a token type, the token is terminated after the matched
+characters and given that type. If it is a <dfn>construction</dfn> rule, i.e. if
+there is no tag, scanning of the current token is continued.</p>
 
 <p>With the above rule, if the scanner is in the <code>start</code> state and
 either of the equality operators <code>==</code> or <code>!=</code> appears
 next, then the scanner moves past the operator, gives it the token type
 <code>OP</code>, and remains in the <code>start</code> state.</p>
 
-<p>A pattern string in a rule is plain text. There are no quoting conventions. A
-pattern must be non-empty and may not contain spaces, newlines, control
-characters, or non-ASCII characters. Although non-ASCII characters cannot be
-explicitly matched, they are accepted in the text being scanned, and are
-implicitly treated the same as letters. This covers most common cases where such
-characters are allowed by programming languages, in comments, strings or
-identifiers. Spaces and newlines cannot be matched explicitly or included in
-tokens. but are handled automatically by the scanner, which tags a space as a
-gap between tokens, and a newline as a one-character token.</p>
+<p>A pattern string in a rule is plain ASCII text. There are no quoting
+conventions. A pattern must be non-empty and may not contain spaces, newlines,
+or control characters. Although non-ASCII characters cannot be explicitly
+matched, they are accepted in the text being scanned, and are implicitly treated
+the same as letters. This covers most common cases where such characters are
+allowed by programming languages, in comments, strings or identifiers. Spaces
+and newlines cannot be matched explicitly or included in tokens. but are matched
+and tagged automatically by the scanner.</p>
 
 <p>As an abbreviation, if a pattern string consists of two characters separated
 by two dots, it represents a range of one-character strings, e.g.
@@ -124,12 +126,13 @@ by two dots, it represents a range of one-character strings, e.g.
 
 <p>This rule says that if the scanner is in the <code>start</code> state, and a
 digit appears next in the input, the scanner matches the digit and goes into the
-<code>number</code> state. There is no tag attached to the rule, so the current
-token is not terminated, and scanning of the token continues.</p>
+<code>number</code> state. This is a construction rule, i.e. there is no tag, so
+the current token is not terminated, and scanning of the token continues after
+the matched digit.</p>
 
 <p>A tag may be a token type which is a name starting with an upper case letter.
-Any names can be used, but only the first letter is significant, and it is only
-used to determine syntax highlighting. Typical names might be:</p>
+Any names can be used, but only the first letter is significant, and it is used
+only to determine syntax highlighting. Typical names might be:</p>
 
 <pre>FUNCTION ID KEY OP PROPERTY RESERVED SIGN TYPE VALUE
 </pre>
@@ -161,15 +164,15 @@ $   End of multiline comment (nesting), e.g. -}
 </pre>
 
 <p>Each symbol other than the last indicates a token type which has some further
-significance in Snipe as well as syntax highlighting, e.g. for bracket or
-delimiter matching or indenting. The minus sign symbol explicitly indicates that
-the current token is to be continued, and is the default if a rule has no tag.</p>
+significance, as well as syntax highlighting, e.g. for bracket or delimiter
+matching or indenting. The minus sign symbol explicitly indicates that the
+current token is to be continued, and is the default if a rule has no tag.</p>
 
 <p>There are further symbols used internally and automatically by the scanner as
-tags for spaces, newlines, and bytes which continue a character. Examples of
-using symbols as token types are:</p>
+tags for spaces, newlines, and bytes which continue a UTF-8 character. Examples
+of using symbols as tags are:</p>
 
-<pre>escape n start ?
+<pre>escape \n start ?
 
 filename > start =
 
@@ -217,10 +220,10 @@ filename !..~ filename
 
 <p>These rules say that, while recognizing a filename in <code>&lt;...></code>
 brackets as a single token, a <code>></code> character terminates the token,
-even though the <code>></code> is also matched by the second rule.</p>
+even though the <code>></code> character is also matched by the second rule.</p>
 
-<p>A limited form of lookahead is provided. A lookahead rule has a token type at
-the beginning of the line, before the base state. For example:</p>
+<p>A limited form of lookahead is provided. A <dfn>lookahead</dfn> rule has a
+token type at the beginning of the line, before the base state. For example:</p>
 
 <pre>FUNCTION id ( start
 </pre>
@@ -228,23 +231,25 @@ the beginning of the line, before the base state. For example:</p>
 <p>This rule says that, in state <code>id</code>, if an open bracket appears
 next in the input text, the current token at this point is terminated and given
 type <code>FUNCTION</code>, without including the bracket. The scanner then goes
-to the <code>start</code> state to deal with the bracket. There may be spaces
-between the current token and the bracket, so this is effectively a lookahead to
-the next token.</p>
+to the <code>start</code> state to deal with the bracket. There may be spaces or
+newlines between the current token and the bracket, so this is effectively a
+lookahead to the next token.</p>
 
-<p>A lookahead rule can be a continuation. For example:</p>
+<p>A lookahead rule can be a construction rule rather than a completion rule.
+For example:</p>
 
-<pre>- start . start2
+<pre>start \ escape
 </pre>
 
-<p>This says that in the <code>start</code> state, if a dot occurs next in the
-input, it is not immediately included in the current token. The target state
-<code>start2</code> is responsible for handling the dot. The minus sign symbol
-cannot be omitted in this case, as it indicates a lookahead rule rather than a
-normal one.</p>
+<p>This says that in the <code>start</code> state, if a backslash occurs next in
+the input, it is not immediately included in the current token. The target state
+<code>escape</code> is responsible for handling the backslash. The minus sign
+symbol cannot be omitted in this case, as it is needed to indicate a lookahead
+rule rather than a normal one.</p>
 
-<p>A rule may have no patterns, in which case it is a default rule to indicate
-what happens in any situation which has not yet been handled. For example:</p>
+<p>A rule may have no patterns, in which case it is a <dfn>default</dfn> rule to
+indicate what happens in any situation which has not yet been handled. For
+example:</p>
 
 <pre>id start ID
 </pre>
@@ -258,14 +263,8 @@ end of the rule:</p>
 
 <p>Either version of the rule ensures that if an identifier is not followed by
 anything handled in previous rules, it is given the type <code>ID</code>. The
-rule applies to all printable characters, as if explicitly written as a
-lookahead rule:</p>
-
-<pre>ID id !..~ start
-</pre>
-
-<p>However, the default rule additionally specifies what happens if the token is
-followed by optional spaces and a newline.</p>
+rule applies to all single printable characters, as if the explicit pattern
+<code>!..~</code> was used, but it also applies to spaces or newlines.</p>
 
 <p>Since a token is not marked until the end of the token is reached, decisions
 about which type to use can be delayed. For example, rules like these can be
@@ -293,8 +292,9 @@ input. The prefix <code>for</code> is matched and the scanner goes into the
 into the <code>id</code> state and the token ends up being given type
 <code>ID</code>.</p>
 
-<p>If a default rule has no tag (or has a minus sign at either end), it is
-effectively an unconditional jump to another state. For example:</p>
+<p>If a default rule is also a construction rule, i.e. it has no tag (or has a
+minus sign at either end), it is effectively an unconditional jump to another
+state. For example:</p>
 
 <pre>inclusion &lt; filename
 inclusion start
@@ -306,15 +306,15 @@ file inclusion. The first rule matches the open angle bracket and goes to the
 says that if anything else appears next in the input, the scanner reverts to the
 <code>start</code> state to handle it.</p>
 
-<p>A lookahead or default rule with no token type makes no immediate progress,
-so there is a check that in any situation where the default rule is reached, the
-target state will, eventually, accept the next character.</p>
+<p>A lookahead or default rule which is a construction rule, i.e. has no token
+type, makes no obvious immediate progress, so there is a check that there is no
+cycle of such rules which could result in an infinite loop.</p>
 
-<p>Every state is either a starting state, which the scanner can be in between
-tokens, or a continuing state, where there is a non-empty current token. Checks
-are made to ensure that each state is treated consistently as one or the other.
-The starting states are the initial state, and any state which appears as a
-target in a rule which has a token type. For example:</p>
+<p>Every state is either a <dfn>starting</dfn> state, which the scanner can be
+in between tokens, or a <dfn>continuing</dfn> state, where there is a non-empty
+current token. Checks are made to ensure that each state is treated consistently
+as one or the other. The starting states are the initial state, and any state
+which appears as a target in a completion rule. For example:</p>
 
 <pre>start # hash KEY
 </pre>
@@ -331,9 +331,9 @@ java %> html >
 </pre>
 
 <p>These rules might be used in a language such as <code>JSP</code> where html
-text can contain Java code between <code>&lt;%</code> and <code>%></code>
-brackets. The <code>html</code> and <code>java</code> states are starting states
-which recognize each of the two sublanguages.</p>
+text can contain Java program fragments between <code>&lt;%</code> and
+<code>%></code> brackets. The <code>html</code> and <code>java</code> states are
+starting states which recognize each of the two sublanguages.</p>
 
 <p>Inconsistency between starting and continuing states can cause an error
 message. For example:</p>
@@ -350,10 +350,10 @@ the identifier should be highlighted differently, as a <code>PROPERTY</code>.
 Since the <code>dot</code> state checks by lookahead for the first letter, it
 seems harmless for the first <code>prop</code> rule to include digits. However,
 these rules would cause an error message. That is because the <code>prop</code>
-state is determined to be a starting state, because it follows the termination
-of a <code>SIGN</code> token in the second <code>dot</code> rule. On the other
-hand, it appears to be a continuing state, both because it is the target of
-its first rule, a continuation rule, and because it terminates a
+state is determined to be a starting state, because it follows the completion of
+a <code>SIGN</code> token in the second <code>dot</code> rule. On the other
+hand, it appears to be a continuing state, both because it is the target of its
+first rule, a continuation rule, and because it completes a
 <code>PROPERTY</code> token in its second rule. This can be corrected by
 writing:</p>
 
@@ -371,9 +371,11 @@ prop2 start PROPERTY
 letter, and <code>prop2</code> is a continuing state which recognizes the rest
 of the token.</p>
 
-<p>The default behaviour for a starting state, for any situation not explicitly
-handled, is to accept the next character as a one-character error token and stay
-in the same state, as if a default rule were added of this form:</p>
+<p>A starting state can have an explicit default rule, but it could only be an
+unconditional jump to another starting state. Without an explicit default rule,
+the implicit default behaviour for a starting state, for any situation not
+otherwise handled, is to accept the next character as a one-character error
+token and stay in the same state, as if a rule were added of this form:</p>
 
 <pre>start !..~ start ?
 </pre>
@@ -381,30 +383,29 @@ in the same state, as if a default rule were added of this form:</p>
 <p>Spaces and newlines are handled similarly and automatically, by accepting and
 tagging them suitably, though this can't be expressed explicitly.</p>
 
-<p>The default behaviour for a continuing state <code>s</code>, say,
-for any situation not explicitly handled, is to terminate the current token as
-an error token and go into the initial state, as if a default rule was added of
-the form:</p>
-
-<pre>? s start
-</pre>
-
-<p>This applies to spaces and newlines as well as to printable characters. If
-there is an explicit default rule for a state such as:</p>
+<p>An explicit default rule for a continuing state must be a completion rule
+with a starting state as its target. For example:</p>
 
 <pre>ID id start
 </pre>
 
-<p>then this apples to spaces and newlines as well, ensuring that the current
-token gets type <code>ID</code> in all cases.</p>
+<p>This apples to spaces and newlines as well as other characters, ensuring that
+the current token gets type <code>ID</code> in all remaining cases.</p>
+
+<p>If there is no explicit default rule, the implicit default behaviour is to
+complete the current token as an error token and go into the initial state, as
+if a default rule was added of the form:</p>
+
+<pre>? id start
+</pre>
 
 <p>In awkward cases, it may be necessary to choose an imperfect compromise. Take
 a file inclusion string <code>&lt;stdio.h></code> in C for example. Technically,
 the C language allows the filename string to contain spaces, but that would
 involve awkward language-dependent handling during later delimiter matching,
-since <code>&lt;</code> and <code>></code> are not uniformly treated as string
-quotes in the C language. To avoid that, the rules for the C language could
-include these:</p>
+since <code>&lt;</code> and <code>></code> are not uniformly treated as literal
+quotes in the C language. To avoid that problem, the rules for the C language
+could include these:</p>
 
 <pre>filename &gt; start =
 filename !..~ filename

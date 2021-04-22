@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <ctype.h>
 #include <assert.h>
 
 // Big is the limit on the number of patterns. Small is the limit on other
@@ -105,6 +106,7 @@ void readScanner(char *path, scanner *sc) {
 // there is no match.
 static inline int match(char *s, char *p) {
     int i;
+//    printf("match %s %s\n", s, p);
     for (i = 0; p[i] != '\0'; i++) if (s[i] != p[i]) return 0;
     return i;
 }
@@ -124,28 +126,34 @@ static void trace(scanner *sc, int base, char *p, int target, char tag) {
     printf("\n");
 }
 
-// After skipping spaces, search for a match, but ignore non-lookahead actions.
+// Skip spaces and newlines. Search for a match, but ignore non-lookahead
+// actions. Return the pattern index or -1 for a failed search (on finding
+// a singleton pattern).
 static int lookahead(scanner *sc) {
     action *actions = sc->actions[sc->state];
     char *input = sc->input;
-    while (input[0] == ' ') input++;
+    while (input[0] == ' ' || input[0] == '\n') input++;
     int ch = input[0];
+    if (ch == '\0') return -1;
     int index = sc->indexes[ch];
     int len = 0;
     char *p;
     while (len == 0) {
         p = sc->patterns[index];
         int tag = actions[index].tag;
-        if (tag == SKIP) continue;
-        if ((tag & 0x80) == 0) continue;
-        len = match(input, p);
-        if (len == 0) index++;
+//        printf("la %d %s %d\n", index, p, tag);
+        if (tag != SKIP && (tag & 0x80) != 0) len = match(input, p);
+        if (len == 0) {
+            if (p[1] == '\0') return -1;
+            index++;
+        }
     }
     return index;
 }
 
 // Do a normal search for a match (for a non-lookahead action, or a lookahead
-// action with no intervening spaces). If not a lookahead, move forward.
+// action with no intervening spaces - should never fail). If not a lookahead,
+// move forward in the input. Return the pattern index.
 static int search(scanner *sc) {
     action *actions = sc->actions[sc->state];
     int ch = sc->input[0];
@@ -155,7 +163,10 @@ static int search(scanner *sc) {
     while (len == 0) {
         p = sc->patterns[index];
         if (actions[index].tag != SKIP) len = match(sc->input, p);
-        if (len == 0) index++;
+        if (len == 0) {
+            if (p[1] == '\0') crash("Bug: no pattern match found");
+            index++;
+        }
     }
     if ((actions[index].tag & 0x80) == 0) for (int i = 0; i < len; i++) {
         *sc->tags++ = MORE;
@@ -166,19 +177,25 @@ static int search(scanner *sc) {
 
 // Given a state and the current position in the input, find the pattern that
 // matches (which should never fail) and mark the matched characters with MORE.
-// Update the state and input position.
+// Update the state and input position. If white space is next in the input, and
+// the action is a lookahead, skip forwards to the next token and check for any
+// explicit lookahead rule which applies.
 static void step(scanner *sc, bool tracing) {
     int index = search(sc);
     action *actions = sc->actions[sc->state];
-    char tag = actions[index].tag;
-    char target = actions[index].target;
-    if (tracing) trace(sc, sc->state, sc->patterns[index], target, tag);
-    if (tag == (GAP | 0x80)) {
-        index = lookahead(sc);
-        tag = actions[index].tag;
-        target = actions[index].target;
-        if (tracing) trace(sc, sc->state, sc->patterns[index], target, tag);
+    int tag = actions[index].tag;
+    int target = actions[index].target;
+    if ((sc->input[0] == ' ' || sc->input[0] == '\n') && (tag & 0x80) != 0) {
+//        printf("la spotted %d %d %d\n", index, tag, index);
+        int index2 = lookahead(sc);
+        if (index2 >= 0) {
+            index = index2;
+            tag = actions[index].tag;
+            target = actions[index].target;
+        }
+//        printf("la spotted %d %d %d\n", index, tag, index);
     }
+    if (tracing) trace(sc, sc->state, sc->patterns[index], target, tag);
     tag = tag & 0x7F;
     if (tag != MORE) {
         sc->token[0] = tag;
@@ -195,8 +212,7 @@ void scan(scanner *sc, char *line, char *tags, bool tracing) {
     sc->input = line;
     sc->tags = tags;
     sc->token = tags;
-    while (sc->input[0] != '\n') step(sc, tracing);
-    step(sc, tracing);
+    while (sc->input[0] != '\0') step(sc, tracing);
 }
 
 // Split the text into a list of lines, replacing each newline by a null.
@@ -226,7 +242,7 @@ void runTest(scanner *sc, char *line, char *expected, bool tracing) {
     actual[n] = '\0';
     if (strcmp(actual, expected) == 0) return;
     fprintf(stderr, "Error:\n");
-    fprintf(stderr, "%s\n", line);
+    fprintf(stderr, "%s", line);
     fprintf(stderr, "%s (expected)\n", expected);
     fprintf(stderr, "%s (actual)\n", actual);
     exit(1);
@@ -243,7 +259,6 @@ int runTests(scanner *sc, char *tests, bool tracing) {
         strcpy(line, lines[i]);
         strcat(line, "\n");
         strcpy(tags, lines[i+1]);
-        strcat(tags, "\n");
         runTest(sc, line, tags, tracing);
         passes++;
     }
