@@ -1,0 +1,21 @@
+// The brackets
+(=) [=] {=} -
+
+// The precedence of the brackets
+(<] [<} ?
+
+// The quotes
+'=' "=" =
+
+// Terminate quotes at newline and mark opener as unmatched
+// The ~ means defer to the other rule, so internals are marked =
+'~. "~. ?
+
+// Allow \ at end of line to continue a quoted literal
+'+\ \=. -
+
+// Define # as one-line comment and < > as multi-line comment
+#=. <=> *
+
+// Allow \ at end of line to continue a one-line comment
+#+\ \=. -

@@ -41,6 +41,10 @@ start */ start \
 // An illegal character is a one-character error token
 start !..~ start ?
 
+// TODO Spaces and newlines
+start \s start _
+start \n start .
+
 // Potential keywords, if not followed by alphanumerics.
 key a..z A..Z 0..9 _ \U \u id
 key start KEY
@@ -66,9 +70,11 @@ num e+ e- E+ E- num
 num p+ p- P+ P- num
 num start VALUE
 
-// Escape sequences: single character, hex, octal.
+// Escape sequences: single character, hex, octal. Mark \ followed by newline as
+// an operator token (concatenate).
 // The default for an escape sequence is ? but gets overridden by = if the
 // sequence is inside quotes.
+escape \n start OP
 escape a..w y..z start ?
 escape x escapex
 escape 0..7 escape1

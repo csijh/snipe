@@ -181,19 +181,18 @@ static int search(scanner *sc) {
 // the action is a lookahead, skip forwards to the next token and check for any
 // explicit lookahead rule which applies.
 static void step(scanner *sc, bool tracing) {
+    bool gap = sc->input[0] == ' ' || sc->input[0] == '\n';
     int index = search(sc);
     action *actions = sc->actions[sc->state];
     int tag = actions[index].tag;
     int target = actions[index].target;
-    if ((sc->input[0] == ' ' || sc->input[0] == '\n') && (tag & 0x80) != 0) {
-//        printf("la spotted %d %d %d\n", index, tag, index);
+    if (gap) {
         int index2 = lookahead(sc);
         if (index2 >= 0) {
             index = index2;
             tag = actions[index].tag;
             target = actions[index].target;
         }
-//        printf("la spotted %d %d %d\n", index, tag, index);
     }
     if (tracing) trace(sc, sc->state, sc->patterns[index], target, tag);
     tag = tag & 0x7F;
@@ -220,7 +219,7 @@ void scan(scanner *sc, char *line, char *tags, bool tracing) {
 char **splitLines(char *text) {
     int nlines = 0;
     for (int i = 0; text[i] != '\0'; i++) if (text[i] == '\n') nlines++;
-    char **lines = malloc((nlines + 1) * sizeof(char *));
+    char **lines = malloc((nlines + 2) * sizeof(char *));
     int p = 0, row = 0;
     for (int i = 0; text[i] != '\0'; i++) {
         if (text[i] != '\n') continue;
@@ -230,7 +229,8 @@ char **splitLines(char *text) {
         }
         p = i + 1;
     }
-    lines[nlines] = NULL;
+    lines[row++] = NULL;
+    lines[row] = NULL;
     return lines;
 }
 
@@ -254,14 +254,14 @@ int runTests(scanner *sc, char *tests, bool tracing) {
     char tags[100];
     int passes = 0;
     char **lines = splitLines(tests);
-    for (int i = 0; lines[i] != NULL; i = i + 2) {
-        if (lines[i+1] == NULL) break;
+    for (int i = 0; lines[i] != NULL && lines[i+1] != NULL; i = i + 2) {
         strcpy(line, lines[i]);
         strcat(line, "\n");
         strcpy(tags, lines[i+1]);
         runTest(sc, line, tags, tracing);
         passes++;
     }
+    free(lines);
     return passes;
 }
 
@@ -280,20 +280,6 @@ int main(int n, char const *args[n]) {
     sprintf(path, "%s/tests.txt", lang);
     char *tests = readFile(path);
     runTests(sc, tests, tracing);
-
-    /*
-    scanner *sc = malloc(sizeof(scanner));
-    readScanner(path, sc);
-    construct(sc);
-    sprintf(path, "%s/tests.txt", lang);
-    char *testFile = readTests(path);
-    char **lines = splitLines(testFile);
-    int p = runTests(lines, sc, trace);
-    free(lines);
-    free(testFile);
-    freeScanner(sc);
-    printf("Tests passed: %d\n", p);
-    */
     free(tests);
     free(sc->data);
     free(sc);

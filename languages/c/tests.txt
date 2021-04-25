@@ -1,20 +1,16 @@
-// 1: Simple id.
 abc
 I--.
 
-// 2: Brackets
 (def)
 (I--).
 
-// 3: Statement, with spaces.
 if (b) n = 1;
 K-_(I)_I_S_VS.
 
-// Statement with block.
 if (b) { n = 1; }
 K-_(I)_{_I_S_VS_}.
 
-// Type keyword followed by id.
+// Type-keyword followed by id.
 int n;
 K--_IS.
 
@@ -22,11 +18,9 @@ K--_IS.
 string s;
 I-----_IS.
 
-// Curly bracket initlializer.
 enum suit { Club, Diamond, Heart, Spade };
 K---_I---_{_I---S_I------S_I----S_I----_}S.
 
-// Numbers.
 int ns[] = { 1, 2, 34};
 K--_I-[]_S_{_VS_VS_V-}S.
 
@@ -45,6 +39,10 @@ I_S_"\-"#-"S_/-_I--_"\-"#-".
 // Properties and functions as alternatively highlighted ids.
 obj.x, obj->x, f(x)
 I--SPS_I--S-PS_F(I).
+
+// Function with gap before brackets.
+n = f   (x);
+I_S_F___(I)S.
 
 // Inclusion. Filename string marked as quoted.
 #include <stdio.h>

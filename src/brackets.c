@@ -29,13 +29,13 @@ bool openers[COUNT] = {
 // (Note indent MAYBE grapheme continuation of preceding NL).
 enum action {
     XX,  // Not relevant.
-    PU,  // push next onto openers, then check it against closers
-    MA,  // match with popped opener, push pair onto matched
-    EX,  // excess: mark next as mismatched  (EQUALS G ???)
-    LT,  // less: pop and mismatch opener, repeat
-    GT,  // mismatch next (and push on matched ???)
-    IN,  // incomplete (same as LT, but don't touch NL)
-    SK,  // skip past ordinary token
++>  PU,  // push next onto openers, then check it against closers
+=   MA,  // match with popped opener, push pair onto matched
+>   EX,  // excess: mark next as mismatched  (EQUALS G ???)
+<   LT,  // less: pop and mismatch opener, repeat
+>   GT,  // mismatch next (and push on matched ???)
+~   IN,  // incomplete (same as LT, but don't touch NL)
+->  SK,  // skip past ordinary token
     CO,  // skip, and override as commented
     QU,  // skip, and override as quoted
 };

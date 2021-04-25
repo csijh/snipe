@@ -27,34 +27,38 @@ supported by adding description files.</p>
 <h2>Overview</h2>
 
 <p>A scanner for an editor has different goals from those of a scanner in a
-compiler. On the one hand:</p>
+compiler. On the one hand the scanner:</p>
 
 <ul>
-<li>it may omit some details needed only for full compiling</li>
-<li>it may accept some tokens that a compiler would reject</li>
-<li>it may split or classify tokens differently</li>
-<li>it may not need to be completely accurate</li>
+<li>may omit some details needed only for full compiling</li>
+<li>may accept some tokens that a compiler would reject</li>
+<li>may split or classify tokens differently</li>
+<li>may not need to be completely accurate</li>
 </ul>
 
-<p>On the other hand:</p>
+<p>One common reason for a scanner not to be completely accurate is where the
+rules for a language have lexical rules that depend on the syntactic context,
+e.g. the rules for distinguishing between <code>/</code> for division and
+<code>/</code> as a regular expression delimiter in JavaScript. On the other
+hand, the scanner:</p>
 
 <ul>
-<li>it must include all characters, including comments, in
+<li>must include all characters, including comments, in
 tokens</li>
-<li>it must be able to handle any text, whether valid or not, and never
+<li>must be able to handle any text, whether valid or not, and never
 fail</li>
-<li>it must produce token types which are suitable for syntax
+<li>must produce token types which are suitable for syntax
 highlighting</li>
 </ul>
 
-<p>In addition, the scanner for Snipe has some further specific features:</p>
+<p>In addition, the scanner for Snipe:</p>
 
 <ul>
-<li>it avoids re-scanning large quantities of text</li>
-<li>it produces mini tokens within comments and literals</li>
-<li>it supports word-based cursor movement and line wrapping</li>
-<li>it helps with automatic indenting, bracket matching, semicolon insertion</li>
-<li>it supports incremental algorithms</li>
+<li>avoids re-scanning large quantities of text</li>
+<li>produces mini tokens within comments and literals</li>
+<li>supports word-based cursor movement and line wrapping</li>
+<li>helps with automatic indenting, bracket matching, semicolon insertion</li>
+<li>supports incremental algorithms</li>
 </ul>
 
 <p>In most editors, when a multi-line comment delimiter such as <code>/*</code>
@@ -69,13 +73,14 @@ small effects, the Snipe scanner divides the text into smaller tokens than
 usual. These small tokens then support word-based cursor movement and line
 wrapping within comments or literals. Bracket matching techniques which take the
 current cursor position into account are used to match up comment and literal
-delimiters, and re-interpret the tokens between them. Auto indenting and other
-features are similarly handled in an incremental fashion.</p>
+delimiters, and override the highlighting of the tokens between them. Auto
+indenting and other features are similarly handled in an incremental
+fashion.</p>
 
-<h2>Rules</h2>
+<h2>Tokens</h2>
 
 <p>Language tokens are described by a plain text file. For example, the C
-language is described by the <code>rules.txt</code> file in the directory
+language is described by the <code>tokens.txt</code> file in the directory
 <code>snipe/languages/c</code>. The file is a description of a string-matching
 state machine. A generic scanner uses the state machine to generate a tag byte
 for every byte of text.</p>
@@ -223,9 +228,9 @@ brackets as a single token, a <code>></code> character terminates the token,
 even though the <code>></code> character is also matched by the second rule.</p>
 
 <p>A limited form of lookahead is provided. A <dfn>lookahead</dfn> rule has a
-token type at the beginning of the line, before the base state. For example:</p>
+<code>~</code> character as a tag prefix. For example:</p>
 
-<pre>FUNCTION id ( start
+<pre>id ( start ~FUNCTION
 </pre>
 
 <p>This rule says that, in state <code>id</code>, if an open bracket appears
@@ -235,17 +240,15 @@ to the <code>start</code> state to deal with the bracket. There may be spaces or
 newlines between the current token and the bracket, so this is effectively a
 lookahead to the next token.</p>
 
-<p>A lookahead rule can be a construction rule rather than a completion rule.
-For example:</p>
+<p>A lookahead rule can be a construction rule rather than a completion rule,
+with <code>-</code> as its tag, or no tag. For example:</p>
 
-<pre>start \ escape
+<pre>start \ escape ~
 </pre>
 
 <p>This says that in the <code>start</code> state, if a backslash occurs next in
 the input, it is not immediately included in the current token. The target state
-<code>escape</code> is responsible for handling the backslash. The minus sign
-symbol cannot be omitted in this case, as it is needed to indicate a lookahead
-rule rather than a normal one.</p>
+<code>escape</code> is responsible for handling the backslash.</p>
 
 <p>A rule may have no patterns, in which case it is a <dfn>default</dfn> rule to
 indicate what happens in any situation which has not yet been handled. For
@@ -255,16 +258,16 @@ example:</p>
 </pre>
 
 <p>This can be thought of as matching the empty string. It can equally be
-thought of as looking ahead for the empty string, so the tag can be at either
-end of the rule:</p>
+thought of as looking ahead for the empty string, so it is equivalent to:</p>
 
-<pre>ID id start
+<pre>id start ~ID
 </pre>
 
 <p>Either version of the rule ensures that if an identifier is not followed by
 anything handled in previous rules, it is given the type <code>ID</code>. The
-rule applies to all single printable characters, as if the explicit pattern
-<code>!..~</code> was used, but it also applies to spaces or newlines.</p>
+rule applies to all single printable characters, as if a lookahead rule with the
+explicit pattern <code>!..~</code> was given, but a default rule also applies to
+spaces or newlines.</p>
 
 <p>Since a token is not marked until the end of the token is reached, decisions
 about which type to use can be delayed. For example, rules like these can be
@@ -292,9 +295,9 @@ input. The prefix <code>for</code> is matched and the scanner goes into the
 into the <code>id</code> state and the token ends up being given type
 <code>ID</code>.</p>
 
-<p>If a default rule is also a construction rule, i.e. it has no tag (or has a
-minus sign at either end), it is effectively an unconditional jump to another
-state. For example:</p>
+<p>If a default rule is also a construction rule, i.e. it has no tag (or a minus
+sign tag), it is effectively an unconditional jump to another state. For
+example:</p>
 
 <pre>inclusion &lt; filename
 inclusion start
@@ -306,9 +309,10 @@ file inclusion. The first rule matches the open angle bracket and goes to the
 says that if anything else appears next in the input, the scanner reverts to the
 <code>start</code> state to handle it.</p>
 
-<p>A lookahead or default rule which is a construction rule, i.e. has no token
-type, makes no obvious immediate progress, so there is a check that there is no
-cycle of such rules which could result in an infinite loop.</p>
+<p>A lookahead or default rule which is a construction rule, i.e. has no tag (or
+has a minus sign tag), makes no obvious immediate progress, so there is a check
+that there is no cycle of such rules which could result in an infinite loop when
+scanning.</p>
 
 <p>Every state is either a <dfn>starting</dfn> state, which the scanner can be
 in between tokens, or a <dfn>continuing</dfn> state, where there is a non-empty
@@ -339,7 +343,7 @@ starting states which recognize each of the two sublanguages.</p>
 message. For example:</p>
 
 <pre>dot 0..9 number
-SIGN dot a..z A..Z prop
+dot a..z A..Z prop ~SIGN
 
 prop a..z A..Z 0..9 prop
 prop start PROPERTY
@@ -358,7 +362,7 @@ first rule, a continuation rule, and because it completes a
 writing:</p>
 
 <pre>dot 0..9 number
-SIGN dot a..z A..Z prop
+dot a..z A..Z prop ~SIGN
 
 prop a..z A..Z prop2
 prop start
@@ -371,33 +375,28 @@ prop2 start PROPERTY
 letter, and <code>prop2</code> is a continuing state which recognizes the rest
 of the token.</p>
 
-<p>A starting state can have an explicit default rule, but it could only be an
-unconditional jump to another starting state. Without an explicit default rule,
-the implicit default behaviour for a starting state, for any situation not
-otherwise handled, is to accept the next character as a one-character error
-token and stay in the same state, as if a rule were added of this form:</p>
+<p>A starting state can have an explicit default rule, but it can only be an
+unconditional jump to another starting state. Without such an explicit default
+rule, a starting state must handle every possible input character, for example
+by having a last rule of the form:</p>
 
 <pre>start !..~ start ?
 </pre>
 
-<p>Spaces and newlines are handled similarly and automatically, by accepting and
-tagging them suitably, though this can't be expressed explicitly.</p>
+<p>This accepts any character not already dealt with as a one-character error
+token. Spaces and newlines are handled similarly and automatically, by accepting
+and tagging them suitably, though this can't be expressed explicitly.</p>
 
-<p>An explicit default rule for a continuing state must be a completion rule
-with a starting state as its target. For example:</p>
+<p>Every continuing state must end with a default rule, to ensure that the
+current token is completed and given a type, no matter what appears next in the
+input. For example:</p>
 
-<pre>ID id start
+<pre>id start ID
 </pre>
 
 <p>This apples to spaces and newlines as well as other characters, ensuring that
-the current token gets type <code>ID</code> in all remaining cases.</p>
-
-<p>If there is no explicit default rule, the implicit default behaviour is to
-complete the current token as an error token and go into the initial state, as
-if a default rule was added of the form:</p>
-
-<pre>? id start
-</pre>
+the current token gets type <code>ID</code> in all cases not already
+handled.</p>
 
 <p>In awkward cases, it may be necessary to choose an imperfect compromise. Take
 a file inclusion string <code>&lt;stdio.h></code> in C for example. Technically,
@@ -409,7 +408,7 @@ could include these:</p>
 
 <pre>filename &gt; start =
 filename !..~ filename
-? filename start
+filename start ~?
 </pre>
 
 <p>This treats <code>&lt;stdio.h&gt;</code> as a single token, without spaces,
@@ -418,7 +417,7 @@ incomplete token. A file path containing spaces in this context is vanishingly
 rare, and the only consequence is incorrect syntax highlighting on one line, so
 the imperfection seems acceptable.</p>
 
-<p>A language description in <code>rules.txt</code> can be compiled into a table
+<p>A language description in <code>tokens.txt</code> can be compiled into a table
 using <code>compile.c</code> in <code>snipe/languages</code> and then executed
 using <code>interpret.c</code>, independently of the rest of Snipe. The
 interpreter carries out tests in a file <code>tests.txt</code>. Each test
@@ -457,6 +456,96 @@ alternative start states for tokens can be used to handle unusual
 situations.</p>
 
 
+<h2>Matching</h2>
+
+<!-- Possibility: reserve 111 + 5 for 'space with starting state'. That leaves
+7*32 = 224 tags. Allocate them dynamically as X overridden with Y. (That's
+enough for 74 with 3 overrides or 56 with 4 overrides) OR also reserve 110 +5
+for 'newline with starting state', leaving 192. -->
+
+<p>The way in which brackets and delimiters are matched for a language is
+defined in a file <code>match.txt</code> in the language directory. A blank line
+or a line starting with one or two symbols (e.g. <code>#</code> or
+<code>//</code>) is a comment line. Each rule in the file consists of triples of
+symbols, followed by a tag:</p>
+
+<pre>(=) [=] {=} -
+</pre>
+
+<p>The first and third symbols in a triple are token type tags, as allocated in
+the <code>tokens.txt</code> file. The first is an opener, i.e. the token type of
+an opening bracket or delimiter, and the third is a closer. The middle symbol is
+an operator such as a comparison which specifies what happens when the opener
+and closer meet during matching. The <code>=</code> symbol indicates that the
+opener and closer match. A rule with a minus sign as a tag (or no tag) specifies
+that the openers and closers are brackets, and the token types of the tokens
+between matching brackets remain unchanged. A rule may also deal with
+mismatches:</p>
+
+<pre>(&lt;] [&lt;} ?
+</pre>
+
+<p>This establishes a precedence between the brackets when they don't match, and
+the token type given to any mismatched brackets. The triple <code>(&lt;]</code>
+means that when <code>(</code> is the most recent open bracket and
+<code>]</code> is the next close bracket, then the <code>(</code> is marked with
+type <code>?</code> and subsequently ignored. Implicit further comparisons are
+automatically deduced from the ones given, in this case:</p>
+
+<pre>(&lt;} [>) {>) {>] ?
+</pre>
+
+<p>A suitable rules for quotes would be:</p>
+
+<pre>'=' "=" =
+</pre>
+
+<p>This establishes which quotes match, and specifies that the type
+<code>=</code> (quoted text) overrides the original types of the quotes and the
+tokens between them. A further rule might be:</p>
+
+<pre>'~. "~. ?
+</pre>
+
+<p>This rule specifies that the quotes are on one line. The dot is the token
+type of a newline, and <code>'~.</code> means that the opening quote and the
+newline 'match'. Using <code>~</code> instead of <code>=</code> means that there
+is no change to the types of the tokens in between. The opening quote has its
+type overridden with <code>?</code> to indicate an incomplete construct. The
+closer would normally be overridden with type <code>?</code> too, except that
+the type of a newline is never overridden. In addition, a rule like this could
+be added:</p>
+
+<pre>'+\ \=. -
+</pre>
+
+<p>This assumes that a backslash immediately before a newline is used in the
+language to say that the next line is a continuation, and that the backslash has
+been tagged with <code>\</code> as its type. The operator <code>+</code> goes
+between two openers (or two closers) to indicate that the first opener allows
+the second as an inner construct. The triple <code>\=.</code> matches up the
+backslash with the immediately following newline, effectively removing it so
+that the earlier triple <code>'~.</code> doesn't apply.</p>
+
+<p>Comments might be specified using:</p>
+
+<pre>#=. &lt;=> *
+</pre>
+
+<p>This says that a one-line comment, where the opening delimiter has been
+tagged with type <code>#</code>, is matched by the next newline and that all the
+tokens making up the comment have their types overridden with <code>*</code>
+(commented text). Assuming that multi-line comment delimiters have been given
+types <code>&lt;</code> and <code>></code>, the triple <code>&lt;=></code> makes
+them match.</p>
+
+<p>In many languages, multi-line comments don't nest, and that is the default
+behaviour. To specify nesting comments, a rule could be added to replace the
+default:</p>
+
+<pre>&lt;+&lt; -
+</pre>
+
 <h3>Example: reinterpretation</h3>
 
 <p>In C or a similar language, the text <code>"*/"//"</code> would be
@@ -483,8 +572,6 @@ instead temporarily adjusted to:</p>
 <p>If bracket matching is incremental as well as scanning, then these
 readjustments can also be incremental, and the whole process need not be very
 expensive.</p>
-
-<h2>Matching</h2>
 
 <p>TODO: explain forward algorithm. Assume only brackets. As well as text, there
 are two stacks: unmatched and matched. (Picture with ... for cursor position.)
@@ -620,61 +707,92 @@ unmatched.</p>
 to the cursor, with possibly one change of highlighting to a delimiter further
 away. And the changes are, arguably, very intuitive.</p>
 
-<!--
+<h3>Notes</h3>
 
+<p>Can bracket/delimiter matching be defined in a custom way too?</p>
 
-
-
-<p>The token types are:</p>
-
-<pre>BAD
-COMMENT  (0=/*, 1=*/, 2, 3)
-ESCAPE sequence
-HANDLE (colon)
-IDENTIFIER (0,1,2,3,4 for normal, function, property, method, constant)
-KEYWORD (0,1 for alternative highlighting, e.g. reserved)
-LEFT (0,1,2)
-LINE
-MEMO  (//)
-NUMBER
-OP
-PARAGRAPH (e.g. """)
-RIGHT (3,4,5)
-QUOTE (0,1 for " ')
-SIGN (symbol e.g. = , ;)
-TYPE
-WORD
-
-order: LINE, BAD, MEMO, QUOTE first.
-important for bracketing: LINE BAD MEMO QUOTE BRACKET COMMENT
+<pre>Brackets, in increasing priority order
+M () [] {} &lt;> (match, mismatch and excess ? Covers PU, MA, EX, LT, GT
+S ~)? ~]? ~}? (start excess)
+G {] {) [)
+L (] (} [}
+Quote delimiters (match with morph)
+M ''=  ""=  @@=
+M '.? ".?   (mismatch both, implicitly not NL)
+One-line delimiters terminated at NL
+Don't need GL rules because first=last
+Since . ends ' and " and // backward matching needs retro morph
+Comment delimiters
+D #.*  /\*  (i.e. // ends at \n and /* ends at */)
+G //?       (i.e. /* /* mismatch R)
+X ^^
+/* /* GT   but  {- {- = PU
 </pre>
 
-<p>All actions other than accept terminate the current token with a type. Upper
-case letters are used to mark tokens which only affect syntax highlighting via
-theme files. Non-letter symbols are used to mark tokens which have some
-syntactic significance which potentially affects bracketing, indenting,
-continuation, wrapping etc. Bracket matching in the editor deals with such
-things as delimiting comments and quoted literals, terminating one-line comments
-at newlines, or marking a close curly bracket as belonging to an initializer
-(which affects the handling of semicolons). That means, for example, that a
-newline should be marked with <code>$</code> so that the bracket matcher can
-detect the end of a one-line comment.</p>
+<pre>M = start of text
+() = Rr   [] = Aa  {} = Ww
+'"T = QDT  // = C  /**/ = Xx   {--} = Yy
 
-<p>A language description file has tests at the end, after a line of at least
-five minus signs. Each test consists of two lines of text. Tests may be
-separated by blank lines. The first line of a test consists of some program text
-in the language being described. The second line shows the token types generated
-by the scanner. The first character of a token is marked with its type, and the
-remaining characters of a token are marked with spaces.</p>
+// Make sure tags have no override flags when not on any of the stacks.
+// (Note indent MAYBE grapheme continuation of preceding NL).
+enum action {
+    XX,  // Not relevant.
+    PU,  // push next onto openers, then check it against closers
+    MA,  // match with popped opener, push pair onto matched
+    EX,  // excess: mark next as mismatched  (EQUALS G ???)
+    LT,  // less: pop and mismatch opener, repeat
+    GT,  // mismatch next (and push on matched ???)
+    IN,  // incomplete (same as LT, but don't touch NL ???)
+    SK,  // skip past ordinary token
+    CO,  // skip, and override as commented
+    QU,  // skip, and override as quoted
+};
 
-<p>The scanner is made incremental by generating tags which encode both the
-token type and the state which the scanner is in after the token. A token cannot
-be affected by anything further ahead than the following character. So, after an
-edit, rescanning can be started at the nearest token boundary before the edit
-point, and stopped as soon as a token after any changed text is given the same
-tag as before the edit.</p>
-
--->
+// Table which compares the most recent opener with the next token, to decide
+// what action to take in forward matching. Use M (MISS) for start of text.
+int table[COUNT][COUNT] = {
+    // At start of text, no openers
+    [M][R]=PU, [M][A]=PU, [M][W]=PU, [M][r]=EX, [M][a]=EX, [M][w]=EX,
+    [M][Q]=PU, [M][D]=PU, [M][T]=PU, [M][C]=PU, [M][X]=PU, [M][x]=EX,
+    [M][Y]=PU, [M][y]=EX, [M][N]=SK, [M][I]=SK,
+    // (
+    [R][R]=PU, [R][A]=PU, [R][W]=PU, [R][r]=MA, [R][a]=LT, [R][w]=LT,
+    [R][Q]=PU, [R][D]=PU, [R][T]=PU, [R][C]=PU, [R][X]=PU, [R][x]=EX,
+    [R][Y]=PU, [R][y]=EX, [R][N]=SK, [R][I]=SK,
+    // [
+    [A][R]=PU, [A][A]=PU, [A][W]=PU, [A][r]=GT, [A][a]=MA, [A][w]=LT,
+    [A][Q]=PU, [A][D]=PU, [A][T]=PU, [A][C]=PU, [A][X]=PU, [A][x]=EX,
+    [A][Y]=PU, [A][y]=EX, [A][N]=SK, [A][I]=SK,
+    // {
+    [W][R]=PU, [W][A]=PU, [W][W]=PU, [W][r]=GT, [W][a]=GT, [W][w]=MA,
+    [W][Q]=PU, [W][D]=PU, [W][T]=PU, [W][C]=PU, [W][X]=PU, [W][x]=EX,
+    [W][Y]=PU, [W][y]=EX, [W][N]=SK, [W][I]=SK,
+    // '
+    [Q][R]=QU, [Q][A]=QU, [Q][W]=QU, [Q][r]=QU, [Q][a]=QU, [Q][w]=QU,
+    [Q][Q]=MA, [Q][D]=QU, [Q][T]=QU, [Q][C]=QU, [Q][X]=QU, [Q][x]=QU,
+    [Q][Y]=QU, [Q][y]=QU, [Q][N]=IN, [Q][I]=QU,
+    // "
+    [D][R]=QU, [D][A]=QU, [D][W]=QU, [D][r]=QU, [D][a]=QU, [D][w]=QU,
+    [D][Q]=QU, [D][D]=MA, [D][T]=QU, [D][C]=QU, [D][X]=QU, [D][x]=QU,
+    [D][Y]=QU, [D][y]=QU, [D][N]=IN, [D][I]=QU,
+    // """
+    [T][R]=QU, [T][A]=QU, [T][W]=QU, [T][r]=QU, [T][a]=QU, [T][w]=QU,
+    [T][Q]=QU, [T][D]=QU, [T][T]=MA, [T][C]=QU, [T][X]=QU, [T][x]=QU,
+    [T][Y]=QU, [T][y]=QU, [T][N]=SK, [T][I]=QU,
+    // //
+    [C][R]=CO, [C][A]=CO, [C][W]=CO, [C][r]=CO, [C][a]=CO, [C][w]=CO,
+    [C][Q]=CO, [C][D]=CO, [C][T]=CO, [C][C]=CO, [C][X]=CO, [C][x]=CO,
+    [C][Y]=CO, [C][y]=CO, [C][N]=MA, [C][I]=CO,
+    // /*
+    [X][R]=CO, [X][A]=CO, [X][W]=CO, [X][r]=CO, [X][a]=CO, [X][w]=CO,
+    [X][Q]=CO, [X][D]=CO, [X][T]=CO, [X][C]=CO, [X][X]=GT, [X][x]=MA,
+    [X][Y]=CO, [X][y]=CO, [X][N]=SK, [X][I]=CO,
+    // {-
+    [Y][R]=CO, [Y][A]=CO, [Y][W]=CO, [Y][r]=CO, [Y][a]=CO, [Y][w]=CO,
+    [Y][Q]=CO, [Y][D]=CO, [Y][T]=CO, [Y][C]=CO, [Y][X]=CO, [Y][x]=CO,
+    [Y][Y]=PU, [Y][y]=MA, [Y][N]=SK, [Y][I]=CO,
+};
+</pre>
 
 </body>
 </html>

@@ -1,0 +1,49 @@
+// JavaScript language definition, based on the JS11=ES2020 standard
+// See https://262.ecma-international.org/11.0/
+
+// Recognising / as the start of a regex such as /abc/ instead of a division
+// operator is a problem. In the standard, grammar-dependent contexts are used.
+// Here, regex strings are recognised after open brackets, signs and operators.
+// The approach fails on regex strings containing spaces, and in rare situations
+// such as if(a)/re/ or ++/re/.
+
+// Keywords
+start  await break case catch class const continue debugger default   key
+start  delete do else enum export extends false finally for function  key
+start  if import in instanceof new null return super switch this      key
+start  throw true try typeof var void while with yield                key
+
+// Operators and signs
+start < > <= >= == != === !== + - * % ** ++ -- << >> >>> & | ^ !  regex OP
+start ~ && || = += -= *= %= **= <<= >>= >>>= &= |= ^= => ??       regex OP
+start . ... ; , ? regex SIGN
+start : regex :
+
+// Brackets
+start ( regex (
+start ) start )
+start [ regex [
+start ] start ]
+start { regex {
+start } start }
+
+// Identifiers, comments
+start a..z $ _ \u id
+start // start #
+start /* start /
+start */ start \
+
+// Possible regular expression literal
+regex / regex1
+regex start
+regex1 / start =
+regex1 !..~ regex1
+regex1 start ?
+
+// Escape sequence
+escape ' " \ b f n r t v start ?
+escape 0 escape2
+escape2 0..9 escape3
+escape2 start ?
+escape3 0..9 escape3
+escape3 start ?
