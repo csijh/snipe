@@ -47,7 +47,7 @@ key start KEY
 
 // Identifiers
 id a..z A..Z 0..9 _ \U \u id
-FUN id ( start
+id ( start ~FUN
 id start ID
 
 // A dot starts a number, or is a sign possibly followed by a property.

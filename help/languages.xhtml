@@ -458,10 +458,10 @@ situations.</p>
 
 <h2>Matching</h2>
 
-<!-- Possibility: reserve 111 + 5 for 'space with starting state'. That leaves
-7*32 = 224 tags. Allocate them dynamically as X overridden with Y. (That's
-enough for 74 with 3 overrides or 56 with 4 overrides) OR also reserve 110 +5
-for 'newline with starting state', leaving 192. -->
+<!-- Best approach for compactness: allocate 256 values 'dynamically' to both
+"tag x overridden with tag y" pairs, and "scanner starting state x overridden
+with space tag" and even "original indent x overridden with newline". Can we
+work out from language definition whether we will run out? -->
 
 <p>The way in which brackets and delimiters are matched for a language is
 defined in a file <code>match.txt</code> in the language directory. A blank line
@@ -511,21 +511,7 @@ tokens between them. A further rule might be:</p>
 type of a newline, and <code>'~.</code> means that the opening quote and the
 newline 'match'. Using <code>~</code> instead of <code>=</code> means that there
 is no change to the types of the tokens in between. The opening quote has its
-type overridden with <code>?</code> to indicate an incomplete construct. The
-closer would normally be overridden with type <code>?</code> too, except that
-the type of a newline is never overridden. In addition, a rule like this could
-be added:</p>
-
-<pre>'+\ \=. -
-</pre>
-
-<p>This assumes that a backslash immediately before a newline is used in the
-language to say that the next line is a continuation, and that the backslash has
-been tagged with <code>\</code> as its type. The operator <code>+</code> goes
-between two openers (or two closers) to indicate that the first opener allows
-the second as an inner construct. The triple <code>\=.</code> matches up the
-backslash with the immediately following newline, effectively removing it so
-that the earlier triple <code>'~.</code> doesn't apply.</p>
+type overridden with <code>?</code> to indicate an incomplete construct.</p>
 
 <p>Comments might be specified using:</p>
 
@@ -539,12 +525,28 @@ tokens making up the comment have their types overridden with <code>*</code>
 types <code>&lt;</code> and <code>></code>, the triple <code>&lt;=></code> makes
 them match.</p>
 
-<p>In many languages, multi-line comments don't nest, and that is the default
-behaviour. To specify nesting comments, a rule could be added to replace the
-default:</p>
+<p>In some languages multi-line comments nest, but in many others they don't. To
+specify that multi-line comments nest, a rule like this can be used:</p>
 
-<pre>&lt;+&lt; -
+<pre>&lt;+&lt; >+>
 </pre>
+
+<p>The operator <code>+</code> goes between two openers or two closers to
+indicate that one pair of  is allowed inside another. In the forward matching
+algorithm, the triple <code>&lt;+&lt;</code> indicates that when
+<code>&lt;</code> is on the stack of unmatched openers, and a further
+<code>&lt;</code> is encountered, it is pushed onto the stack. To specify
+instead that multi-line comments are non-nesting, rules like this can be
+used:</p>
+
+<pre> &lt;>&lt; *
+>>> ?
+</pre>
+
+<p>The first rule indicates that, when scanning forwards, a later
+start-of-comment token is mismatched, but tagged as commented text rather than
+as an error. When scanning backwards, an earlier end-of-comment token takes
+precedence and the later one is tagged as an error.</p>
 
 <h3>Example: reinterpretation</h3>
 

@@ -3,6 +3,8 @@
 // Type  ./match x  to compile a description of matching for language x in
 // x/match.txt into a scanner table in x/table.bin.
 
+#include "list.h"
+#include "data.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -33,83 +35,38 @@ struct matcher {
 };
 typedef struct matcher matcher;
 
-// ----- Reading in  -----------------------------------------------------------
-
-// Read a text file as a string, adding a final newline if necessary, and a null
-// terminator. Use binary mode, so that the file size equals the bytes read in.
-char *readFile(char const *path) {
-    FILE *file = fopen(path, "rb");
-    if (file == NULL) crash("can't read file", 0, path);
-    fseek(file, 0, SEEK_END);
-    int size = ftell(file);
-    fseek(file, 0, SEEK_SET);
-    if (size < 0) crash("can't find file size", 0, path);
-    char *text = malloc(size+2);
-    int n = fread(text, 1, size, file);
-    if (n != size) crash("can't read file", 0, path);
-    if (n > 0 && text[n - 1] != '\n') text[n++] = '\n';
-    text[n] = '\0';
-    fclose(file);
-    return text;
-}
-
-// Validate a line. Check it is ASCII only. Convert '\t' or '\r' to a space. Ban
-// other control characters.
-void validateLine(int row, char *line) {
-    for (int i = 0; line[i] != '\0'; i++) {
-        unsigned char ch = line[i];
-        if (ch == '\t' || ch == '\r') line[i] = ' ';
-        else if (ch >= 128) crash("non-ASCII character", row, "");
-        else if (ch < ' ' || ch > '~') crash("control character", row, "");
+void readRule(matcher *ma, char *tokens[]) {
+    int n = countStrings(tokens);
+    if (n == 0) return;
+    char tag = '-';
+    if (strlen(tokens[n-1]) == 1) {
+        tag = tokens[n-1][0];
+        n--;
     }
-}
-
-// Split a text into a list of lines, replacing each newline by a null.
-void splitLines(char *text, char *lines[]) {
-    int p = 0, row = 1;
-    for (int i = 0; text[i] != '\0'; i++) {
-        if (text[i] != '\n') continue;
-        text[i]= '\0';
-        validateLine(row, &text[p]);
-        addString(lines, &text[p]);
-        p = i + 1;
-        row++;
-    }
-}
-
-// Split a line into a list of tokens.
-void splitTokens(language *lang, int row, char *line, char *tokens[]) {
-    int start = 0, end = 0, len = strlen(line);
-    while (line[start] == ' ') start++;
-    while (start < len) {
-        end = start;
-        while (line[end] != ' ' && line[end] != '\0') end++;
-        line[end] = '\0';
-        char *pattern = &line[start];
-        addString(tokens, pattern);
-        start = end + 1;
-        while (start < len && line[start] == ' ') start++;
+    for (int i = 0; i < n; i++) {
+        char *triple = tokens[i];
+        if (strlen(triple) != 3) crash("expecting triple of symbols");
     }
 }
 
 // Convert the list of lines into quads
-void readQuads(matcher *ma, char *lines[]) {
-    char **tokens = malloc(BIG * sizeof(char *));
-    tokens[0] = NULL;
-    for (int i = 0; lines[i] != NULL; i++) {
+void readRules(char *lines[]) {
+    char **tokens = newStrings();
+    for (int i = 0; i < countStrings(lines); i++) {
         char *line = lines[i];
-        splitTokens(lang, i+1, line, tokens);
-        readRule(lang, i+1, tokens);
-        tokens[0] = NULL;
+        printf("line %d %s\n", i+1, line);
+        tokens = splitTokens(i+1, line, tokens);
+//        readRule(i+1, tokens);
+        clearStrings(tokens);
     }
-    free(tokens);
+    freeStrings(tokens);
 }
 
 int main(int n, char const *args[n]) {
     matcher *ma = malloc(sizeof(matcher));
-    char *text = readFile("c/match.txt");
-    char **lines = malloc(BIG * sizeof(char *));
-    readQuads(ma, lines);
+    char *text = readFile("../c/match.txt", false);
+    char **lines = splitLines(text);
+    readRules(ma, lines);
     /*
     if (n != 2) crash("Use: ./compile language", 0, "");
     runTests();
@@ -125,34 +82,35 @@ int main(int n, char const *args[n]) {
     */
     free(lines);
     free(text);
+    free(ma);
     return 0;
 }
 
 /*
 Operators are:
 =   // match with popped opener, push pair onto matched
-+>  // push next onto openers, then check it against closers after caret
++   // push next onto openers, then check it against closers after caret
 >   // mismatch next (including excess) (and push on matched ???)
 <   // less: pop and mismatch opener, repeat
-~   // incomplete (same as = but don't morph tokens between, usually ?)
-->  // skip past ordinary token or anything that can be eaten
+~   // special form of = indicating careful backwards algorithm
+
+First, use = triples to classify tags as opener, closer or both and as bracket
+(no override) or delimiter. Check nothing is both a bracket and delimiter. Check
+that a delimiter always causes the same overriding (excluding RHS of ~). Check
+that + never overrides.
+
+Add defaults -+( ->) for every opener and non-opener, )+- (<- for every closer
+and non-closer. Deduce precedence (<[ ]>) for every pair of open brackets, and
+pair of close brackets. Add (+[ ]+) for every pair of open-bracket and opener,
+pair of closer and close-bracket. Add <>X X<> * for open/close delimiters, for
+all tags X other than <=> and <+<. Add .$X for everything except close
+delimiters to mean search backwards from . to preceding . accepting last # or
+similar if any.
 
 Note + and - appear to be forward-biased: + must be opener+opener or
-closer+closer, with '+" being both - is that possible? I doubt it, though we do
-need '+\ \=. and \=. .+A and other triples that drop . presumably. Minus is
-usually '-X or X-' which are unambiguous. '-" is reversible and means either can
-appear inside the other and is the default. Note can have #=. and "~. which
-means when going backwards, don't know what override to use (leave alone until
-opener found, then backtrack - fortunately it is not far) Need asymmetrical .>.
-so that the most recent newline is on the stack. Can also have "=" and "~. Do
-they override the inner tokens differently? Preferably not, so want ("=" =) and
-("~. =).
-
-Seems a genuine problem with newlines going back. Want to push on, then push
-other stuff on, then take off when next newline comes along. Maybe it is the
-only ambiguity, and resolved when forward meets backward.
-
-What was the problem with normal /* comments that meant an inner /* should be
-mismatched?
+closer+closer, with '+" being both - is that possible? I doubt it. Note can have
+#=. and "~. which means when going backwards, don't know what override to use
+(leave alone until opener found, then backtrack - fortunately it is not far) Can
+also have "=" and "~. Do they override the inner tokens differently? No.
 
 */

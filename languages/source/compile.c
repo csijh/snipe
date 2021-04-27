@@ -273,32 +273,30 @@ void readRule(language *lang, int row, char *tokens[]) {
     addRule(lang->rules, r);
     r->row = row;
     r->type = MATCHING;
-    r->tag = NULL;
-    int first = 0, last = countStrings(tokens) - 1;
-    if (first >= last) crash("rule too short", row, "");
-    if (! islower(tokens[first][0])) {
-        r->tag = findTag(lang, row, tokens[first]);
-        r->type = LOOKAHEAD;
-        first++;
-    }
+    r->tag = lang->more;
+    int last = countStrings(tokens) - 1;
+    if (last < 1) crash("rule too short", row, "");
     if (! islower(tokens[last][0])) {
-        if (r->tag != NULL) crash("rule has a tag first and last", row, "");
-        r->tag = findTag(lang, row, tokens[last]);
+        char *tag = tokens[last];
+        if (tag[0] == '~') {
+            r->type = LOOKAHEAD;
+            tag++;
+        }
+        r->tag = findTag(lang, row, tag);
         last--;
     }
-    if (r->tag == NULL) r->tag = lang->more;
     r->ending = true;
     if (r->tag == lang->more) r->ending = false;
-    if (last == first + 1) r->type = DEFAULT;
-    char *s = tokens[first];
+    if (last == 1) r->type = DEFAULT;
+    char *s = tokens[0];
     if (! islower(s[0])) crash("expecting state name", row, s);
-    r->base = findState(lang, tokens[first++]);
+    r->base = findState(lang, tokens[0]);
     addRule(r->base->rules, r);
     s = tokens[last];
     if (! islower(s[0])) crash("expecting state name", row, s);
-    r->target = findState(lang, tokens[last--]);
+    r->target = findState(lang, tokens[last]);
     r->patterns[0] = NULL;
-    for (int i = first; i <= last; i++) {
+    for (int i = 1; i < last; i++) {
         readPattern(lang, r, tokens[i]);
     }
 }
@@ -558,9 +556,11 @@ void addContinuingDefaults(language *lang, state *s) {
         readRule(lang, 0, df);
         d = s->rules[n];
     }
-    char *df[] = { d->tag->name, s->name, " ", d->target->name, NULL };
+    char tag[SMALL+1];
+    sprintf(tag, "~%s", d->tag->name);
+    char *df[] = { s->name, " ", d->target->name, tag, NULL };
     readRule(lang, 0, df);
-    char *nl[] = { d->tag->name, s->name, "\n", d->target->name, NULL };
+    char *nl[] = { s->name, "\n", d->target->name, tag, NULL };
     readRule(lang, 0, nl);
 }
 
@@ -856,17 +856,14 @@ void checkAction(language *lang, char *name, char *test) {
     state *s, *t;
     pattern *p;
     unsigned char tag;
-    int itag = 3, ibase = 0, ipat = 1, itarget = 2, ilook = 0;
-    if (! islower(tokens[0][0])) {
-        itag = 0; ibase = 1; ipat = 2; itarget = 3; ilook = 1;
-    }
+    int ibase = 0, ipat = 1, itarget = 2, itag = 3;
     s = findState(lang, tokens[ibase]);
     if (strcmp(tokens[ipat],"\\n") == 0) tokens[ipat] = "\n";
     if (strcmp(tokens[ipat],"\\s") == 0) tokens[ipat] = " ";
     p = findPattern(lang, tokens[ipat]);
     t = findState(lang, tokens[itarget]);
-    tag = tokens[itag][0];
-    if (ilook == 1) tag = tag | 0x80;
+    if (tokens[itag][0] == '~') tag = tokens[itag][1] | 0x80;
+    else tag = tokens[itag][0];
     unsigned char actionTag = s->actions[p->index].tag;
     int actionTarget = s->actions[p->index].target;
     if (actionTag == tag && actionTarget == t->index) return;
@@ -964,22 +961,22 @@ char *eg6[] = {
 char *eg7[] = {
     "start a..z A..Z id\n"
     "id a..z A..Z 0..9 id\n"
-    "FUN id ( start\n"
+    "id ( start ~FUN\n"
     "id start ID\n",
     //--------------
     "start f id -",
-    "FUN id ( start",
-    "ID id ; start", NULL
+    "id ( start ~FUN",
+    "id ; start ~ID", NULL
 };
 
-// A lookahead rule can be a continuing. It is a jump to another state.
+// A lookahead rule can be a continuing one. It is a jump to another state.
 char *eg8[] = {
     "start a start ID\n"
-    "- start . start2\n"
+    "start . start2 ~-\n"
     "start2 . start2 DOT\n"
     "start2 start\n",
     //-------------------
-    "- start . start2", NULL
+    "start . start2 ~-", NULL
 };
 
 // Identifier may start with keyword. A default rule ("matching the empty
@@ -995,7 +992,7 @@ char *eg9[] = {
     "start f id -",
     "start for key -",
     "key m id -",
-    "KEY key ; start", NULL
+    "key ; start ~KEY", NULL
 };
 
 // A default rule with no tag is an unconditional jump.
@@ -1009,9 +1006,9 @@ char *eg10[] = {
     //--------------
     "start #include inclusion K",
     "inclusion < filename -",
-    "- inclusion ! start",
-    "- inclusion x start",
-    "- inclusion ~ start",
+    "inclusion ! start ~-",
+    "inclusion x start ~-",
+    "inclusion ~ start ~-",
     "inclusion \\n inclusion .",
     "inclusion \\s inclusion _", NULL
 };
@@ -1040,17 +1037,17 @@ char *eg11[] = {
 char *eg12[] = {
     "start . dot\n"
     "dot 0..9 start NUM\n"
-    "SIGN dot a..z A..Z prop\n"
+    "dot a..z A..Z prop ~SIGN\n"
     "prop a..z A..Z prop2\n"
     "prop start\n"
     "prop2 a..z A..Z 0..9 prop2\n"
     "prop2 start PROPERTY\n",
     //-----------------------
     "dot 0 start N",
-    "S dot x prop",
+    "dot x prop ~S",
     "prop x prop2 -",
     "prop2 x prop2 -",
-    "P prop2 ; start", NULL
+    "prop2 ; start ~P", NULL
 };
 
 // Illustrates lookahead. If a state has an explicit lookahead, a rule "_ s \s
@@ -1059,11 +1056,11 @@ char *eg12[] = {
 char *eg13[] = {
     "start a..z id\n"
     "id a..z id\n"
-    "FUN id ( start\n"
+    "id ( start ~FUN\n"
     "id start ID\n",
     //--------------
-    "ID id \\s start",
-    "ID id \\n start", NULL
+    "id \\s start ~I",
+    "id \\n start ~I", NULL
 };
 
 // CAUSES ERROR. The number state is not defined.
@@ -1125,6 +1122,7 @@ void runTests() {
     runExample("eg11", eg11, false);
     runExample("eg12", eg12, false);
     runExample("eg13", eg13, false);
+
 //    runExample("eg14", eg14, false);
 //    runExample("eg15", eg15, false);
 //    runExample("eg16", eg16, false);
@@ -1137,7 +1135,9 @@ int main(int n, char const *args[n]) {
     char path[100];
     sprintf(path, "%s/rules.txt", args[1]);
     char *text = readFile(path);
+    printf("before bL\n");
     language *lang = buildLanguage(text, false);
+    printf("after bL\n");
     printf("%d states, %d patterns\n",
         countStates(lang->states), countPatterns(lang->patterns));
     sprintf(path, "%s/table.bin", args[1]);
