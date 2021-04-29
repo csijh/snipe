@@ -2,10 +2,10 @@
 #    make compile;    cd ..;  ./compile x
 #    make interpret;  cd ..;  ./interpret x
 # To test a module, make one of these.
-list = list.c
-data = data.c $(list)
-match = match.c $(data)
-tags = tags.c $(list)
+strings = strings.c
+tags = tags.c $(strings)
+
+match = match.c $(strings)
 quads = quads.c $(tags)
 
 #DEBUG = -g

@@ -6,9 +6,21 @@
 #include <ctype.h>
 #include <assert.h>
 
-static quad *newQuad(tag *l, char op, tag *r, tag *t) {
+struct quad {
+    tag *left, *right, *override;
+    char op;
+    int row;
+};
+
+quad **newQuads() { return (quad **) newPointers(); }
+int countQuads(quad *list[]) { return countPointers((void **)list); }
+void addQuad(quad ***listp, quad *t) { addPointer((void ***)listp, t); }
+
+static quad *newQuad(int row, tag *l, char op, tag *r, tag *t) {
     struct quad *q = malloc(sizeof(quad));
-    *q = (quad) { .left = l, .op = op, .right = r, .override = t };
+    *q = (quad) {
+        .index = -1, .left = l, .op = op, .right = r, .override = t, .row = row
+    };
     return q;
 }
 
@@ -17,16 +29,33 @@ static bool eqQuad(quad *q, tag *l, char op, tag *r, tag *t) {
 }
 
 // Find an existing quad or create a newly allocated one.
-quad *findQuad(quad ***qsp, tag *l, char op, tag *r, tag *t) {
+quad *findQuad(quad ***qsp, int row, tag *l, char op, tag *r, tag *t) {
     quad **qs = *qsp;
     int i;
     for (i = 0; qs[i] != NULL; i++) if (eqQuad(qs[i],l,op,r,t)) return qs[i];
-    quad *q = newQuad(l,op,r,t);
+    quad *q = newQuad(row, l, op, r, t);
     addQuad(qsp, q);
     return q;
 }
 
-void freeQuad(quad *t) { free((struct quad *) t); }
+// Mark the tags in a quad.
+static void mark(quad *q) {
+    if (q->op != '=') return;
+    if (tagChar(q->override) == MORE) {
+        setBracket(q->left, q->row);
+        setBracket(q->right, q->row);
+    }
+    else {
+        setDelimiter(q->left, q->row);
+        setDelimiter(q->right, q->row);
+    }
+    setOpener(q->left, q->row);
+    setCloser(q->right, q->row);
+}
+
+void markTags(quad **qs) {
+    for (int i = 0; qs[i] != NULL; i++) mark(qs[i]);
+}
 
 #ifdef quadsTest
 

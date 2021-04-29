@@ -1,33 +1,44 @@
 // Snipe language compiler. Free and open source. See licence.txt.
 #include <stdbool.h>
 
-// A tag is either a name starting with an upper case letter or consists of a
-// single ASCII symbol. Only the first letter of a name is significant, but
-// consistency is checked, i.e. names of more than one character must have the
-// same first letter. A tag is classified as a bracket or a delimiter or
-// special, and as an opener or closer or both. Read-only access to the
-// structure is provided via the tag type.
-struct tag {
-    bool bracket, delimiter, opener, closer;
-    char ch;
-    char name1[2];
-    char name[];
-};
-typedef struct tag const tag;
+// A tag has a name which starts with an upper case letter or consists of a
+// single ASCII symbol. Only the first character of the name is significant, but
+// consistency is checked, i.e. there must not be two names with the same first
+// character. A tag is classified as a bracket or a delimiter or neither, and as
+// an opener or closer or neither or both.
+struct tag;
+typedef struct tag tag;
 
-// Find an existing tag or create a newly allocated one.
-tag *findTag(tag ***tsp, char *s);
+// List of tags.
+struct tags;
+typedef struct tags tags;
 
-// Deallocate a tag.
-void freeTag(tag *t);
+// The MORE tag is the default for a missing tag, and indicates a continuation
+// character of a token, or the start or end of the entire text, or no effect on
+// the tags between brackets. The SKIP tag indicates a continuation byte of a
+// UTF-8 character or grapheme, or a state transition table entry which isn't
+// relevant, or labels a lookahead rule. The GAP tag is the tag for a space
+// character when it is between tokens. The NEWLINE tag is the tag for a newline
+// when it is between tokens.
+enum { MORE = '-', SKIP = '~', GAP = '_', NEWLINE = '.' };
 
-// Check whether a string is a single ASCII symbol.
-bool isSymbol(char *s);
+// Create the list of tags.
+tags *newTags();
 
-// Reserved tags: 'more' indicates a continuation character of a token, or the
-// start or end of the entire text, or indicates no overriding; 'skip' indicates
-// a continuation byte of a UTF-8 character or grapheme, or a state transition
-// table entry which isn't relevant, or a lookahead rule; 'gap' is the tag for a
-// space when it is between tokens; 'newline' is the tag for a newline when it
-// is between tokens.
-extern tag *more, *skip, *gap, *newline;
+// Free the tags list.
+void freeTags(tags *ts);
+
+// Find the tag with given character.
+tag *findTag(tags *ts, char ch);
+
+// Get a tag's character.
+char tagChar(tag *t);
+
+// Check whether a character is an ASCII symbol.
+bool isSymbol(char ch);
+
+// Check if a tag is a bracket or delimiter or opener or closer.
+bool isBracket(tag *t);
+bool isDelimiter(tag *t);
+bool isOpener(tag *t);
+bool isCloser(tag *t);
