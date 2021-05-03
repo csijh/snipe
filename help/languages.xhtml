@@ -466,10 +466,11 @@ work out from language definition whether we will run out? -->
 <p>The way in which brackets and delimiters are matched for a language is
 defined in a file <code>match.txt</code> in the language directory. A blank line
 or a line starting with one or two symbols (e.g. <code>#</code> or
-<code>//</code>) is a comment line. Each rule in the file consists of triples of
-symbols, followed by a tag:</p>
+<code>//</code>) is a comment line. Each rule in the file begins with a
+two-letter upper case keyword followed by triples of symbol tags, for
+example:</p>
 
-<pre>(=) [=] {=} -
+<pre>EQ (-) [-] {-} '=' "=" /*. &lt;*>
 </pre>
 
 <p>The first and third symbols in a triple are token type tags, as allocated in
@@ -482,7 +483,7 @@ that the openers and closers are brackets, and the token types of the tokens
 between matching brackets remain unchanged. A rule may also deal with
 mismatches:</p>
 
-<pre>(&lt;] [&lt;} ?
+<pre>LT (?] [?}
 </pre>
 
 <p>This establishes a precedence between the brackets when they don't match, and
@@ -492,30 +493,31 @@ means that when <code>(</code> is the most recent open bracket and
 type <code>?</code> and subsequently ignored. Implicit further comparisons are
 automatically deduced from the ones given, in this case:</p>
 
-<pre>(&lt;} [>) {>) {>] ?
+<pre>LT (?}
+GT [?) {?) {?]
 </pre>
 
 <p>A suitable rules for quotes would be:</p>
 
-<pre>'=' "=" =
+<pre>EQ '=' "="
 </pre>
 
 <p>This establishes which quotes match, and specifies that the type
 <code>=</code> (quoted text) overrides the original types of the quotes and the
 tokens between them. A further rule might be:</p>
 
-<pre>'~. "~. ?
+<pre>MM '?. "?.
 </pre>
 
 <p>This rule specifies that the quotes are on one line. The dot is the token
-type of a newline, and <code>'~.</code> means that the opening quote and the
-newline 'match'. Using <code>~</code> instead of <code>=</code> means that there
-is no change to the types of the tokens in between. The opening quote has its
-type overridden with <code>?</code> to indicate an incomplete construct.</p>
+type of a newline, and <code>'?.</code> means that the opening quote and the
+newline 'match'. Using <code>MM</code> instead of <code>EQ</code> means that a
+different token type than the normal one for the opener can be used, in this
+case the quoted text is tagged as an error.</p>
 
 <p>Comments might be specified using:</p>
 
-<pre>#=. &lt;=> *
+<pre>EQ #*. &lt;*>
 </pre>
 
 <p>This says that a one-line comment, where the opening delimiter has been
@@ -528,19 +530,17 @@ them match.</p>
 <p>In some languages multi-line comments nest, but in many others they don't. To
 specify that multi-line comments nest, a rule like this can be used:</p>
 
-<pre>&lt;+&lt; >+>
+<pre>PL &lt;*&lt; >*>
 </pre>
 
-<p>The operator <code>+</code> goes between two openers or two closers to
-indicate that one pair of  is allowed inside another. In the forward matching
-algorithm, the triple <code>&lt;+&lt;</code> indicates that when
-<code>&lt;</code> is on the stack of unmatched openers, and a further
-<code>&lt;</code> is encountered, it is pushed onto the stack. To specify
-instead that multi-line comments are non-nesting, rules like this can be
-used:</p>
+<p>The PL operation refers to two openers or two closers to indicate that one
+pair is allowed inside another. In the forward matching algorithm, the triple
+<code>&lt;*&lt;</code> indicates that when <code>&lt;</code> is on the stack of
+unmatched openers, and a further <code>&lt;</code> is encountered, it is pushed
+onto the stack. To specify instead that multi-line comments are non-nesting,
+rules like this can be used:</p>
 
-<pre> &lt;>&lt; *
->>> ?
+<pre>GT &lt;*&lt; >?>
 </pre>
 
 <p>The first rule indicates that, when scanning forwards, a later

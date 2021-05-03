@@ -5,7 +5,7 @@
 struct strings;
 typedef struct strings strings;
 
-// Give error message, with line number or 0, and extra info or "", and exit.
+// Give error message, with printf-style parameters, and exit.
 void crash(char const *message, ...);
 
 // Read a binary or text file. If text, add a newline and a null terminator.
