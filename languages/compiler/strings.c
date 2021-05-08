@@ -14,7 +14,7 @@ void freeStrings(strings *l) { free(l->a); free(l); }
 
 strings *newStrings() {
     strings *l = malloc(sizeof(strings));
-    *l = (strings) { .n = 0, .c = 4, .a = malloc(4 * sizeof(char *))};
+    *l = (strings) { .n = 0, .c = 4, .a = malloc(4 * sizeof(char *)) };
     return l;
 }
 
@@ -94,7 +94,7 @@ void crash(char const *fmt, ...) {
 
 #ifdef stringsTest
 
-int main(int argc, char const *argv[]) {
+int main() {
     char *text = readFile("strings.c", false);
     printf("#chars in data.c = %d\n", (int) strlen(text));
     strings *lines = newStrings();

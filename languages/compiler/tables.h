@@ -39,12 +39,6 @@ char tagChar(tag *t);
 // Check whether a character is an ASCII symbol.
 bool isSymbol(char ch);
 
-// Set the role of a tag. A tag can't be both a bracket and a delimiter.
-void setBracket(tag *t, int row);
-void setDelimiter(tag *t, int row);
-void setOpener(tag *t, int row);
-void setCloser(tag *t, int row);
-
 // Check if a tag is a bracket or delimiter or opener or closer.
 bool isBracket(tag *t);
 bool isDelimiter(tag *t);

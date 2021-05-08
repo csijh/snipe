@@ -1,3 +1,16 @@
+// Store only long-distance openers and closers.
+
+// To move down a line, find all local bds, pair up, interpret in the light of
+// the openers or closers, use to do local overriding, contribute remainder to
+// long-distance.
+
+// Tags: start-of-token, continue-char, continue-byte, white (2 bits). Token has
+// 'normal' original type. If one-character token, lookup in 128 array. (What if
+// two types, context dependent? Treat all but 1 as overrides?) If more, encode
+// in second byte (2 bits+6). Overrides: NONE, commented, quoted, bad, -, ~,
+
+
+
 // Names with suffix L refer to things to the left of the current position,
 // associated with forward matching of brackets and delimiters. Names with
 // suffix R refer to things to the right of the current position, associated

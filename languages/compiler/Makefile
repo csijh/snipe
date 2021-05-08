@@ -4,6 +4,9 @@
 # To test a module, make one of these.
 strings = strings.c
 tags = tags.c $(strings)
+patterns = patterns.c $(strings)
+states = states.c $(strings)
+rules = rules.c $(strings)
 
 match = match.c $(strings)
 quads = quads.c $(tags)

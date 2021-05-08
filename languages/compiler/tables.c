@@ -85,7 +85,7 @@ bool isDelimiter(tag *t) { return t->delimiter > 0; }
 bool isOpener(tag *t) { return t->opener > 0; }
 bool isCloser(tag *t) { return t->closer > 0; }
 
-void setBracket(tag *t, int row) {
+static void setBracket(tag *t, int row) {
     if (t->bracket > 0) return;
     t->bracket = row;
     if (t->in >= NS) {
@@ -98,7 +98,7 @@ void setBracket(tag *t, int row) {
     );
 }
 
-void setDelimiter(tag *t, int row) {
+static void setDelimiter(tag *t, int row) {
     if (t->delimiter > 0) return;
     t->delimiter = row;
     if (t->in >= NS) {
@@ -111,14 +111,82 @@ void setDelimiter(tag *t, int row) {
     );
 }
 
-void setOpener(tag *t, int row) {
+static void setOpener(tag *t, int row) {
     if (t->opener) return;
     t->opener = row;
 }
 
-void setCloser(tag *t, int row) {
+static void setCloser(tag *t, int row) {
     if (t->closer) return;
     t->closer = row;
+}
+
+// Make deductions from a match rule such as "(<] ?"
+void less(tags *ts, int row, char l, char o, char r, char t) {
+    if (o != '<') return;
+    tag *tl = findTag(ts, l);
+    tag *tr = findTag(ts, r);
+    if (tl->bracket == 0 || tr->bracket == 0) return;
+    ts->forward[tl->in][tr->in] = (action) { o, t };
+    ts->backward[tl->in][tr->in] = (action) { o, t };
+}
+
+// Make deductions from a match rule such as "(=) -"
+void equals(tags *ts, int row, char l, char o, char r, char t) {
+    if (o != '=') return;
+    tag *tl = findTag(ts, l);
+    tag *tr = findTag(ts, r);
+    setOpener(tl, row);
+    setCloser(tr, row);
+    if (t == MORE) {
+        setBracket(tl, row);
+        setBracket(tr, row);
+    }
+    else {
+        setDelimiter(tl, row);
+        setDelimiter(tr, row);
+    }
+    if (t == MORE) {
+        ts->forward[tl->in][tr->in] = (action) { o, t };
+        ts->forward[tl->in][tl->in] = (action) { PL, MORE };
+        ts->backward[tl->in][tr->in] = (action) { o, t };
+        ts->backward[tr->in][tr->in] = (action) { PL, MORE };
+        tag *te = findTag(ts, MORE);
+        ts->forward[te->in][tl->in] = (action) { PL, MORE };
+        ts->forward[te->in][tr->in] = (action) { GT, '?' };
+        ts->forward[tl->in][te->in] = (action) { LT, '?' };
+        ts->backward[tl->in][te->in] = (action) { LT, '?' };
+        ts->backward[tr->in][te->in] = (action) { PL, MORE };
+        ts->backward[te->in][tr->in] = (action) { GT, '?' };
+    }
+}
+
+// Print out match table.
+void print(tags *ts) {
+    int active[NT];
+    int n = 0;
+    for (int i = 0; i < NT; i++) {
+        tag *t = ts->a[i];
+        if (t->bracket == 0 && t->delimiter == 0) {
+            if (t->ch != '-' && t->ch != '~') continue;
+        }
+        active[n++] = i;
+    }
+    for (int i = 0; i < n; i++) {
+        tag *t = ts->a[active[i]];
+        printf("  %c", t->ch);
+    }
+    printf("\n");
+    for (int i = 0; i < n; i++) {
+        tag *t = ts->a[active[i]];
+        printf("%c ", t->ch);
+        for (int j = 0; j < n; j++) {
+            tag *u = ts->a[active[j]];
+            printf("%c%c ", ts->forward[t->in][u->in].op,
+                ts->forward[t->in][u->in].type);
+        }
+        printf("\n");
+    }
 }
 
 #ifdef tagsTest
@@ -138,13 +206,15 @@ void testTagChars() {
     }
 }
 
-int main() {
+int main(int argc, char const *argv[]) {
     testTagChars();
     tags *ts = newTags();
     tag *t1 = findTag(ts, '(');
     tag *t2 = findTag(ts, ')');
     tag *t3 = findTag(ts, '(');
     assert(t1 != t2 && t1 == t3);
+    equals(ts, 1, '(', '=', ')', '-');
+    print(ts);
     freeTags(ts);
     return 0;
 }

@@ -136,6 +136,8 @@ static void gtForward(matcher *ma, char o) {
     ma->at++;
 }
 
+// TODO: when undoing ltForward, how undo override on opener?
+
 // Do an LT operation forwards, overriding the opener, pushing the pair as if
 // matched, but not moving past the next tag, which needs to be processed again.
 static void ltForward(matcher *ma, char o) {
@@ -144,6 +146,9 @@ static void ltForward(matcher *ma, char o) {
     pushL(ma->matched, opener);
     pushL(ma->matched, ma->at);
 }
+
+// TODO: how undo all the overrides? Maybe only override opener? Put old override
+// at the top of the pushed opener index?
 
 // Do an MM operation forwards, 'matching' the opener with the next tag, but
 // overriding all tags in the range with o.
@@ -173,6 +178,10 @@ void stepForward(matcher *ma) {
         case LT: ltForward(ma, o); break;
         case MM: mmForward(ma, o); repeat = false; break;
     }
+}
+
+void undoForward() {
+    // TODO
 }
 
 // Carry out an EQ operation in the backward direction. Pop the closer, override

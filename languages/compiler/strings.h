@@ -20,7 +20,7 @@ void splitTokens(int row, char *line, strings *tokens);
 // Create a list of strings.
 strings *newStrings();
 
-// Free the data in a list of strings, but not the descriptor.
+// Free a list of strings.
 void freeStrings(strings *ss);
 
 // Find the length of a list of strings.
@@ -35,5 +35,5 @@ char *getString(strings *ss, int i);
 // Set the i'th string in the list.
 void setString(strings *ss, int i, char *s);
 
-// Add a string to a list.
+// Add a string to a list, returning the index.
 int addString(strings *ss, char *s);
