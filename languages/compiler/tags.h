@@ -31,7 +31,7 @@ tags *newTags();
 void freeTags(tags *ts);
 
 // Find the tag with given character.
-tag *findTag(tags *ts, char ch);
+tag *findTag(tags *ts, int ch);
 
 // Get a tag's character.
 char tagChar(tag *t);

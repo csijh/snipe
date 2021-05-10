@@ -11,11 +11,16 @@ rules = rules.c $(strings)
 match = match.c $(strings)
 quads = quads.c $(tags)
 
-#DEBUG = -g
+FLAGS = -std=c11 -Wall -pedantic
 DEBUG = -g -fsanitize=undefined -fsanitize=address -fsanitize=leak
+#DEBUG = -g
+
+compile2: compile2.c
+	gcc $(FLAGS) $(DEBUG) compile2.c \
+	rules.c states.c patterns.c strings.c -o compile2
 
 compile: compile.c
-	gcc -std=c11 -Wall -pedantic $(DEBUG) compile.c -o compile
+	gcc $(FLAGS) $(DEBUG) compile.c -o compile
 	cp compile ../compile
 
 interpret: interpret.c
@@ -27,6 +32,6 @@ interpret: interpret.c
 
 # Default rule for building and testing a module.
 %: %.c
-	clang $(DEBUG) -D$@Test $(FLAGS) $($@) -o test
+	gcc $(FLAGS) $(DEBUG) -D$@Test $($@) -o test
 	./test
 	rm test

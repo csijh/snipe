@@ -86,9 +86,9 @@ state machine. A generic scanner uses the state machine to generate a tag byte
 for every byte of text.</p>
 
 <p>The format of language description files is fairly simple. A line which is
-blank or begins with two symbol characters such as <code>//</code> is a comment
-line which is ignored. Otherwise, a line represents a string matching rule, for
-example:</p>
+blank or begins with a symbol such as <code>#</code> or <code>//</code> is a
+comment line which is ignored. Otherwise, a line represents a string matching
+rule, for example:</p>
 
 <pre>start == != start OP
 </pre>
@@ -97,75 +97,67 @@ example:</p>
 target state name, and an optional tag. These are all separated by spaces. A
 state name begins with a lower case letter. A pattern is an arbitrary string of
 ASCII characters, excluding control characters or spaces or newlines. A tag
-starts with an upper case letter or is a single symbol character. A tag often
-represents a token type. The base state of the first rule in the description is
-the initial state of the scanner.</p>
+starts with an upper case letter or is a single symbol character. If there is no
+tag, the default is a minus sign, which indicates continuation of the current
+token.</p>
 
-<p>When the scanner is in the base state of a rule and one of the strings in the
-list is matched, the scanner moves past the matched string in the input, and
-goes into the target state. If it is a <dfn>completion</dfn> rule, i.e. if the
-tag represents a token type, the token is terminated after the matched
-characters and given that type. If it is a <dfn>construction</dfn> rule, i.e. if
-there is no tag, scanning of the current token is continued.</p>
+<p>The base state of the first rule in the description is the initial state of
+the scanner. When the scanner is in the base state of a rule and one of the
+strings in the list is matched, the scanner moves past the matched string in the
+input, and goes into the target state. If the tag represents a token type, the
+token is terminated after the matched characters and given that type. If there
+is no tag or the tag is a minus sign, scanning of the current token is
+continued.</p>
 
 <p>With the above rule, if the scanner is in the <code>start</code> state and
 either of the equality operators <code>==</code> or <code>!=</code> appears
 next, then the scanner moves past the operator, gives it the token type
 <code>OP</code>, and remains in the <code>start</code> state.</p>
 
-<p>A pattern string in a rule is plain ASCII text. There are no quoting
-conventions. A pattern must be non-empty and may not contain spaces, newlines,
-or control characters. Although non-ASCII characters cannot be explicitly
-matched, they are accepted in the text being scanned, and are implicitly treated
-the same as letters. This covers most common cases where such characters are
-allowed by programming languages, in comments, strings or identifiers. Spaces
-and newlines cannot be matched explicitly or included in tokens. but are matched
-and tagged automatically by the scanner.</p>
+<p>A pattern string in a rule must be non-empty and may not contain spaces,
+newlines, control characters, or Unicode characters beyond ASCII. In a pattern,
+a backslash followed by digits is an escape sequence giving the decimal
+numerical code of an ASCII character. For example, a space can be written as
+<code>\32</code> and a newline can be written as <code>\10</code>. A backslash
+which is not followed by a digit has no special meaning.</p>
+
+<p>Although non-ASCII characters cannot be explicitly matched, they are accepted
+in the text being scanned, and are implicitly treated the same as letters. This
+covers most common cases where such characters are allowed by programming
+languages, in comments, strings or identifiers.</p>
 
 <p>As an abbreviation, if a pattern string consists of two characters separated
 by two dots, it represents a range of one-character strings, e.g.
-<code>0..9</code> stands for <code>0 1 2 3 4 5 6 7 8 9</code>. For example:</p>
+<code>0..9</code> stands for <code>0 1 2 3 4 5 6 7 8 9</code> and
+<code>\0..\127</code> stands for any single character. For example:</p>
 
 <pre>start 0..9 number
 </pre>
 
 <p>This rule says that if the scanner is in the <code>start</code> state, and a
 digit appears next in the input, the scanner matches the digit and goes into the
-<code>number</code> state. This is a construction rule, i.e. there is no tag, so
-the current token is not terminated, and scanning of the token continues after
-the matched digit.</p>
+<code>number</code> state. There is no tag, so the current token is not
+terminated, and scanning of the token continues after the matched digit.</p>
 
 <p>A tag may be a token type which is a name starting with an upper case letter.
 Any names can be used, but only the first letter is significant, and it is used
 only to determine syntax highlighting. Typical names might be:</p>
 
-<pre>FUNCTION ID KEY OP PROPERTY RESERVED SIGN TYPE VALUE
+<pre>COMMENTED ERROR FUNCTION ID KEY OP PROPERTY QUOTED RESERVED SIGN TYPE VALUE
 </pre>
 
 <p>Alternatively, a tag may be a symbol consisting of a single printable but
-non-alphanumeric ASCII character. The symbols and their meanings are:</p>
+non-alphanumeric ASCII character. The minus sign symbol is reserved to indicate
+continuation of a token, and the tilde character is reserved to indicate a
+lookahead rule. Otherwise, symbols may be used as desired. Suitable tag symbols
+for the C language might be:</p>
 
-<pre>(   Open level 0 bracket
-)   Close level 0 bracket
-[   Open level 1 bracket
-]   Close level 1 bracket
-{   Open level 2 bracket
-}   Close level 2 bracket
-&lt;   Open level 3 bracket
->   Close level 3 bracket
-#   Start of one-line comment, e.g. # or //
-/   Start of multiline comment (non-nesting), e.g. /*
-\   End of multiline comment (non-nesting), e.g. */
-^   Start of multiline comment (nesting), e.g. {-
-$   End of multiline comment (nesting), e.g. -}
-*   Token inside (any kind of) comment
-'   Single quote delimiter
-"   Double quote delimiter
-@   Multiline quote delimiter, e.g. """
-=   Token inside (any kind of) quotes
-:   Label indicator (affects indenting)
-?   Invalid, incomplete, mismatched or unwise token
--   Continue the same token
+<pre>( ) [ ] { } " '   brackets and quotes used as their own tags
+#                 start delimiter // of one-line comments
+< >               start and end delimiters /* and */ of multiline comments
+_                 space, when not included in a filename
+.                 newline, when not preceded by a backslash
+:                 label indicator (affects indenting)
 </pre>
 
 <p>Each symbol other than the last indicates a token type which has some further
@@ -177,23 +169,26 @@ current token is to be continued, and is the default if a rule has no tag.</p>
 tags for spaces, newlines, and bytes which continue a UTF-8 character. Examples
 of using symbols as tags are:</p>
 
-<pre>escape \n start ?
-
-filename > start =
+<pre>start ( start (
 
 start 0..9 number -
 </pre>
 
-<p>The <code>escape</code> state might be used to mark an escape sequence such
+<p>The first rule recognises an open round bracket and tags it as a
+one-character token. The second rule is an alternative way of saying that if a
+digit is matched, the <code>number</code> state is used to scan the rest of the
+token, using an explicit minus sign instead of having no tag.</p>
+<!--
+    The <code>escape</code> state might be used to mark an escape sequence such
 as <code>\n</code> as an error token, in case it is not inside quotes. If it is
 inside quotes, then later delimiter matching will override the type as
-<code>=</code> to indicate that it should be highlighted as quoted text. The
+<code>=</code> to indicate that it should be highlighted as quoted text.
+The
 <code>filename</code> rule might be used to recognise the end of an inclusion
 filename in the C language between angle quotes as a token, and give it the type
 <code>=</code> to indicate that it should be highlighted as if it were a normal
-quoted string. The third rule is an alternative way of saying that if a digit is
-matched, the <code>number</code> state is used to scan the rest of the token,
-using an explicit minus sign instead of having no tag.</p>
+quoted string.
+-->
 
 <p>There may be multiple rules for the same state. If a string mentioned in any
 one of the rules matches, that rule is applied. For example:</p>
@@ -219,7 +214,7 @@ the first. If there is only a single equal sign, the first rule applies.</p>
 <p>If the same string is mentioned in multiple rules, the earlier rule takes
 precedence. Thus later rules act as defaults. For example:</p>
 
-<pre>filename > start =
+<pre>filename > start QUOTED
 filename !..~ filename
 </pre>
 
@@ -228,7 +223,7 @@ brackets as a single token, a <code>></code> character terminates the token,
 even though the <code>></code> character is also matched by the second rule.</p>
 
 <p>A limited form of lookahead is provided. A <dfn>lookahead</dfn> rule has a
-<code>~</code> character as a tag prefix. For example:</p>
+<code>~</code> (tilde) character as a tag prefix. For example:</p>
 
 <pre>id ( start ~FUNCTION
 </pre>
@@ -240,8 +235,8 @@ to the <code>start</code> state to deal with the bracket. There may be spaces or
 newlines between the current token and the bracket, so this is effectively a
 lookahead to the next token.</p>
 
-<p>A lookahead rule can be a construction rule rather than a completion rule,
-with <code>-</code> as its tag, or no tag. For example:</p>
+<p>A lookahead rule need not terminate the current token, i.e. it may have no
+tag or a minus sign as its tag. For example:</p>
 
 <pre>start \ escape ~
 </pre>
@@ -257,17 +252,13 @@ example:</p>
 <pre>id start ID
 </pre>
 
-<p>This can be thought of as matching the empty string. It can equally be
-thought of as looking ahead for the empty string, so it is equivalent to:</p>
+<p>The rule ensures that if an identifier is not followed by anything handled in
+previous rules, it is given the type <code>ID</code>. This can be thought of as
+matching the empty string. It can equally be thought of as looking ahead for any
+character, so it is equivalent to:</p>
 
-<pre>id start ~ID
+<pre>id \0..\127 start ~ID
 </pre>
-
-<p>Either version of the rule ensures that if an identifier is not followed by
-anything handled in previous rules, it is given the type <code>ID</code>. The
-rule applies to all single printable characters, as if a lookahead rule with the
-explicit pattern <code>!..~</code> was given, but a default rule also applies to
-spaces or newlines.</p>
 
 <p>Since a token is not marked until the end of the token is reached, decisions
 about which type to use can be delayed. For example, rules like these can be
@@ -295,9 +286,8 @@ input. The prefix <code>for</code> is matched and the scanner goes into the
 into the <code>id</code> state and the token ends up being given type
 <code>ID</code>.</p>
 
-<p>If a default rule is also a construction rule, i.e. it has no tag (or a minus
-sign tag), it is effectively an unconditional jump to another state. For
-example:</p>
+<p>If a default rule has no tag (or a minus sign tag), it is effectively an
+unconditional jump to another state. For example:</p>
 
 <pre>inclusion &lt; filename
 inclusion start
@@ -309,10 +299,9 @@ file inclusion. The first rule matches the open angle bracket and goes to the
 says that if anything else appears next in the input, the scanner reverts to the
 <code>start</code> state to handle it.</p>
 
-<p>A lookahead or default rule which is a construction rule, i.e. has no tag (or
-has a minus sign tag), makes no obvious immediate progress, so there is a check
-that there is no cycle of such rules which could result in an infinite loop when
-scanning.</p>
+<p>A lookahead or default rule which has no tag (or has a minus sign tag), makes
+no obvious immediate progress, so there is a check that there is no cycle of
+such rules which could result in an infinite loop when scanning.</p>
 
 <p>Every state is either a <dfn>starting</dfn> state, which the scanner can be
 in between tokens, or a <dfn>continuing</dfn> state, where there is a non-empty
@@ -378,14 +367,15 @@ of the token.</p>
 <p>A starting state can have an explicit default rule, but it can only be an
 unconditional jump to another starting state. Without such an explicit default
 rule, a starting state must handle every possible input character, for example
-by having a last rule of the form:</p>
+by having rules at the end of the form:</p>
 
-<pre>start !..~ start ?
+<pre>start \32 start _
+start \10 start .
+start \0..\127 start ?
 </pre>
 
-<p>This accepts any character not already dealt with as a one-character error
-token. Spaces and newlines are handled similarly and automatically, by accepting
-and tagging them suitably, though this can't be expressed explicitly.</p>
+<p>These tag a space or a newline as a token, and accept any character not
+already dealt with as a one-character error token.</p>
 
 <p>Every continuing state must end with a default rule, to ensure that the
 current token is completed and given a type, no matter what appears next in the
@@ -394,9 +384,8 @@ input. For example:</p>
 <pre>id start ID
 </pre>
 
-<p>This apples to spaces and newlines as well as other characters, ensuring that
-the current token gets type <code>ID</code> in all cases not already
-handled.</p>
+<p>This ensures that the current token gets type <code>ID</code> in all cases
+not already handled.</p>
 
 <p>In awkward cases, it may be necessary to choose an imperfect compromise. Take
 a file inclusion string <code>&lt;stdio.h></code> in C for example. Technically,
@@ -553,22 +542,25 @@ precedence and the later one is tagged as an error.</p>
 <p>In C or a similar language, the text <code>"*/"//"</code> would be
 scanned as something like:</p>
 
-<pre>" QUOTE */ COMMENT " QUOTE // COMMENT " QUOTE
+<pre>"*/"//"
+">-"#-"
 </pre>
 
 <p>After scanning, if there is no multiline comment in progress at the start of
 the sequence, the first two quotes are matched, the one-line comment delimiter
-is matched with the end of the line, and the sequence is temporarily adjusted
-to:</p>
+is matched with the end of the line, and the tags are temporarily overridden
+as:</p>
 
-<pre>" QUOTE */ QUOTE " QUOTE // COMMENT " COMMENT
+<pre>"*/"//"
+==-=*-*
 </pre>
 
 <p>On the other hand, if a multiline comment is in progress, it ends at the
 <code>*/</code> delimiter, the last two quotes are matched, and the phrase is
-instead temporarily adjusted to:</p>
+instead temporarily overridden as:</p>
 
-<pre>" COMMENT */ COMMENT " QUOTE // QUOTE " QUOTE
+<pre>"*/"//"
+**-====
 </pre>
 
 <p>If bracket matching is incremental as well as scanning, then these

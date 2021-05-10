@@ -9,7 +9,7 @@
 
 // There are NS symbols and NL letters, making NT possible tag characters.
 enum { NS = 32, NL = 26, NT = NS + NL };
-static char tagChars[] =
+static unsigned char tagChars[] =
     "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 // An operator says what happens when one bracket or delimiter L meets another
@@ -72,7 +72,7 @@ bool isSymbol(char ch) {
     return ' ' < ch && ch <= '~' && ! isalnum(ch);
 }
 
-tag *findTag(tags *ts, char ch) {
+tag *findTag(tags *ts, int ch) {
     int i = ts->index[ch];
     if (i >= NT) crash("bad tag character %c", ch);
     return ts->a[i];

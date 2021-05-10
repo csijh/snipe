@@ -2,9 +2,9 @@
 #include "strings.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <string.h>
 
-// Copy and adapt this list implementation for any desired list type.
 struct strings { int c, n; char **a; };
 extern inline char *getString(strings *l, int i) { return l->a[i]; }
 extern inline void setString(strings *l, int i, char *s) { l->a[i] = s; }
