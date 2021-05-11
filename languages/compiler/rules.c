@@ -9,11 +9,6 @@
 
 struct rules { int c, n; rule **a; strings *patterns; };
 
-// Check if a rule terminates the current token.
-static bool isTerminating(rule *r) {
-    return strcmp(r->tag, "-") == 0;
-}
-
 // Static memory for one-character patterns.
 static char singles[128][2];
 
@@ -196,63 +191,6 @@ static void sortPatterns(strings *patterns) {
 strings *getPatterns(rules *rs) {
     sortPatterns(rs->patterns);
     return rs->patterns;
-}
-
-void stateNames(rules *rs, strings *names) {
-    for (int i = 0; i < rs->n; i++) {
-        rule *r = rs->a[i];
-        char *name = r->base;
-        bool found = false;
-        for (int j = 0; j < countStrings(names); j++) {
-            char *s = getString(names, i);
-            if (strcmp(s, name) == 0) found = true;
-        }
-        if (! found) addString(names, name);
-    }
-    for (int i = 0; i < rs->n; i++) {
-        rule *r = rs->a[i];
-        char *name = r->target;
-        bool found = false;
-        for (int j = 0; j < countStrings(names); j++) {
-            char *s = getString(names, i);
-            if (strcmp(s, name) == 0) found = true;
-        }
-        if (! found) crash("undefined state %s on line %d", name, r->row);
-    }
-}
-
-bool isStarting(rules *rs, char *state) {
-    int startingRow = 0, continuingRow = 0;
-    if (strcmp(state, rs->a[0]->base) == 0) startingRow = rs->a[0]->row;
-    for (int i = 0; i < rs->n; i++) {
-        rule *r = rs->a[i];
-        if (strcmp(state, r->base) == 0) {
-            if (i == 0) startingRow = r->row;
-            if (r->lookahead && isTerminating(r)) continuingRow = r->row;
-        }
-        else if (strcmp(state, r->target) == 0) {
-            if (isTerminating(r)) startingRow = r->row;
-            else if (! r->lookahead) continuingRow = r->row;
-        }
-    }
-    if (startingRow > 0 && continuingRow > 0) {
-        char *message =
-            "Error: %s is a starting state (line %d) "
-            "and a continuing state (line %d)";
-        crash(message, state, startingRow, continuingRow);
-    }
-    /*
-    if (continuingRow > 0) {
-        for (int i = 0; i < rs->n; i++) {
-            rule *r = rs->a[i];
-            if (! r->lookahead) continue;
-            if (countStrings(r->patterns) == 0) continue;
-            if (isTerminating(r)) continue;
-            crash("lookahead fails to terminate token on line %d", r->row);
-        }
-    }
-    */
-    return (continuingRow == 0);
 }
 
 #ifdef rulesTest

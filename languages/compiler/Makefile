@@ -3,10 +3,12 @@
 #    make interpret;  cd ..;  ./interpret x
 # To test a module, make one of these.
 strings = strings.c
+rules = rules.c $(strings)
+states = states.c $(rules)
+
+
 tags = tags.c $(strings)
 patterns = patterns.c $(strings)
-states = states.c $(strings)
-rules = rules.c $(strings)
 
 match = match.c $(strings)
 quads = quads.c $(tags)
@@ -17,7 +19,7 @@ DEBUG = -g -fsanitize=undefined -fsanitize=address -fsanitize=leak
 
 compile2: compile2.c
 	gcc $(FLAGS) $(DEBUG) compile2.c \
-	rules.c states.c patterns.c strings.c -o compile2
+	states.c rules.c strings.c -o compile2
 
 compile: compile.c
 	gcc $(FLAGS) $(DEBUG) compile.c -o compile

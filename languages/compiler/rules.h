@@ -33,18 +33,8 @@ int countRules(rules *rs);
 // Get the i'th rule.
 rule *getRule(rules *rs, int i);
 
-// Get the list of patterns gathered from the rules.
+// Get the sorted list of patterns gathered from the rules.
 strings *getPatterns(rules *rs);
 
 // Check that tag names are consistent.
 void checkTags(rules *rs);
-
-// Extract names of states, and check that all states are defined.
-void stateNames(rules *rs, strings *names);
-
-// Check whether a state is a starting state or continuing state, and check
-// consistency. The base state of the first rule is a starting state. Any rule
-// which terminates a token has a starting state as its target. A normal rule
-// which continues a token has a continuing state as its target. A lookahead (or
-// default) rule which terminates a token has a continuing state as its base.
-bool isStarting(rules *rs, char *state);

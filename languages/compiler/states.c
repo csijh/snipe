@@ -16,7 +16,6 @@ struct state {
     char *name;
     int index;
     bool starting;
-    int row;
     action *actions;
     bool visiting, visited;
 };
@@ -24,24 +23,59 @@ typedef struct state state;
 
 enum { SKIP = '~' };
 
-// List of states, plus patterns.
-struct states { int c, n; state **a; strings *patterns; };
-
-static state *newState(char *name) {
-    state *s = malloc(sizeof(state));
-    *s = (state) { .name = name, .row = 0, .actions = NULL };
-    return s;
-}
+// Lists of rules and patterns, and array of states.
+struct states { rules *rs; strings *patterns; int n; state *a[]; };
 
 static void freeState(state *s) {
     if (s->actions != NULL) free(s->actions);
     free(s);
 }
 
-states *newStates() {
-    states *ss = malloc(sizeof(states));
-    state **a = malloc(4 * sizeof(state *));
-    *ss = (states) { .n = 0, .c = 4, .a = a, .patterns = NULL };
+// Find the distinct names of base states.
+static void findNames(rules *rs, strings *names) {
+    for (int i = 0; i < countRules(rs); i++) {
+        rule *r = getRule(rs, i);
+        char *name = r->base;
+        bool found = false;
+        for (int j = 0; j < countStrings(names); j++) {
+            char *s = getString(names, j);
+            if (strcmp(s, name) == 0) found = true;
+        }
+        if (! found) addString(names, name);
+    }
+}
+
+// Find a state by name.
+static state *findState(states *ss, char *name) {
+    for (int i = 0; i < ss->n; i++) {
+        if (strcmp(name, ss->a[i]->name) == 0) return ss->a[i];
+    }
+    return NULL;
+}
+
+// For each target state, check whether it is defined.
+static void checkDefined(states *ss, rules *rs) {
+    for (int i = 0; i < countRules(rs); i++) {
+        rule *r = getRule(rs, i);
+        char *name = r->target;
+        state *s = findState(ss, name);
+        if (s == NULL) crash("undefined state %s on line %d", name, r->row);
+    }
+}
+
+states *newStates(rules *rs) {
+    strings *names = newStrings();
+    findNames(rs, names);
+    int n = countStrings(names);
+    states *ss = malloc(sizeof(states) + n * sizeof(state *));
+    *ss = (states) { .n = n, .patterns = getPatterns(rs), .rs = rs };
+    for (int i = 0; i < countStrings(names); i++) {
+        char *name = getString(names, i);
+        state *s = malloc(sizeof(state));
+        *s = (state) { .name = name, .actions = NULL };
+        ss->a[i] = s;
+    }
+    checkDefined(ss, rs);
     return ss;
 }
 
@@ -53,46 +87,40 @@ void freeStates(states *ss) {
     free(ss);
 }
 
-// Find a state by name, or create a new one.
-static state *findState(states *ss, char *name) {
+// Check if a rule terminates the current token.
+static bool isTerminating(rule *r) {
+    return strcmp(r->tag, "-") == 0;
+}
+
+static bool isStarting(rules *rs, char *state) {
+    int startingRow = 0, continuingRow = 0;
+    rule *r0 = getRule(rs, 0);
+    if (strcmp(state, r0->base) == 0) startingRow = r0->row;
+    for (int i = 0; i < countRules(rs); i++) {
+        rule *r = getRule(rs, i);
+        if (strcmp(state, r->base) == 0) {
+            if (i == 0) startingRow = r->row;
+            if (r->lookahead && isTerminating(r)) continuingRow = r->row;
+        }
+        else if (strcmp(state, r->target) == 0) {
+            if (isTerminating(r)) startingRow = r->row;
+            else if (! r->lookahead) continuingRow = r->row;
+        }
+    }
+    if (startingRow > 0 && continuingRow > 0) {
+        char *message =
+            "Error: %s is a starting state (line %d) "
+            "and a continuing state (line %d)";
+        crash(message, state, startingRow, continuingRow);
+    }
+    return (continuingRow == 0);
+}
+
+void checkTypes(states *ss) {
     for (int i = 0; i < ss->n; i++) {
-        if (strcmp(name, ss->a[i]->name) == 0) return ss->a[i];
+        state *s = ss->a[i];
+        s->starting = isStarting(ss->rs, s->name);
     }
-    if (ss->n >= ss->c) {
-        ss->c = ss->c * 2;
-        ss->a = realloc(ss->a, ss->c * sizeof(state *));
-    }
-    ss->a[ss->n] = newState(name);
-    return ss->a[ss->n++];
-}
-
-void addState(states *ss, char *name) {
-    findState(ss, name);
-}
-
-void setType(states *ss, char *name, bool starting) {
-    state *s = findState(ss, name);
-    s->starting = starting;
-}
-
-/*
-static bool isStarting(states *ss, char *name) {
-    state *s = findState(ss, name);
-    return s->starting;
-}
-*/
-
-void convert(states *ss, int row, char *b, strings *ps, char *t, char tag) {
-    state *base = findState(ss, b);
-    state *target = findState(ss, t);
-    bool differ = (base->starting != target->starting);
-    if (countStrings(ps) == 0 && tag == (0x80 | '-') && differ) {
-        char *m =
-            "Error in rule on line %d\n"
-            "states are not both starting or both continuing";
-        crash(m, row);
-    }
-    // TODO
 }
 
 void sortStates(states *ss) {
@@ -114,30 +142,50 @@ void sortStates(states *ss) {
     }
 }
 
-void setupActions(states *ss, strings *patterns) {
-    ss->patterns = patterns;
+static void checkLookahead(states *ss) {
+    for (int i = 0; i < countRules(ss->rs); i++) {
+        rule *r = getRule(ss->rs, i);
+        state *base = findState(ss, r->base);
+        state *target = findState(ss, r->target);
+        bool differ = (base->starting != target->starting);
+        if (countStrings(r->patterns) == 0 && r->lookahead && differ) {
+            char *m = (
+                "Error in rule on line %d\n"
+                "states are not both starting or both continuing"
+            );
+            crash(m, r->row);
+        }
+    }
 }
 
-void fillAction(states *ss, char *name, int p, char tag, char *target) {
-    state *s = findState(ss, name);
-    int n = countStrings(ss->patterns);
-    if (s->actions == NULL) {
-        s->actions = malloc(n * sizeof(action));
-        for (int p = 0; p < n; p++) s->actions[p].tag = SKIP;
+static int findPattern(strings *ps, char *s) {
+    for (int i = 0; i < countStrings(ps); i++) {
+        if (strcmp(getString(ps, i), s) == 0) return i;
     }
-    s->actions[p].tag = tag;
-    state *t = findState(ss, target);
-    s->actions[p].target = t->index;
+    return -1;
 }
-/*
-// Check that all states have rules/actions associated with them.
-void checkDefined(states *ss) {
-    for (int i = 0; i < ss->n; i++) {
-        state *s = ss->a[i];
-        if (s->actions == NULL) crash("state %s not defined", s->name);
+
+void fillActions(states *ss) {
+    checkLookahead(ss);
+    for (int i = 0; i < countRules(ss->rs); i++) {
+        rule *r = getRule(ss->rs, i);
+        state *s = findState(ss, r->base);
+        int n = countStrings(ss->patterns);
+        if (s->actions == NULL) {
+            s->actions = malloc(n * sizeof(action));
+            for (int p = 0; p < n; p++) s->actions[p].tag = SKIP;
+        }
+        int tag = r->tag[0];
+        if (r->lookahead) tag = (0x80 | tag);
+        for (int j = 0; j < countStrings(r->patterns); j++) {
+            int p = findPattern(ss->patterns, getString(r->patterns, j));
+            s->actions[p].tag = tag;
+            state *t = findState(ss, r->target);
+            s->actions[p].target = t->index;
+        }
     }
 }
-*/
+
 // Check that each state covers all input characters. Assume each character is
 // represented as a one-character pattern.
 void checkComplete(states *ss) {
@@ -237,8 +285,14 @@ void writeTable(states *ss, char const *path) {
 #ifdef statesTest
 
 int main(int argc, char const *argv[]) {
-    states *ss = newStates();
+    /*
+    strings *names = newStrings();
+    addString(names, "s1");
+    addString(names, "s2");
+    states *ss = newStates(names);
     freeStates(ss);
+    freeStrings(names);
+    */
     return 0;
 }
 

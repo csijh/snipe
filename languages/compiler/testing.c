@@ -1,68 +1,6 @@
 // Snipe language compiler. Free and open source. See licence.txt.
 
-// Type
-//       ./compile x
-//       ./interpret x
-//
-// to compile a description of language x in x/rules.txt into a scanner table in
-// x/table.bin, and then run tests on the table.
-
-// A rule has a base state, patterns, a target state, and an optional tag. A
-// pattern may be a range such as a..z to represent single-character patterns. A
-// backslash followed by digits can be used to specify a control character or
-// space. A tilde ~ prefix on the tag indicates a lookahead rule, and a lack of
-// patterns indicates a default rule.
-
-// Each state must consistently be either a starting state between tokens, or a
-// continuing state within tokens. There is a search to make sure there are no
-// cycles which fail to make progress. A default rule is treated as a lookahead
-// for any single-character patterns not already covered. A check is made that
-// each state is complete, covering every possible input character. That means
-// the state machine operation is uniformly driven by the next input character.
-
-// The resulting table has an entry for each state and pattern, with a tag and a
-// target. The tag is a token type to label and terminate the current token, or
-// indicates continuing the token, skipping the table entry, or classifying a
-// text byte as a continuing character of a token or a space or a newline. The
-// tag can have its top bit set to indicate lookahead behaviour rather than
-// normal matching behaviour. If a state has any explicit lookahead rules, then
-// matching a space is marked as a lookahead.
-
-// The states are sorted with starting states first, and the number of starting
-// states is limited to 32 so they can be cached by the scanner (in the tag
-// bytes for spaces). The total number of states is limited to 128 so a state
-// index can be held in a char. The patterns are sorted, with longer ones before
-// shorter ones, so the next character in the input can be used to find the
-// first pattern starting with that character. The patterns are searched
-// linearly, skipping the ones where the table entry has SKIP, to find the first
-// match. Completeness ensures that the search always succeeds.
-
-#include "strings.h"
-#include "states.h"
-#include "testing.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <stdint.h>
-#include <string.h>
-#include <ctype.h>
-#include <assert.h>
-
-// For testing, examples are taken from help/languages.xhtml. Each example has a
-// string forming a language description (made of concatenated lines), then
-// strings which test some generated table entries, then a NULL. Each test
-// checks an entry in the generated table, expressed roughly in the original
-// rule format, except that each rule has a single pattern and the tag is a
-// single character..
-
-// One basic illustrative rule.
-char *eg1[] = {
-    "start == != start OP\n",
-    // ----------------------
-    "start == start O",
-    "start != start O", NULL
-};
-
+// ----- Testing ---------------------------------------------------------------
 
 // Check that, in the named example, the given test succeeds. The test
 // represents an action, i.e. an entry in the table to be generated. It is
@@ -101,7 +39,7 @@ void checkAction(language *lang, char *name, char *test) {
 }
 
 // Run the tests in an example.
-void runExample(states *ss, char *name, char *eg[], bool print) {
+void runExample(char *name, char *eg[], bool print) {
     char text[1000];
     strcpy(text, eg[0]);
     language *lang = buildLanguage(text, print);
@@ -109,51 +47,19 @@ void runExample(states *ss, char *name, char *eg[], bool print) {
     freeLanguage(lang);
 }
 
-// Run all the tests. Keep the last few commented out during normal operation
-// because they test error messages.
-void runTests() {
-    runExample("eg1", eg1, false);
-//    runExample("eg2", eg2, false);
-//    runExample("eg3", eg3, false);
-//    runExample("eg4", eg4, false);
-//    runExample("eg5", eg5, false);
-//    runExample("eg6", eg6, false);
-//    runExample("eg7", eg7, false);
-//    runExample("eg8", eg8, false);
-//    runExample("eg9", eg9, false);
-//    runExample("eg10", eg10, false);
-//    runExample("eg11", eg11, false);
-//    runExample("eg12", eg12, false);
-//    runExample("eg13", eg13, false);
+// Examples from help/languages.xhtml. Each example has a string forming a
+// language description (made of concatenated lines), then strings which test
+// some generated table entries, then a NULL. Each test checks an entry in the
+// generated table, expressed roughly in the original rule format (state name,
+// single pattern or \n or \s, state name, single character tag at either end).
 
-//    runExample("eg14", eg14, false);
-//    runExample("eg15", eg15, false);
-//    runExample("eg16", eg16, false);
-//    runExample("eg17", eg17, false);
-}
-
-int main(int n, char const *args[n]) {
-    if (n != 2) crash("Use: ./compile language", 0, "");
-    char path[100];
-    sprintf(path, "%s/rules.txt", args[1]);
-    rules *rs = readRules(path);
-    states *ss = newStates(rs);
-    checkTypes(ss);
-    sortStates(ss);
-    fillActions(ss);
-    checkComplete(ss);
-    checkProgress(ss);
-    runTests(ss);
-//    sprintf(path, "%s/table.bin", args[1]);
-//    writeTable(ss, path);
-    freeStates(ss);
-    freeRules(rs);
-}
-
-/*
-
-// ----- Testing ---------------------------------------------------------------
-
+// One basic illustrative rule.
+char *eg1[] = {
+    "start == != start OP\n",
+    // ----------------------
+    "start == start O",
+    "start != start O", NULL
+};
 
 // Rule with no tag, continuing the token. Range pattern.
 char *eg2[] = {
@@ -358,6 +264,28 @@ char *eg17[] = {
     "DOT start . start2", NULL
 };
 
+// Run all the tests. Keep the last few commented out during normal operation
+// because they test error messages.
+void runTests() {
+    runExample("eg1", eg1, false);
+    runExample("eg2", eg2, false);
+    runExample("eg3", eg3, false);
+    runExample("eg4", eg4, false);
+    runExample("eg5", eg5, false);
+    runExample("eg6", eg6, false);
+    runExample("eg7", eg7, false);
+    runExample("eg8", eg8, false);
+    runExample("eg9", eg9, false);
+    runExample("eg10", eg10, false);
+    runExample("eg11", eg11, false);
+    runExample("eg12", eg12, false);
+    runExample("eg13", eg13, false);
+
+//    runExample("eg14", eg14, false);
+//    runExample("eg15", eg15, false);
+//    runExample("eg16", eg16, false);
+//    runExample("eg17", eg17, false);
+}
 
 int main(int n, char const *args[n]) {
     if (n != 2) crash("Use: ./compile language", 0, "");
