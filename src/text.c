@@ -71,14 +71,26 @@ static void moveGap(text *t, int at) {
     }
 }
 
-// Clean up new text, assumed to be UTF-8 valid. Remove carriage returns, and
-// internal trailing spaces.
+// Clean up new text, assumed to be UTF-8 valid. Normalise line endings, and
+// remove internal trailing spaces.
 static int clean(int n, char *s) {
     int j = 0;
     for (int i = 0; i < n; i++) {
-        char ch = s[i];
-        if (ch == '\r') continue;
-        if (ch == '\n') {
+        int ch = s[i];
+        if (ch == 0xE2 && (int)s[i+1] == 0x80 && (int)s[i+2] == 0xA8) {
+            ch = '\n';
+            i = i + 2;
+        }
+        else if (ch == 0xE2 && (int)s[i+1] == 0x80 && (int)s[i+2] == 0xA9) {
+            ch = '\n';
+            i = i + 2;
+        }
+        else if (ch == '\r' && s[i+1] != '\n') {
+            ch = '\n';
+            i = i + 1;
+        }
+        else if (ch == '\r') continue;
+        else if (ch == '\n') {
             while (j > 0 && s[j-1] == ' ') j--;
         }
         s[j++] = ch;
@@ -91,7 +103,7 @@ static int clean(int n, char *s) {
 // Clean the buffer, and also remove any final trailing spaces or blank lines,
 // and ensure a final newline. Then copy the buffer as the new text.
 bool loadText(text *t, int n, char *buffer) {
-    bool ok = uvalid(n, buffer, true);
+    bool ok = uvalid(n, buffer);
     if (! ok) return false;
     n = clean(n, buffer);
     while (n > 0 && buffer[n-1] == ' ') n--;

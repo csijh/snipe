@@ -16,8 +16,8 @@ static char singles[128][2];
 static void addSingles(strings *patterns) {
     for (int ch = 0; ch < 128; ch++) {
         char *s = singles[ch];
-        if (ch == 0) ch = 0x80;
         s[0] = ch;
+        if (ch == 0) s[0] = (char) 0x80;
         s[1] = '\0';
         addString(patterns, s);
     }
@@ -26,6 +26,13 @@ static void addSingles(strings *patterns) {
 // Find one-character string.
 static char *single(int ch) {
     return singles[ch];
+}
+
+static int findPattern(strings *ps, char *s) {
+    for (int i = 0; i < countStrings(ps); i++) {
+        if (strcmp(getString(ps, i), s) == 0) return i;
+    }
+    return -1;
 }
 
 static rules *newRules() {
@@ -39,6 +46,8 @@ static rules *newRules() {
 
 void freeRules(rules *rs) {
     freeStrings(rs->patterns);
+    for (int i = 0; i < rs->n; i++) freeStrings(rs->a[i]->patterns);
+    for (int i = 0; i < rs->n; i++) free((struct rule *)rs->a[i]);
     free(rs->a);
     free(rs);
 }
@@ -86,7 +95,11 @@ static void readPattern(rules *rs, int row, rule *r, char *p) {
             addString(r->patterns, s);
         }
     }
-    else addString(r->patterns, p);
+    else {
+        addString(r->patterns, p);
+        int n = findPattern(rs->patterns, p);
+        if (n < 0) addString(rs->patterns, p);
+    }
 }
 
 int countRules(rules *rs) {
@@ -132,9 +145,8 @@ static void readRule(rules *rs, int row, strings *tokens) {
     }
 }
 
-rules *readRules(char const *path) {
+rules *readRules(char *text) {
     rules *rs = newRules();
-    char *text = readFile(path, false);
     strings *lines = newStrings();
     splitLines(text, lines);
     strings *tokens = newStrings();
@@ -143,6 +155,7 @@ rules *readRules(char const *path) {
         splitTokens(i+1, getString(lines, i), tokens);
         readRule(rs, i+1, tokens);
     }
+    checkTags(rs);
     freeStrings(tokens);
     freeStrings(lines);
     return rs;

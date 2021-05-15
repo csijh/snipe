@@ -1,20 +1,4 @@
 // Snipe file and directory handling. Free and open source. See licence.txt.
-
-// Use args[0] to find the installation directory. This appears to be the only
-// simple cross-platform technique which doesn't involve making an installer.
-
-// Some Posix headers are required:
-// unistd.h    for getcwd, getuid, getpwuid
-// dirent.h    for opendir, readdir, closedir
-// pwd.h       for getpwuid
-// sys/stat.h  for stat
-// See http://pubs.opengroup.org/onlinepubs/9699919799/.
-
-// Some conditional compilation is required for (a) UTF8 filenames on Windows
-// and (b) standard directories for preferences.
-
-#define _POSIX_C_SOURCE 200809L
-#define _FILE_OFFSET_BITS 64
 #include "files.h"
 #include <stdio.h>
 #include <stdbool.h>
@@ -24,6 +8,21 @@
 #include <string.h>
 #include <ctype.h>
 
+// Uses args[0] to find the installation directory. This appears to be the only
+// simple cross-platform technique which doesn't involve making an installer.
+
+// Some conditional compilation is required for (a) UTF8 filenames on Windows
+// and (b) standard directories for preferences.
+
+// Some Posix headers are required:
+// unistd.h    for getcwd, getuid, getpwuid
+// dirent.h    for opendir, readdir, closedir
+// pwd.h       for getpwuid
+// sys/stat.h  for stat
+// See http://pubs.opengroup.org/onlinepubs/9699919799/.
+
+#define _POSIX_C_SOURCE 200809L
+#define _FILE_OFFSET_BITS 64
 #include <unistd.h>
 #include <dirent.h>
 #include <pwd.h>
@@ -462,6 +461,7 @@ static void writeMakefile(FILE *file, int size, char data[size]) {
     }
 }
 
+// Use binary mode, to preserve line endings as \n.
 void writeFile(char const *path, int size, char data[size]) {
     if (path[strlen(path) - 1] == '/') { err("can't write", path); return; }
     FILE *file = fopen(path, "wb");

@@ -39,7 +39,6 @@
 
 #include "strings.h"
 #include "states.h"
-#include "testing.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -63,98 +62,6 @@ char *eg1[] = {
     "start != start O", NULL
 };
 
-
-// Check that, in the named example, the given test succeeds. The test
-// represents an action, i.e. an entry in the table to be generated. It is
-// expressed roughly in the original rule format (base state name, single
-// pattern or \n or \s, target state name, single character tag at either end).
-void checkAction(language *lang, char *name, char *test) {
-    char text[100];
-    strcpy(text, test);
-    char *tokens[5] = { NULL };
-    splitTokens(lang, 0, text, tokens);
-    state *s, *t;
-    pattern *p;
-    unsigned char tag;
-    int ibase = 0, ipat = 1, itarget = 2, itag = 3;
-    s = findState(lang, tokens[ibase]);
-    if (strcmp(tokens[ipat],"\\n") == 0) tokens[ipat] = "\n";
-    if (strcmp(tokens[ipat],"\\s") == 0) tokens[ipat] = " ";
-    p = findPattern(lang, tokens[ipat]);
-    t = findState(lang, tokens[itarget]);
-    if (tokens[itag][0] == '~') tag = tokens[itag][1] | 0x80;
-    else tag = tokens[itag][0];
-    unsigned char actionTag = s->actions[p->index].tag;
-    int actionTarget = s->actions[p->index].target;
-    if (actionTag == tag && actionTarget == t->index) return;
-    fprintf(stderr, "Test failed: %s: %s\n", name, test);
-    if ((actionTag & 0x80) != (tag & 0x80)) {
-        fprintf(stderr, "lookahead %d\n", (actionTag >> 7));
-    }
-    if ((actionTag & 0x7F) != (tag & 0x7F)) {
-        fprintf(stderr, "tag %c\n", actionTag & 0x7F);
-    }
-    if (actionTarget != t->index) {
-        fprintf(stderr, "target %s\n", lang->states[actionTarget]->name);
-    }
-    exit(1);
-}
-
-// Run the tests in an example.
-void runExample(states *ss, char *name, char *eg[], bool print) {
-    char text[1000];
-    strcpy(text, eg[0]);
-    language *lang = buildLanguage(text, print);
-    for (int i = 1; eg[i] != NULL; i++) checkAction(lang, name, eg[i]);
-    freeLanguage(lang);
-}
-
-// Run all the tests. Keep the last few commented out during normal operation
-// because they test error messages.
-void runTests() {
-    runExample("eg1", eg1, false);
-//    runExample("eg2", eg2, false);
-//    runExample("eg3", eg3, false);
-//    runExample("eg4", eg4, false);
-//    runExample("eg5", eg5, false);
-//    runExample("eg6", eg6, false);
-//    runExample("eg7", eg7, false);
-//    runExample("eg8", eg8, false);
-//    runExample("eg9", eg9, false);
-//    runExample("eg10", eg10, false);
-//    runExample("eg11", eg11, false);
-//    runExample("eg12", eg12, false);
-//    runExample("eg13", eg13, false);
-
-//    runExample("eg14", eg14, false);
-//    runExample("eg15", eg15, false);
-//    runExample("eg16", eg16, false);
-//    runExample("eg17", eg17, false);
-}
-
-int main(int n, char const *args[n]) {
-    if (n != 2) crash("Use: ./compile language", 0, "");
-    char path[100];
-    sprintf(path, "%s/rules.txt", args[1]);
-    rules *rs = readRules(path);
-    states *ss = newStates(rs);
-    checkTypes(ss);
-    sortStates(ss);
-    fillActions(ss);
-    checkComplete(ss);
-    checkProgress(ss);
-    runTests(ss);
-//    sprintf(path, "%s/table.bin", args[1]);
-//    writeTable(ss, path);
-    freeStates(ss);
-    freeRules(rs);
-}
-
-/*
-
-// ----- Testing ---------------------------------------------------------------
-
-
 // Rule with no tag, continuing the token. Range pattern.
 char *eg2[] = {
     "start 0..9 number\n"
@@ -168,7 +75,7 @@ char *eg2[] = {
     "number 9 start V", NULL
 };
 
-// Symbol as token type, i.e. ? for error token.
+// Symbol as token type, e.g. ? for error token.
 char *eg3[] = {
     "start \\ escape\n"
     "escape n start ?\n",
@@ -208,6 +115,101 @@ char *eg6[] = {
     "filename > start =",
     "filename ! filename -", NULL
 };
+
+// Check that, in the named example, the given test succeeds. The test
+// represents an action, i.e. an entry in the generated table. It is expressed
+// in the original rule format (base state name, single pattern, target state
+// name, lookahead marker, single character tag).
+void checkAction(states *ss, char *name, char *test) {
+    char text[100];
+    strcpy(text, test);
+    strings *tokens = newStrings();
+    splitTokens(1, text, tokens);
+    char *base = getString(tokens, 0);
+    char *pattern = getString(tokens, 1);
+    char *target = getString(tokens, 2);
+    char tag = getString(tokens, 3)[0];
+    if (tag == '~') tag = (0x80 | getString(tokens, 3)[1]);
+    action act = getAction(ss, base, pattern);
+    int t = getIndex(ss, target);
+    freeStrings(tokens);
+    if (act.tag == tag && act.target == t) return;
+    fprintf(stderr, "Test failed: %s: %s\n", name, test);
+    if ((act.tag & 0x80) != (tag & 0x80)) {
+        fprintf(stderr, "lookahead %d\n", (act.tag >> 7));
+    }
+    if ((act.tag & 0x7F) != (tag & 0x7F)) {
+        fprintf(stderr, "tag %c\n", act.tag & 0x7F);
+    }
+    if (act.target != t) {
+        fprintf(stderr, "target %d\n", t);
+    }
+    exit(1);
+}
+
+// Run the tests in an example.
+void runExample(char *name, char *eg[], bool print) {
+    char text[1000];
+    strcpy(text, eg[0]);
+    rules *rs = readRules(text);
+    states *ss = newStates(rs);
+    checkTypes(ss);
+    sortStates(ss);
+    fillActions(ss);
+    for (int i = 1; eg[i] != NULL; i++) checkAction(ss, name, eg[i]);
+    freeStates(ss);
+    freeRules(rs);
+}
+
+// Run all the tests. Keep the last few commented out during normal operation
+// because they test error messages.
+void runTests() {
+    runExample("eg1", eg1, false);
+    runExample("eg2", eg2, false);
+    runExample("eg3", eg3, false);
+    runExample("eg4", eg4, false);
+    runExample("eg5", eg5, false);
+    runExample("eg6", eg6, false);
+//    runExample("eg7", eg7, false);
+//    runExample("eg8", eg8, false);
+//    runExample("eg9", eg9, false);
+//    runExample("eg10", eg10, false);
+//    runExample("eg11", eg11, false);
+//    runExample("eg12", eg12, false);
+//    runExample("eg13", eg13, false);
+
+//    runExample("eg14", eg14, false);
+//    runExample("eg15", eg15, false);
+//    runExample("eg16", eg16, false);
+//    runExample("eg17", eg17, false);
+}
+
+int main(int n, char const *args[n]) {
+    runTests();
+    /*
+    if (n != 2) crash("Use: ./compile language", 0, "");
+    char path[100];
+    sprintf(path, "%s/rules.txt", args[1]);
+    char *text = readFile(path, false);
+    rules *rs = readRules(text);
+    states *ss = newStates(rs);
+    checkTypes(ss);
+    sortStates(ss);
+    fillActions(ss);
+    checkComplete(ss);
+    checkProgress(ss);
+//    sprintf(path, "%s/table.bin", args[1]);
+//    writeTable(ss, path);
+    freeStates(ss);
+    freeRules(rs);
+    free(text);
+    */
+}
+
+/*
+
+// ----- Testing ---------------------------------------------------------------
+
 
 // A lookahead rule allows a token's type to be affected by the next token.
 char *eg7[] = {

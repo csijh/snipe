@@ -22,7 +22,7 @@ typedef struct rules rules;
 // list. Deal with escaped characters, expand ranges, fill in a missing tag as
 // the default "-", and implement a default rule (s t X) as a lookahead for each
 // character (s \0..127 t ~X).
-rules *readRules(char const *path);
+rules *readRules(char *text);
 
 // Free the list of rules.
 void freeRules(rules *rs);

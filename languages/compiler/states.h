@@ -7,6 +7,11 @@
 struct states;
 typedef struct states states;
 
+// An action contains a tag and a target state index, each stored in one byte.
+// The tag may have the top bit set to indicate a lookahead.
+struct action { unsigned char tag, target; };
+typedef struct action action;
+
 // Create the list of states from the list of rules.
 states *newStates(rules *rs);
 
@@ -33,6 +38,12 @@ void checkComplete(states *ss);
 
 // Check the actions to ensure that progress is always made.
 void checkProgress(states *ss);
+
+// Extract one action, for a state and pattern, for testing.
+action getAction(states *ss, char *s, char *p);
+
+// Find the index of a state, for testing.
+int getIndex(states *ss, char *s);
 
 // Write out a binary file containing the names of the states as null-terminated
 // strings, then a null, then the pattern strings, then a null, then the array

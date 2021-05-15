@@ -1,8 +1,10 @@
-allegro = -lallegro -lallegro_main -lallegro_font -lallegro_ttf -lallegro_primitives
-display = display.c $(allegro)
+unicode = unicode.c
+allegro = -lallegro -lallegro_main -lallegro_font -lallegro_ttf
+display = display.c $(allegro) $(unicode)
 events = events.c $(allegro)
 
 files = files.c
+text = text.c $(unicode)
 tags = tags.c
 
 # Compile flags. May need to remove sanitize flags for Windows.

@@ -1,4 +1,5 @@
 // Snipe text handling. Free and open source, see licence.txt.
+// TODO: get() with +- arg, shared with tag bytes.
 #include <stdbool.h>
 
 // A text object holds the UTF-8 content of a file. The text is kept clean so
@@ -36,8 +37,8 @@ void freeText(text *t);
 int lengthText(text *t);
 
 // Fill a text object from a newly loaded file, discarding any previous content.
-// Return false if the buffer contains invalid UTF-8 sequences or control
-// characters '\0 to '\7 and otherwise clean the buffer and return true.
+// Return false if the buffer contains invalid UTF-8 sequences, and otherwise
+// clean the buffer and return true.
 bool loadText(text *t, int n, char *buffer);
 
 // Copy the text out into a buffer.

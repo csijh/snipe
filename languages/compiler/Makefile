@@ -17,7 +17,7 @@ FLAGS = -std=c11 -Wall -pedantic
 DEBUG = -g -fsanitize=undefined -fsanitize=address -fsanitize=leak
 #DEBUG = -g
 
-compile2: compile2.c
+compile2: compile2.c states.c rules.c strings.c
 	gcc $(FLAGS) $(DEBUG) compile2.c \
 	states.c rules.c strings.c -o compile2
 

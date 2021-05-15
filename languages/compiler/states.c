@@ -5,11 +5,6 @@
 #include <string.h>
 #include <assert.h>
 
-// An action contains a tag and a target state, each stored in one byte. The tag
-// may have the top bit set to indicate a lookahead.
-struct action { unsigned char tag, target; };
-typedef struct action action;
-
 // A state stores the line number on which its starting flag was established, or
 // 0 if not established yet, to allow a sensible error message for a clash.
 struct state {
@@ -76,6 +71,7 @@ states *newStates(rules *rs) {
         ss->a[i] = s;
     }
     checkDefined(ss, rs);
+    freeStrings(names);
     return ss;
 }
 
@@ -83,13 +79,12 @@ void freeStates(states *ss) {
     for (int i = 0; i < ss->n; i++) {
         freeState(ss->a[i]);
     }
-    free(ss->a);
     free(ss);
 }
 
 // Check if a rule terminates the current token.
 static bool isTerminating(rule *r) {
-    return strcmp(r->tag, "-") == 0;
+    return strcmp(r->tag, "-") != 0;
 }
 
 static bool isStarting(rules *rs, char *state) {
@@ -178,7 +173,9 @@ void fillActions(states *ss) {
         int tag = r->tag[0];
         if (r->lookahead) tag = (0x80 | tag);
         for (int j = 0; j < countStrings(r->patterns); j++) {
-            int p = findPattern(ss->patterns, getString(r->patterns, j));
+            char *pattern = getString(r->patterns, j);
+            int p = findPattern(ss->patterns, pattern);
+            if (p < 0) crash("can't find pattern %s\n", pattern);
             s->actions[p].tag = tag;
             state *t = findState(ss, r->target);
             s->actions[p].target = t->index;
@@ -260,6 +257,17 @@ void checkProgress(states *ss) {
             if (! ok) reportLoop(ss, ch);
         }
     }
+}
+
+action getAction(states *ss, char *s, char *pattern) {
+    state *base = findState(ss, s);
+    int p = findPattern(ss->patterns, pattern);
+    return base->actions[p];
+}
+
+int getIndex(states *ss, char *s) {
+    state *base = findState(ss, s);
+    return base->index;
 }
 
 void writeTable(states *ss, char const *path) {

@@ -1,11 +1,17 @@
 // Snipe graphics display. Free and open source. See licence.txt.
+// TODO: config file (use allegro?)
+// TODO: fonts = sequence (synonyms?)
+// TODO: theme = colours (synonyms?)
+// TODO: syntax = map token types to fg(/bg)(@font)
+// TODO: keymap = ?
 
 // A display structure deals with the graphics aspects of the editor window.
 struct display;
 typedef struct display display;
 
-// A shade is a colour/color stored in RGB format.
+// A shade is a colour stored in RGB format. A theme is an array of 16 shades.
 typedef unsigned int shade;
+typedef shade *theme;
 
 // Each text byte is accompanied by a style byte. A style consists of a
 // foreground shade index in the bottom 5 bits (0x1F), a background shade in
