@@ -1,6 +1,5 @@
 // Snipe graphics display. Free and open source. See licence.txt.
 // TODO: allow for variable width characters (e.g. Asian).
-// TODO: decide how to represent combiners (reserve 0x00 etc.)
 // TODO: and carets (inserted bytes?, separate issue?)
 // TODO: decide how to access text (get(+-), ~ auto)
 #include "display.h"
@@ -73,6 +72,7 @@ static void try(bool b, char const *fmt, ...) {
 	exit(EXIT_FAILURE);
 }
 
+// Set up an array of colours.
 static void setTheme(display *d, shade *theme) {
     for (int i = 0; i < 16; i++) {
         shade c = theme[i];
@@ -89,7 +89,7 @@ static cell **newGrid(display *d) {
     return grid;
 }
 
-// Create a new display.
+// Create a new display, with font and ttf addons.
 display *newDisplay() {
     display *d = malloc(sizeof(display));
     try(al_init(), "Failed to initialize Allegro.");
@@ -143,16 +143,35 @@ static void drawRectangle(display *d, int c, int x, int y, int w, int h) {
     al_set_clipping_rectangle(0, 0, d->width, d->height);
 }
 
+void drawCaret(display *d, int row, int col) {
+    int y = row * d->lineHeight;
+    int x = d->grid[row][col].pixels;
+//    int x = d->pad + col * d->charWidth;
+    drawRectangle(d,12,x,y,1,d->lineHeight);
+//    frame(d);
+}
+
+// When drawing a line, x is the pixel position across the screen, col is the
+// cell position in the grid. and i is the byte position in the text.
 void drawLine(display *d, int row, char *bytes, unsigned char *tags) {
     codePoint cp = initialCodePoint();
     nextCode(&cp, &bytes[0]);
     int x = d->pad, y = row * d->lineHeight, col = 0, oldFg, i;
     for (i = 0; bytes[i] != '\n'; ) {
+        if (col >= d->cols) {
+            // TODO: continuation markers.
+            row++;
+            x = d->pad;
+            y = row * d->lineHeight;
+            col = 0;
+        }
         int code = cp.code;
         int length = cp.length;
         bool joiner = cp.joiner;
         nextCode(&cp, &bytes[i+length]);
         int width = al_get_glyph_advance(d->font, code, cp.code);
+//        int xx = al_get_glyph_width(d->font, code);
+//        if (bytes[i] == 'e') printf("e %d %d\n", width, xx);
         if (joiner) {
             int oldx = d->grid[row][col-1].pixels;
             int newx = (oldx + x) / 2;
@@ -178,34 +197,29 @@ void drawLine(display *d, int row, char *bytes, unsigned char *tags) {
     }
 }
 
-static void drawCaret(display *d, int row, int col) {
-    drawRectangle(d,12,d->pad,0,1,d->lineHeight);
+void drawPage(display *d, char *bytes, style *tags) {
+    clear(d);
+    for (int r = 0; r < d->rows; r++) {
+        printf("r=%d s=%.5s\n", r, bytes);
+        drawLine(d, r, bytes, tags);
+        while (*bytes != '\n' && *bytes != '\0') {
+            bytes++;
+            tags++;
+        }
+        if (*bytes == '\0') break;
+        bytes++;
+        tags++;
+    }
+    drawCaret(d, 3, 5);
+    frame(d);
 }
 
-void drawPage(display *d, char *bytes, unsigned char *tags) {
-    ALLEGRO_USTR_INFO ui;
-    al_clear_to_color(d->theme[0]);
-    float x = d->pad, y = 0;
-    for (int i = 0; bytes[i] != '\0'; i++) {
-        char ch = bytes[i];
-        if ((ch & 0xC0) == 0x80) continue;
-        if (ch == '\n') {
-            y = y + d->lineHeight;
-            x = d->pad;
-            continue;
-        }
-        int n = 1;
-        while ((bytes[i+n] & 0xC0) == 0x80) n++;
-        al_ref_buffer(&ui, &bytes[i], n);
-        int bg = (tags[i] >> 4) & 0x0F;
-        int fg = tags[i] & 0x0F;
-        if (bg != 0) {
-            drawRectangle(d,bg,x,y,d->charWidth,d->lineHeight);
-        }
-        al_draw_ustr(d->font, d->theme[fg], x, y, 0, &ui);
-        x += d->charWidth;
+rowCol findPosition(display *d, int x, int y) {
+    int row = y / d->lineHeight, col = 0;
+    for (int c = 1; c <= d->cols; c++) {
+        if (x > d->grid[row][c].pixels) col = c;
     }
-    al_flip_display();
+    return (rowCol) { row, col };
 }
 
 #ifdef displayTest

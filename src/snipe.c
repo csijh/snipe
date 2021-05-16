@@ -23,8 +23,7 @@ int main(int n, char *args[]){
     text = readPath(path);
     unsigned char *tags = malloc(strlen(text) + 1);
     for (int i = 0; i < strlen(text); i++) {
-        if ((text[i] & 0xC0) == 0x80) tags[i] = 0;
-        tags[i] = 1;
+        tags[i] = 4;
     }
 
     drawPage(d, text, tags);
@@ -35,7 +34,12 @@ int main(int n, char *args[]){
         else if (e == FRAME) drawPage(d, text, tags);
         else if (e == TEXT) printf("TEXT %s\n", eventText(es));
         else if (e == SCROLL) printf("SCROLL %d\n", eventY(es));
-        else if (e == CLICK) printf("CLICK %d %d\n", eventX(es), eventY(es));
+        else if (e == CLICK) {
+            printf("CLICK %d %d\n", eventX(es), eventY(es));
+            rowCol rc = findPosition(d, eventX(es), eventY(es));
+            printf("R=%d, C=%d\n", rc.r, rc.c);
+            drawCaret(d, rc.r, rc.c);
+        }
         else if (e == DRAG) printf("DRAG %d %d\n", eventX(es), eventY(es));
         else if (e == IGNORE) continue;
         else printf("%s\n", findEventName(e));

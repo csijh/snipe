@@ -85,6 +85,7 @@ static char *findInstall(char const *args0, char const *current) {
     char *suffix = strrchr(install, '/');
     if (suffix == NULL) crash("no / in", install);
     suffix[1] = '\0';
+    if (strcmp(suffix - 4, "/src/") == 0) suffix[-3] = '\0';
     return install;
 }
 
