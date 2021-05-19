@@ -37,7 +37,7 @@ events *newEvents(void *handle) {
     if (es->timer == NULL) fail("Failed to create Allegro timer.");
     al_register_event_source(es->queue, al_get_timer_event_source(es->timer));
 //    al_set_mouse_emulation_mode(ALLEGRO_MOUSE_EMULATION_TRANSPARENT);
-//    al_start_timer(es->timer);
+    al_start_timer(es->timer);
     es->mouseButtonDown = false;
     return es;
 }
@@ -80,8 +80,8 @@ static void putUTF8(unsigned int code, char *s) {
     }
 }
 
-// Convert a non-text Allegro keycode into an event. Note that C_SPACE and
-// C_0... and keypad keys come here.
+// Convert a non-text Allegro keycode into an event. Handle C_SPACE, C_0... and
+// keypad keys.
 static event nonText(events *es, bool shift, bool ctrl, int code) {
     int offset = shift ? (ctrl ? 3 : 1) : (ctrl ? 2 : 0) ;
     if (code >= ALLEGRO_KEY_A && code <= ALLEGRO_KEY_Z) {
@@ -196,9 +196,9 @@ event nextEvent(events *es) {
         case ALLEGRO_EVENT_DISPLAY_RESIZE:
             al_acknowledge_resize(es->display);
             return FRAME;
-            case ALLEGRO_EVENT_TIMER:
-    //            printf("tick\n");
-                return IGNORE;
+        case ALLEGRO_EVENT_TIMER:
+            printf("tick\n");
+            return IGNORE;
         case ALLEGRO_EVENT_KEY_CHAR:
             return keyboard(es, &ae);
         case ALLEGRO_EVENT_MOUSE_AXES:

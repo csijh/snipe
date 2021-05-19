@@ -18,7 +18,9 @@ files *newFiles(char const *arg0);
 // Release a files object.
 void freeFiles(files *fs);
 
-// Get a system directory.
+// Get one of the system directories. The user preferences directory is
+// $HOME/.config/ on Linux, $HOME/Library/Preferences/ on macOS,
+// $HOME/AppData/Roaming/ on Windows.
 char *installDir(files *fs);
 char *currentDir(files *fs);
 char *homeDir(files *fs);

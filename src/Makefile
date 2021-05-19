@@ -1,10 +1,11 @@
-unicode = unicode.c
 allegro = -lallegro -lallegro_main -lallegro_font -lallegro_ttf
+unicode = unicode.c
+files = files.c
+settings = settings.c $(unicode) $(files) $(allegro)
+
 display = display.c $(allegro) $(unicode)
 events = events.c $(allegro)
 
-files = files.c
-settings = settings.c $(files) $(allegro)
 text = text.c $(unicode)
 tags = tags.c
 

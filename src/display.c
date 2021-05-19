@@ -59,7 +59,7 @@ shade sold[] = {
     base03, base02, base01, base00, base0, base1, base2, base3, yellow, orange,
     cyan, blue, red, magenta, violet, green,
 };
-
+/*
 // Check result of a function which must succeed.
 static void try(bool b, char const *fmt, ...) {
     if (b) return;
@@ -71,7 +71,7 @@ static void try(bool b, char const *fmt, ...) {
     fprintf(stderr, "\n");
 	exit(EXIT_FAILURE);
 }
-
+*/
 // Set up an array of colours.
 static void setTheme(display *d, shade *theme) {
     for (int i = 0; i < 16; i++) {
@@ -95,8 +95,8 @@ display *newDisplay() {
     try(al_init(), "Failed to initialize Allegro.");
     al_init_font_addon();
     al_init_ttf_addon();
-    char *fontFile1 = "NotoSans-Regular.ttf";
-    char *fontFile2 = "NotoSansSymbols2-Regular.ttf";
+    char *fontFile1 = "../fonts/NotoSansMono-Regular.ttf";
+    char *fontFile2 = "../fonts/NotoSansSymbols2-Regular.ttf";
     d->font = al_load_ttf_font(fontFile1, 18, 0);
     try(d->font != NULL, "failed to load '%s'", fontFile1);
     ALLEGRO_FONT *font2 = al_load_ttf_font(fontFile2, 18, 0);
@@ -154,8 +154,7 @@ void drawCaret(display *d, int row, int col) {
 // When drawing a line, x is the pixel position across the screen, col is the
 // cell position in the grid. and i is the byte position in the text.
 void drawLine(display *d, int row, char *bytes, unsigned char *tags) {
-    codePoint cp = initialCodePoint();
-    nextCode(&cp, &bytes[0]);
+    character cp = getCode(&bytes[0]);
     int x = d->pad, y = row * d->lineHeight, col = 0, oldFg, i;
     for (i = 0; bytes[i] != '\n'; ) {
         if (col >= d->cols) {
@@ -165,31 +164,20 @@ void drawLine(display *d, int row, char *bytes, unsigned char *tags) {
             y = row * d->lineHeight;
             col = 0;
         }
-        int code = cp.code;
-        int length = cp.length;
-        bool joiner = cp.joiner;
-        nextCode(&cp, &bytes[i+length]);
-        int width = al_get_glyph_advance(d->font, code, cp.code);
-//        int xx = al_get_glyph_width(d->font, code);
-//        if (bytes[i] == 'e') printf("e %d %d\n", width, xx);
-        if (joiner) {
-            int oldx = d->grid[row][col-1].pixels;
-            int newx = (oldx + x) / 2;
-            al_draw_glyph(d->font, d->theme[oldFg], newx, y, code);
-            i = i + length;
-            continue;
-        }
+        character next = getCode(&bytes[i+cp.length]);
+        int width = al_get_glyph_advance(d->font, cp.code, next.code);
         d->grid[row][col] = (cell) { .bytes = i, .pixels = x };
         int bg = (tags[i] >> 4) & 0x0F;
         int fg = tags[i] & 0x0F;
         if (bg != 0) {
             drawRectangle(d,bg,x,y,width,d->lineHeight);
         }
-        al_draw_glyph(d->font, d->theme[fg], x, y, code);
+        al_draw_glyph(d->font, d->theme[fg], x, y, cp.code);
         oldFg = fg;
         col++;
         x = x + width;
-        i = i + length;
+        i = i + cp.length;
+        cp = next;
     }
     d->grid[row][col] = (cell) { .bytes = i, .pixels = x };
     for (col++; col <= d->cols; col++) {
@@ -200,7 +188,6 @@ void drawLine(display *d, int row, char *bytes, unsigned char *tags) {
 void drawPage(display *d, char *bytes, style *tags) {
     clear(d);
     for (int r = 0; r < d->rows; r++) {
-        printf("r=%d s=%.5s\n", r, bytes);
         drawLine(d, r, bytes, tags);
         while (*bytes != '\n' && *bytes != '\0') {
             bytes++;
