@@ -126,6 +126,7 @@ static int *styles(ALLEGRO_CONFIG *cfg, char **keys) {
     for (int i = 0; keys[i] != NULL; i++) n++;
     char const *cursor = al_get_config_value(cfg, "themes", "cursor");
     int t = countTokens(cursor);
+    int *data = malloc(n * t * sizeof(int) + 1);
     for (int i = 0; keys[i] != NULL; i++) {
         char const *value = al_get_config_value(cfg, "themes", keys[i]);
     }

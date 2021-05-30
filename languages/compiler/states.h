@@ -7,9 +7,11 @@
 struct states;
 typedef struct states states;
 
-// An action contains a tag and a target state index, each stored in one byte.
-// The tag may have the top bit set to indicate a lookahead.
-struct action { unsigned char tag, target; };
+// An action contains an op and a target state index, each stored in one byte.
+// There is one action in each state for each pattern. The op is SKIP = 0xFF to
+// mean the pattern is not relevant in the state, otherwise it is an index into
+// the list of tag names, plus a flag (top bit) to indicate a lookahead action.
+struct action { unsigned char op, target; };
 typedef struct action action;
 
 // Create the list of states from the list of rules.

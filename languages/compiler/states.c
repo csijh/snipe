@@ -5,8 +5,8 @@
 #include <string.h>
 #include <assert.h>
 
-// A state stores the line number on which its starting flag was established, or
-// 0 if not established yet, to allow a sensible error message for a clash.
+// A state has a name, an index (after sorting), a flag to say if it is a
+// starting or continuing state, an array of actions, and search flags.
 struct state {
     char *name;
     int index;
@@ -18,8 +18,8 @@ typedef struct state state;
 
 enum { SKIP = '~' };
 
-// Lists of rules and patterns, and array of states.
-struct states { rules *rs; strings *patterns; int n; state *a[]; };
+// Lists of rules and patterns and tags, and array of states.
+struct states { rules *rs; strings *patterns, *tags; int n; state *a[]; };
 
 static void freeState(state *s) {
     if (s->actions != NULL) free(s->actions);
@@ -84,7 +84,7 @@ void freeStates(states *ss) {
 
 // Check if a rule terminates the current token.
 static bool isTerminating(rule *r) {
-    return strcmp(r->tag, "-") != 0;
+    return strlen(r->tag) != 0;
 }
 
 static bool isStarting(rules *rs, char *state) {
@@ -104,7 +104,7 @@ static bool isStarting(rules *rs, char *state) {
     }
     if (startingRow > 0 && continuingRow > 0) {
         char *message =
-            "Error: %s is a starting state (line %d) "
+            "%s is a starting state (line %d) "
             "and a continuing state (line %d)";
         crash(message, state, startingRow, continuingRow);
     }
@@ -165,20 +165,22 @@ void fillActions(states *ss) {
     for (int i = 0; i < countRules(ss->rs); i++) {
         rule *r = getRule(ss->rs, i);
         state *s = findState(ss, r->base);
-        int n = countStrings(ss->patterns);
         if (s->actions == NULL) {
+            int n = countStrings(ss->patterns);
             s->actions = malloc(n * sizeof(action));
-            for (int p = 0; p < n; p++) s->actions[p].tag = SKIP;
+            for (int p = 0; p < n; p++) s->actions[p].op = SKIP;
         }
-        int tag = r->tag[0];
-        if (r->lookahead) tag = (0x80 | tag);
+        int op = r->tag[0];
+        if (r->lookahead) op = (0x80 | op);
         for (int j = 0; j < countStrings(r->patterns); j++) {
             char *pattern = getString(r->patterns, j);
             int p = findPattern(ss->patterns, pattern);
             if (p < 0) crash("can't find pattern %s\n", pattern);
-            s->actions[p].tag = tag;
-            state *t = findState(ss, r->target);
-            s->actions[p].target = t->index;
+            if (s->actions[p].op == SKIP) {
+                s->actions[p].op = op;
+                state *t = findState(ss, r->target);
+                s->actions[p].target = t->index;
+            }
         }
     }
 }
@@ -189,11 +191,18 @@ void checkComplete(states *ss) {
     for (int i = 0; i < ss->n; i++) {
         state *s = ss->a[i];
         for (int p = 0; p < countStrings(ss->patterns); p++) {
-            char *ps = getString(ss->patterns, i);
+            char *ps = getString(ss->patterns, p);
             if (strlen(ps) != 1) continue;
-            if (s->actions[p].tag == SKIP) {
-                if (ps[0] == '\n') ps = "\\n";
-                crash("state %s has no rule for character '%s'", s->name, ps);
+            if (s->actions[p].op == SKIP) {
+                char temp[10];
+                if ((ps[0] & 0x7F) < ' ') {
+                    sprintf(temp, "\\%d", (ps[0] & 0x7F));
+                    ps = temp;
+                }
+//                printf("cc %d\n", countRules(ss->rs));
+//                rule *r = getRule(ss->rs, 1);
+//                printf("cc %d\n", countStrings(r->patterns));
+                crash("state %s has no rule for character '%s' p=%d %s", s->name, ps, p, ps);
             }
         }
     }
@@ -213,9 +222,9 @@ static bool visit(states *ss, state *s, char ch) {
         char *p = getString(ss->patterns, i);
         if (p[0] < ch) continue;
         if (p[0] > ch) break;
-        int tag = s->actions[i].tag;
-        if (tag == SKIP) continue;
-        bool lookahead = (tag & 0x80) != 0;
+        int op = s->actions[i].op;
+        if (op == SKIP) continue;
+        bool lookahead = (op & 0x80) != 0;
         if (lookahead) {
             bool ok = visit(ss, ss->a[s->actions[i].target], ch);
             if (! ok) return false;

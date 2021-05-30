@@ -9,20 +9,22 @@ start  for goto if inline int long register restrict return short       key
 start  signed sizeof static struct switch true typedef union unsigned   key
 start  void volatile while                                              key
 
-// Operators and signs. An arrow may be followed by a field
+// Maybe mark "bool|char|double|float|int|long",
+//  "short|signed|unsigned|void|wchar_t" as TYPE
+
+// Operators and signs. An arrow is followed by a field
 start != ! % && &= & *= * ++ += + -- -= - /= / ?  start OP
 start <<= << <= < == >= >>= >> > ^= ^ |= || | ~   start OP
-start ## %:%: %= , ... = ; ?? start SIGN
-start : start :
+start ## %:%: %= , ... = ; ?? : start SIGN
 start -> field SIGN
 
 // Brackets.
-start ( start (
-start ) start )
-start [ <: start [
-start ] :> start ]
-start { <% start {
-start } %> start }
+start ( start BRACKET0
+start ) start BRACKET1
+start [ <: start BRACKET2
+start ] :> start BRACKET3
+start { <% start BRACKET4
+start } %> start BRACKET5
 
 // Identifiers, numbers, preprocessor lines
 start a..z A..Z _ \U \u id
@@ -30,16 +32,43 @@ start 0..9 num
 start . dot
 start # %: hash RESERVED
 
-// Quotes, escape sequences, comments
-start ' start '
-start " start "
-start \ escape
-start // start #
-start /* start /
-start */ start \
+// Char and string quotes, comments
+start ' char
+start " string
+start // note
+start /* comment
+
+// A backslash followed by a newline is marked as a token, to join the lines.
+start \\10 start OP
+
+// Spaces and newlines
+start \32 start GAP
+start \10 start NL
 
 // An illegal character is a one-character error token
-start !..~ start ?
+start \0..\127 start ERROR
+
+// Character quotes (no test for single character content).
+char ' start QUOTE
+char \10 start -ERROR
+char \' char
+char \0..\127 char
+
+// String quotes. Allow a backslash followed by a newline.
+string " start QUOTE
+string \10 start -ERROR
+string \" string
+string \\10 string
+string \0..\127 string
+
+// One-line comment. Allow a backslash followed by a newline.
+note \10 start -COMMENT
+note \\10 note
+note \0..\127 note
+
+// Multi-line comment.
+comment */ start COMMENT
+comment \0..\127 comment
 
 // Potential keywords, if not followed by alphanumerics.
 key a..z A..Z 0..9 _ \U \u id
@@ -47,7 +76,7 @@ key start KEY
 
 // Identifiers
 id a..z A..Z 0..9 _ \U \u id
-id ( start ~FUN
+id ( start -FUN
 id start ID
 
 // A dot starts a number, or is a sign possibly followed by a property.
@@ -66,25 +95,8 @@ num e+ e- E+ E- num
 num p+ p- P+ P- num
 num start VALUE
 
-// Escape sequences: single character, hex, octal.
-// The default for an escape sequence is ? but gets overridden by = if the
-// sequence is inside quotes.
-escape a..w y..z start ?
-escape x escapex
-escape 0..7 escape1
-escape start ?
-
-// Octal escape sequences: up to three digits.
-escape1 0..7 escape2
-escape1 start ?
-escape2 0..7 start ?
-escape2 start ?
-
-// Hex escape sequences: any number of digits
-escapex 0..9 a..f A..F escapex
-escapex start ?
-
-// A hash is followed by a preprocessor keyword.
+// A hash is followed by optional spaces and a preprocessor keyword.
+hash \32 hash GAP
 hash include inclusion RESERVED
 hash define elif else endif error if start RESERVED
 hash ifdef ifndef line pragma undef start RESERVED
@@ -93,6 +105,6 @@ hash start
 // After #include, treat <filename> as a single quoted token.
 inclusion < filename
 inclusion start
-filename > start =
-filename !..~ filename
-filename start ?
+filename > start QUOTE
+filename \10 start -ERROR
+filename \0..\127 filename

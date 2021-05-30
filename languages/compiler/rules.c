@@ -35,6 +35,37 @@ static int findPattern(strings *ps, char *s) {
     return -1;
 }
 
+int unescape(char *p, int row) {
+    int n = strlen(p);
+    for (int i = 0; i < n; i++) {
+        if (p[i] != '\\') continue;
+        if (! isdigit(p[i+1])) continue;
+        if (p[i+1] == '0' && isdigit(p[i+2])) {
+            crash("bad escape on line %d", row);
+        }
+        int j = i+1;
+        int ch = atoi(&p[j]);
+        while (isdigit(p[j])) j++;
+        if (ch < 0 || ch > 127) crash("character out of range on line %d", row);
+        if (ch == 0) ch = 0x80;
+        p[i] = ch;
+        for (int k = j; k <= n; k++) p[i+1+k-j] = p[k];
+        n = n - (j - i - 1);
+    }
+    return n;
+}
+
+void escape(char *s) {
+    char temp[strlen(s) + 1];
+    strcpy(temp, s);
+    for (int i = 0; i < strlen(temp); i++) {
+        unsigned char ch = temp[i] & 0x7F;
+        if ('!' <= ch && ch <= '~') *s++ = ch;
+        else s = s + sprintf(s, "\\%d", ch);
+    }
+    *s = '\0';
+}
+
 static rules *newRules() {
     rules *rs = malloc(sizeof(rules));
     rule **a = malloc(4 * sizeof(rule *));
@@ -56,34 +87,15 @@ static rule *addRule(rules *rs, int row, char *b, char *t, bool l, char *tag) {
     struct rule *r = malloc(sizeof(rule));
     strings *ps = newStrings();
     *r = (struct rule) {
-        .row = row, .base = b, .target = t, .patterns = ps, .tag = tag,
+        .row = row, .base = b, .patterns = ps, .target = t, .tag = tag,
         .lookahead = l
     };
+    if (rs->n >= rs->c) {
+        rs->c = 2 * rs->c;
+        rs->a = realloc(rs->a, rs->c * sizeof(rule *));
+    }
     rs->a[rs->n++] = r;
     return r;
-}
-
-
-// Translate escapes in place in the given pattern and return the new length.
-// Note \0 may create a null within the string.
-static int unescape(char *p, int row) {
-    int n = strlen(p);
-    for (int i = 0; i < n; i++) {
-        if (p[i] != '\\') continue;
-        if (! isdigit(p[i+1])) continue;
-        if (p[i+1] == '0' && isdigit(p[i+2])) {
-            crash("bad escape on line %d", row);
-        }
-        int j = i+1;
-        int ch = atoi(&p[j]);
-        while (isdigit(p[j])) j++;
-        if (ch < 0 || ch > 127) crash("character out of range on line %d", row);
-        if (ch == 0) ch = 0x80;
-        p[i] = ch;
-        for (int k = j; k <= n; k++) p[i+1+k-j] = p[k];
-        n = n - (j - i - 1);
-    }
-    return n;
 }
 
 // Add a pattern to a rule, handling ranges and escapes.
@@ -115,31 +127,30 @@ extern inline rule *getRule(rules *rs, int i) {
 static void readRule(rules *rs, int row, strings *tokens) {
     int n = countStrings(tokens);
     if (n == 0) return;
-    if (n == 1) crash("rule on line %d too short", row);
     char *first = getString(tokens, 0);
     char *last = getString(tokens, n-1);
     if (! isalpha(first[0])) return;
     if (! islower(first[0])) crash("bad state name %s on line %d", first, row);
+    if (n == 1) crash("rule on line %d too short", row);
     bool lookahead = false;
-    char *tag;
+    char *tag = "";
     if (! islower(last[0])) {
         if (n == 2) crash("rule on line %d too short", row);
         tag = last;
-        if (tag[0] == '~') {
+        if (tag[0] == '-') {
             lookahead = true;
             tag++;
         }
-        if (tag[0] == '~') crash("symbol ~ used as token type on line %d", row);
+        if (tag[0] == '\0') tag = "";
+        else if (! isupper(tag[0])) crash("bad tag on line %d", row);
         n--;
         last = getString(tokens, n-1);
     }
-    else tag = "-";
-    if (strlen(tag) == 0) tag = "-";
-    if (isdigit(tag[0]) || islower(tag[0])) crash("bad tag on line %d", row);
     if (! islower(last[0])) crash("bad state name %s on line %d", last, row);
     if (n == 2) lookahead = true;
     rule *r = addRule(rs, row, first, last, lookahead, tag);
-    if (n == 2) readPattern(rs, row, r, "\0..127");
+    char all[] = "\\0..\\127";
+    if (n == 2) readPattern(rs, row, r, all);
     for (int i = 1; i < n - 1; i++) {
         readPattern(rs, row, r, getString(tokens,i));
     }
@@ -155,26 +166,9 @@ rules *readRules(char *text) {
         splitTokens(i+1, getString(lines, i), tokens);
         readRule(rs, i+1, tokens);
     }
-    checkTags(rs);
     freeStrings(tokens);
     freeStrings(lines);
     return rs;
-}
-
-void checkTags(rules *rs) {
-    strings *names = newStrings();
-    for (int i = 0; i < rs->n; i++) {
-        rule *r = rs->a[i];
-        if (strlen(r->tag) == 1) continue;
-        for (int j = 0; j < countStrings(names); j++) {
-            char *s = getString(names, j);
-            if (s[0] != r->tag[0]) continue;
-            if (strcmp(s, r->tag) == 0) continue;
-            crash("two tags start with %c (line %d)", s[0], r->row);
-        }
-        addString(names, r->tag);
-    }
-    freeStrings(names);
 }
 
 // Compare two patterns in ASCII order, except suffixes go after longer strings.
@@ -206,7 +200,30 @@ strings *getPatterns(rules *rs) {
     return rs->patterns;
 }
 
+void printRule(rule *r) {
+    printf("%s", r->base);
+    for (int i = 0; i < countStrings(r->patterns); i++) {
+        char *p = getString(r->patterns, i);
+        char temp[10];
+        if ((p[0] & 0x7F) <= ' ' || p[0] == 127) {
+            sprintf(temp, "\\%d", (p[0] & 0x7F));
+            p = temp;
+        }
+        printf(" %s", p);
+    }
+    printf(" %s", r->target);
+    if (r->lookahead || strlen(r->tag) > 0) printf(" ");
+    if (r->lookahead) printf("-");
+    printf("%s\n", r->tag);
+}
+
 #ifdef rulesTest
+
+void testEscape() {
+    char s[100] = "a\200b\37c d\177";
+    escape(s);
+    assert(strcmp(s, "a\\0b\\31c\\32d\\127") == 0);
+}
 
 void testUnescape() {
     char s[] = "ab\\33cd\\32xy";
@@ -215,8 +232,54 @@ void testUnescape() {
     assert(strcmp(s, "ab!cd xy") == 0);
 }
 
+void showRule(rule *r, char text[]) {
+    sprintf(text, "%s", r->base);
+    for (int i = 0; i < countStrings(r->patterns); i++) {
+        char *p = getString(r->patterns, i);
+        char temp[10];
+        if ((p[0] & 0x7F) <= ' ' || p[0] == 127) {
+            sprintf(temp, "\\%d", (p[0] & 0x7F));
+            p = temp;
+        }
+        sprintf(text + strlen(text), " %s", p);
+    }
+    sprintf(text + strlen(text), " %s", r->target);
+    if (r->lookahead || strlen(r->tag) > 0) strcat(text, " ");
+    if (r->lookahead) strcat(text, "-");
+    strcat(text, r->tag);
+}
+
+void testRule(char const *s, char const *t) {
+    rules *rs = newRules();
+    strings *tokens = newStrings();
+    char text[100], out[500];
+    strcpy(text, s);
+    splitTokens(1, text, tokens);
+    readRule(rs, 1, tokens);
+    showRule(getRule(rs, 0), out);
+    assert(strcmp(t, out) == 0);
+    freeStrings(tokens);
+    freeRules(rs);
+}
+
 int main(int argc, char const *argv[]) {
+    testEscape();
     testUnescape();
+    testRule("s + t SIGN",       "s + t SIGN");
+    testRule("s + t",            "s + t");
+    testRule("s + t -",          "s + t -");
+    testRule("s a..c t X",       "s a b c t X");
+    testRule("s \\65..\\67 t X", "s A B C t X");
+    testRule("s t X",
+        "s \\0 \\1 \\2 \\3 \\4 \\5 \\6 \\7 \\8 \\9 \\10 \\11 \\12 \\13 \\14 "
+        "\\15 \\16 \\17 \\18 \\19 \\20 \\21 \\22 \\23 \\24 \\25 \\26 \\27 \\28 "
+        "\\29 \\30 \\31 \\32 "
+        "! \" # $ % & ' ( ) * + , - . / 0 1 2 3 4 5 6 7 8 9 : ; < = > ? @ "
+        "A B C D E F G H I J K L M N O P Q R S T U V W X Y Z "
+        "[ \\ ] ^ _ ` "
+        "a b c d e f g h i j k l m n o p q r s t u v w x y z "
+        "{ | } ~ \\127 t -X"
+    );
     return 0;
 }
 

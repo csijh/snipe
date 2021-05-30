@@ -3,6 +3,19 @@
 #include <stdbool.h>
 #include <assert.h>
 
+// NORMAL /* COMMENT
+// COMMENT /* COMMENT1
+// COMMENT1 /* COMMENT2
+// COMMENT2 /* COMMENT3
+// COMMENT3 /* COMMENT4
+// COMMENT4 /* COMMENT4
+// COMMENT4 */ COMMENT3
+// COMMENT3 */ COMMENT2
+// COMMENT2 */ COMMENT1
+// COMMENT1 */ COMMENT
+// COMMENT */ NORMAL
+
+
 // Two-letter abbreviations for token types. EN is used for the left and right
 // ends of the text. ID is used to represent all token types which are not
 // brackets or delimiters.
