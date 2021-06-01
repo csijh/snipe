@@ -57,7 +57,7 @@
 // A basic example.
 char *eg1[] = {
     "start == != start OP\n"
-    "start \\0..\\127 start ERROR\n",
+    "start start ERROR\n",
     // ----------------------
     "start == start O",
     "start != start O", NULL
@@ -66,13 +66,13 @@ char *eg1[] = {
 // Rule with no tag, continuing the token.
 char *eg2[] = {
     "start 0..9 number\n"
-    "start \\0..\\127 start ERROR\n"
+    "start start ERROR\n"
     "number 0..9 start VALUE\n"
-    "number \\0..\\127 start ERROR\n",
+    "number start ERROR\n",
     //--------------------------
-    "start 0 number",
-    "start 5 number",
-    "start 9 number",
+    "start 0 number .",
+    "start 5 number .",
+    "start 9 number .",
     "number 0 start V",
     "number 5 start V",
     "number 9 start V", NULL
@@ -82,12 +82,12 @@ char *eg2[] = {
 char *eg3[] = {
     "start == != start OP\n"
     "start a..z A..Z id\n"
-    "start \\0..\\127 start ERROR\n"
+    "start start ERROR\n"
     "id a..z A..Z start ID\n"
     "id start ID\n",
     //------------------------
     "start == start O",
-    "start x id",
+    "start x id .",
     "id x start I", NULL
 };
 
@@ -96,7 +96,7 @@ char *eg3[] = {
 char *eg4[] = {
     "start = start SIGN\n"
     "start == != start OP\n"
-    "start \\0..\\127 start ERROR\n",
+    "start start ERROR\n",
     //-----------------------
     "start = start S",
     "start == start O", NULL
@@ -105,26 +105,26 @@ char *eg4[] = {
 // Earlier rule for same pattern takes precedence (> is matched by last rule).
 char *eg5[] = {
     "start < filename\n"
-    "start \\0..\\127 start ERROR\n"
+    "start start ERROR\n"
     "filename > start QUOTE\n"
-    "filename \\0..\\127 filename\n",
+    "filename filename\n",
     //-------------------------
-    "start < filename",
-    "filename > start QUOTE",
-    "filename ! filename", NULL
+    "start < filename .",
+    "filename > start Q",
+    "filename ! filename .", NULL
 };
 
 // A lookahead rule allows a token's type to be affected by the next token.
 char *eg6[] = {
     "start a..z A..Z id\n"
-    "start \\0..\\127 start ERROR\n"
+    "start start ERROR\n"
     "id a..z A..Z 0..9 id\n"
-    "id ( start -FUN\n"
+    "id ( start FUN+\n"
     "id start ID\n",
     //--------------
-    "start f id",
-    "id ( start -FUN",
-    "id ; start -ID", NULL
+    "start f id .",
+    "id ( start FUN+",
+    "id ; start ID+", NULL
 };
 
 // A lookahead rule can be a continuing one. It is a jump to another state.
@@ -231,13 +231,13 @@ void checkAction(states *ss, char *name, char *test) {
     action act = getAction(ss, base, pattern);
     int t = getIndex(ss, target);
     freeStrings(tokens);
-    if (act.tag == tag && act.target == t) return;
+    if (act.op == tag && act.target == t) return;
     fprintf(stderr, "Test failed: %s: %s\n", name, test);
-    if ((act.tag & 0x80) != (tag & 0x80)) {
-        fprintf(stderr, "lookahead %d not %d\n", (act.tag >> 7), tag >> 7);
+    if ((act.op & 0x80) != (tag & 0x80)) {
+        fprintf(stderr, "lookahead %d not %d\n", (act.op >> 7), tag >> 7);
     }
-    if ((act.tag & 0x7F) != (tag & 0x7F)) {
-        fprintf(stderr, "tag %c not %c\n", act.tag & 0x7F, tag & 0x7F);
+    if ((act.op & 0x7F) != (tag & 0x7F)) {
+        fprintf(stderr, "tag %c not %c\n", act.op & 0x7F, tag & 0x7F);
     }
     if (act.target != t) {
         fprintf(stderr, "target %d not %d\n", act.target, t);
@@ -251,11 +251,8 @@ void runExample(char *name, char *eg[], bool print) {
     strcpy(text, eg[0]);
     rules *rs = readRules(text);
     states *ss = newStates(rs);
-    checkTypes(ss);
-    sortStates(ss);
-    fillActions(ss);
-    checkComplete(ss);
-    checkProgress(ss);
+    char *e = checkAndFillActions(ss);
+    if (e != NULL) { printf("%s", e); exit(1); }
     for (int i = 1; eg[i] != NULL; i++) checkAction(ss, name, eg[i]);
     freeStates(ss);
     freeRules(rs);

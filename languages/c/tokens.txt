@@ -1,110 +1,113 @@
 // C language definition, based on the C11 standard
 // See http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1548.pdf
+// Digraphs and trigraphs are omitted as obsolescent.
 
-// Potential keywords: go to key state to check if really identifiers
-start  _Alignas _Atomic _Bool _Complex _Generic _Imaginary _Noreturn    key
-start  _Static_assert _Thread_Local alignof auto bool break case char   key
-start  const continue default do double else enum extern false float    key
-start  for goto if inline int long register restrict return short       key
-start  signed sizeof static struct switch true typedef union unsigned   key
-start  void volatile while                                              key
+// Type-related keywords. The type state checks for identifiers.
+start _Atomic _Bool _Complex _Generic _Imaginary type
+start bool char double float int long short signed unsigned void type
+type a..z A..Z 0..9 _ \U \u id
+type start KEY+
 
-// Maybe mark "bool|char|double|float|int|long",
-//  "short|signed|unsigned|void|wchar_t" as TYPE
+// Non-type-related Keywords. The key state checks for identifiers.
+start _Alignas _Noreturn _Static_assert _Thread_Local key
+start alignof auto break case const continue default do else enum key
+start extern false for goto if inline register restrict return sizeof key
+start static struct switch true typedef union volatile while key
+key a..z A..Z 0..9 _ \U \u id
+key start KEY+
 
-// Operators and signs. An arrow is followed by a field
-start != ! % && &= & *= * ++ += + -- -= - /= / ?  start OP
-start <<= << <= < == >= >>= >> > ^= ^ |= || | ~   start OP
-start ## %:%: %= , ... = ; ?? : start SIGN
-start -> field SIGN
+// Identifiers
+start a..z A..Z _ \U \u id
+id a..z A..Z 0..9 _ \U \u id
+id ( \32( start FUN+
+id start ID+
+
+// Numbers with possible exponents.
+start 0..9 num
+num . 0..9 num
+num e+ e- E+ E- num
+num p+ p- P+ P- num
+num start VALUE+
 
 // Brackets.
 start ( start BRACKET0
 start ) start BRACKET1
-start [ <: start BRACKET2
-start ] :> start BRACKET3
-start { <% start BRACKET4
-start } %> start BRACKET5
+start [ start BRACKET2
+start ] start BRACKET3
+start { start BRACKET4
+start } start BRACKET5
 
-// Identifiers, numbers, preprocessor lines
-start a..z A..Z _ \U \u id
-start 0..9 num
+// Operators and signs.
+start != ! % && &= & *= * ++ += + -- -= - /= / ? start OP
+start <<= << <= < == >= >>= >> > ^= ^ |= || | ~ start OP
+start ## %= , ... = ; : start SIGN
+
+// An arrow sign may be followed by a property
+start -> property SIGN
+property a..z A..Z 0..9 _ \U \u property2
+property start
+property2 a..z A..Z 0..9 _ \U \u property2
+property2 start PROPERTY+
+
+// A dot starts a number, or is a sign possibly followed by a property.
 start . dot
-start # %: hash RESERVED
+dot 0..9 num
+dot property SIGN+
 
-// Char and string quotes, comments
+// Preprocessor directives, e.g. # include <filename>
+start # hash RESERVED
+hash \32 hash GAP
+hash include inclusion RESERVED
+hash define elif else endif error if start RESERVED
+hash ifdef ifndef line pragma undef start RESERVED
+hash start +
+inclusion < filename
+inclusion start +
+filename > start QUOTE
+filename \10 start ERROR+
+filename filename
+
+// Character quotes (no test for single character content or legal escapes).
 start ' char
+char \' char
+char ' start QUOTE
+char \10 start ERROR+
+char char
+
+// String quotes. Allow a backslash followed by a newline. Mark spaces as gaps.
 start " string
+string \32 stringGap
+string \" string
+string \\10 string QUOTE
+string " start QUOTE
+string \10 start ERROR+
+string string
+stringGap \32 stringGap
+stringGap string QUOTE
+
+// One-line comment. Allow a backslash followed by a newline.
 start // note
+note \10 start COMMENT+
+note \\10 note COMMENT
+note note
+
+// Multi-line comment.
 start /* comment
+comment \32 commentGap COMMENT+
+comment \10 COMMENT
+comment */ start COMMENT
+comment comment
+commentGap \32 commentGap
+commentGap comment COMMENT
 
 // A backslash followed by a newline is marked as a token, to join the lines.
 start \\10 start OP
 
 // Spaces and newlines
-start \32 start GAP
-start \10 start NL
+start \32 gap
+gap \32 gap
+gap start GAP
+start \10 start NEWLINE
 
 // An illegal character is a one-character error token
-start \0..\127 start ERROR
-
-// Character quotes (no test for single character content).
-char ' start QUOTE
-char \10 start -ERROR
-char \' char
-char \0..\127 char
-
-// String quotes. Allow a backslash followed by a newline.
-string " start QUOTE
-string \10 start -ERROR
-string \" string
-string \\10 string
-string \0..\127 string
-
-// One-line comment. Allow a backslash followed by a newline.
-note \10 start -COMMENT
-note \\10 note
-note \0..\127 note
-
-// Multi-line comment.
-comment */ start COMMENT
-comment \0..\127 comment
-
-// Potential keywords, if not followed by alphanumerics.
-key a..z A..Z 0..9 _ \U \u id
-key start KEY
-
-// Identifiers
-id a..z A..Z 0..9 _ \U \u id
-id ( start -FUN
-id start ID
-
-// A dot starts a number, or is a sign possibly followed by a property.
-dot 0..9 num
-dot field SIGN
-
-// A field is an identifier following a dot or arrow
-field a..z A..Z 0..9 _ \U \u field2
-field start
-field2 a..z A..Z 0..9 _ \U \u field2
-field2 start PROPERTY
-
-// Numbers with possible exponents.
-num . 0..9 num
-num e+ e- E+ E- num
-num p+ p- P+ P- num
-num start VALUE
-
-// A hash is followed by optional spaces and a preprocessor keyword.
-hash \32 hash GAP
-hash include inclusion RESERVED
-hash define elif else endif error if start RESERVED
-hash ifdef ifndef line pragma undef start RESERVED
-hash start
-
-// After #include, treat <filename> as a single quoted token.
-inclusion < filename
-inclusion start
-filename > start QUOTE
-filename \10 start -ERROR
-filename \0..\127 filename
+start start ERROR

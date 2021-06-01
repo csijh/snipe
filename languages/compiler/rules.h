@@ -3,20 +3,18 @@
 #include <stdbool.h>
 
 // A rule is represented by a line of text consisting of a base state, patterns,
-// a target state, an optional minus sign prefix to indicate lookahead, and an
-// optional tag representing a token type. A pattern may contain numerical
-// escapes for control characters or spaces, and may be a range x..y.
-
-// A rule structure has a row (line number), a base state, patterns, a target
-// state, a lookahead flag, and a tag, or "" to indicate no tag. The type 'rule'
-// provides read-only access.
+// a target state, an optional token type, and an optional + sign as a lookahead
+// flag. A pattern may contain numerical escapes for control characters or
+// spaces, and may be a range x..y. In the rule structure, 'row' is the line
+// number and NULL represents the absence of a token type. The type synonym
+// 'rule' provides read-only access.
 struct rule {
     int row;
     char *base;
     strings *patterns;
     char *target;
     bool lookahead;
-    char *tag;
+    char *type;
 };
 typedef struct rule const rule;
 
@@ -38,8 +36,7 @@ void escape(char *s);
 // Read rules from the given multi-line text. Discard comment lines (which start
 // with a symbol), split each remaining line into tokens separated by spaces,
 // convert into a rule, and add the rule to the list. Deal with escape
-// sequences, expand ranges, and convert a default rule (s t X) into an explicit
-// lookahead rule (s \0..\127 t -X).
+// sequences, expand ranges, and insert \0..\127 if there are no patterns.
 rules *readRules(char *text);
 
 // Free the list of rules.

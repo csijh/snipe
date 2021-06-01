@@ -83,13 +83,8 @@ void freeRules(rules *rs) {
     free(rs);
 }
 
-static rule *addRule(rules *rs, int row, char *b, char *t, bool l, char *tag) {
+static struct rule *addRule(rules *rs) {
     struct rule *r = malloc(sizeof(rule));
-    strings *ps = newStrings();
-    *r = (struct rule) {
-        .row = row, .base = b, .patterns = ps, .target = t, .tag = tag,
-        .lookahead = l
-    };
     if (rs->n >= rs->c) {
         rs->c = 2 * rs->c;
         rs->a = realloc(rs->a, rs->c * sizeof(rule *));
@@ -123,35 +118,53 @@ extern inline rule *getRule(rules *rs, int i) {
     return rs->a[i];
 }
 
+// Extract the lookahead flag, if any (as a suffix or separate token).
+static bool lookahead(strings *tokens) {
+    int n = countStrings(tokens);
+    char *last = getString(tokens, n-1);
+    if (strcmp(last, "+") == 0) {
+        popString(tokens);
+        return true;
+    }
+    int m = strlen(last);
+    if (last[m-1] == '+') {
+        last[m-1] = '\0';
+        return true;
+    }
+    return false;
+}
+
+// Extract the token type, if any.
+static char *type(strings *tokens) {
+    int n = countStrings(tokens);
+    char *last = getString(tokens, n-1);
+    if (! isupper(last[0])) return NULL;
+    popString(tokens);
+    return last;
+}
+
 // Read a single rule from the tokens on a line.
 static void readRule(rules *rs, int row, strings *tokens) {
     int n = countStrings(tokens);
     if (n == 0) return;
-    char *first = getString(tokens, 0);
-    char *last = getString(tokens, n-1);
-    if (! isalpha(first[0])) return;
-    if (! islower(first[0])) crash("bad state name %s on line %d", first, row);
-    if (n == 1) crash("rule on line %d too short", row);
-    bool lookahead = false;
-    char *tag = "";
-    if (! islower(last[0])) {
-        if (n == 2) crash("rule on line %d too short", row);
-        tag = last;
-        if (tag[0] == '-') {
-            lookahead = true;
-            tag++;
-        }
-        if (tag[0] == '\0') tag = "";
-        else if (! isupper(tag[0])) crash("bad tag on line %d", row);
-        n--;
-        last = getString(tokens, n-1);
-    }
-    if (! islower(last[0])) crash("bad state name %s on line %d", last, row);
-    if (n == 2) lookahead = true;
-    rule *r = addRule(rs, row, first, last, lookahead, tag);
+    if (n < 2) crash("rule on line %d too short", row);
+    if (! isalpha(getString(tokens, 0)[0])) return;
+    struct rule *r = addRule(rs);
+    r->row = row;
+    r->lookahead = lookahead(tokens);
+    r->type = type(tokens);
+    n = countStrings(tokens);
+    if (n < 2) crash("rule on line %d too short", row);
+    char *b = getString(tokens, 0);
+    char *t = getString(tokens, n-1);
+    if (! islower(b[0])) crash("bad state name %s on line %d", b, row);
+    if (! islower(t[0])) crash("bad state name %s on line %d", t, row);
+    r->base = b;
+    r->target = t;
+    r->patterns = newStrings();
     char all[] = "\\0..\\127";
     if (n == 2) readPattern(rs, row, r, all);
-    for (int i = 1; i < n - 1; i++) {
+    else for (int i = 1; i < n - 1; i++) {
         readPattern(rs, row, r, getString(tokens,i));
     }
 }
@@ -212,9 +225,9 @@ void printRule(rule *r) {
         printf(" %s", p);
     }
     printf(" %s", r->target);
-    if (r->lookahead || strlen(r->tag) > 0) printf(" ");
+    if (r->lookahead || r->type != NULL) printf(" ");
     if (r->lookahead) printf("-");
-    printf("%s\n", r->tag);
+    printf("%s\n", r->type == NULL ? "" : r->type);
 }
 
 #ifdef rulesTest
@@ -244,9 +257,9 @@ void showRule(rule *r, char text[]) {
         sprintf(text + strlen(text), " %s", p);
     }
     sprintf(text + strlen(text), " %s", r->target);
-    if (r->lookahead || strlen(r->tag) > 0) strcat(text, " ");
-    if (r->lookahead) strcat(text, "-");
-    strcat(text, r->tag);
+    if (r->lookahead || r->type != NULL) strcat(text, " ");
+    strcat(text, r->type == NULL ? "" : r->type);
+    if (r->lookahead) strcat(text, "+");
 }
 
 void testRule(char const *s, char const *t) {
@@ -267,7 +280,7 @@ int main(int argc, char const *argv[]) {
     testUnescape();
     testRule("s + t SIGN",       "s + t SIGN");
     testRule("s + t",            "s + t");
-    testRule("s + t -",          "s + t -");
+    testRule("s + t +",          "s + t +");
     testRule("s a..c t X",       "s a b c t X");
     testRule("s \\65..\\67 t X", "s A B C t X");
     testRule("s t X",
@@ -278,7 +291,7 @@ int main(int argc, char const *argv[]) {
         "A B C D E F G H I J K L M N O P Q R S T U V W X Y Z "
         "[ \\ ] ^ _ ` "
         "a b c d e f g h i j k l m n o p q r s t u v w x y z "
-        "{ | } ~ \\127 t -X"
+        "{ | } ~ \\127 t X"
     );
     return 0;
 }

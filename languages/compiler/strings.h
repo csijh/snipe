@@ -37,3 +37,9 @@ void setString(strings *ss, int i, char *s);
 
 // Add a string to a list, returning the index.
 int addString(strings *ss, char *s);
+
+// Treat the list as a set, add a string if not already present.
+int addOrFind(strings *ss, char *s);
+
+// Remove the last string in the list.
+char *popString(strings *ss);

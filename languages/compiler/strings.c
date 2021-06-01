@@ -27,6 +27,17 @@ int addString(strings *l, char *s) {
     return l->n++;
 }
 
+int addOrFind(strings *l, char *s) {
+    for (int i = 0; i < l->n; i++) {
+        if (strcmp(l->a[i], s) == 0) return i;
+    }
+    return addString(l, s);
+}
+
+char *popString(strings *l) {
+    return l->a[--l->n];
+}
+
 char *readFile(char const *path, bool binary) {
     FILE *file = fopen(path, "rb");
     if (file == NULL) crash("can't read file %s", path);
