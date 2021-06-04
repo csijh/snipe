@@ -27,15 +27,29 @@ int addString(strings *l, char *s) {
     return l->n++;
 }
 
-int addOrFind(strings *l, char *s) {
+int findString(strings *l, char *s) {
     for (int i = 0; i < l->n; i++) {
         if (strcmp(l->a[i], s) == 0) return i;
     }
+    return -1;
+}
+
+int findOrAddString(strings *l, char *s) {
+    int i = findString(l, s);
+    if (i >= 0) return i;
     return addString(l, s);
 }
 
 char *popString(strings *l) {
     return l->a[--l->n];
+}
+
+static int compare(const void *a, const void *b) {
+    return strcmp(*(const char**)a, *(const char**)b);
+}
+
+void sortStrings(strings *l) {
+    qsort(l->a, l->n, sizeof(char *), compare);
 }
 
 char *readFile(char const *path, bool binary) {
@@ -107,13 +121,13 @@ void crash(char const *fmt, ...) {
 
 int main() {
     char *text = readFile("strings.c", false);
-    printf("#chars in data.c = %d\n", (int) strlen(text));
+    printf("#chars in strings.c = %d\n", (int) strlen(text));
     strings *lines = newStrings();
     splitLines(text, lines);
-    printf("#lines in data.c = %d\n", countStrings(lines));
+    printf("#lines in strings.c = %d\n", countStrings(lines));
     strings *tokens = newStrings();
     splitTokens(1, getString(lines,0), tokens);
-    printf("#tokens in data.c line 1 = %d\n", countStrings(tokens));
+    printf("#tokens in strings.c line 1 = %d\n", countStrings(tokens));
     freeStrings(tokens);
     freeStrings(lines);
     free(text);

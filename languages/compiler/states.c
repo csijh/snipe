@@ -45,7 +45,7 @@ static void findNames(rules *rs, strings *names) {
     for (int i = 0; i < countRules(rs); i++) {
         rule *r = getRule(rs, i);
         char *name = r->base;
-        addOrFind(names, name);
+        findOrAddString(names, name);
     }
 }
 
@@ -62,11 +62,16 @@ states *newStates(rules *rs) {
     findNames(rs, names);
     int n = countStrings(names);
     states *ss = malloc(sizeof(states) + n * sizeof(state *));
-    *ss = (states) { .n = n, .patterns = getPatterns(rs), .rs = rs };
+    strings *ps = getPatterns(rs), *ts = getTypes(rs);
+    *ss = (states) { .n = n, .rs = rs, .patterns = ps, .types = ts };
+    int np = countStrings(ss->patterns);
     for (int i = 0; i < countStrings(names); i++) {
         char *name = getString(names, i);
         state *s = malloc(sizeof(state));
-        *s = (state) { .name = name, .actions = NULL };
+        s->name = name;
+        s->actions = malloc(np * sizeof(action));
+        s->index = i;
+        for (int p = 0; p < np; p++) s->actions[p] = (action) { SKIP, 0 };
         ss->a[i] = s;
     }
     freeStrings(names);
@@ -82,7 +87,7 @@ void freeStates(states *ss) {
 
 // Check if a rule terminates the current token.
 static bool isTerminating(rule *r) {
-    return r->type != NULL;
+    return strlen(r->type) > 0;
 }
 
 // For each target state, check whether it is defined.
@@ -92,56 +97,76 @@ static char *checkDefined(states *ss) {
         char *name = r->target;
         state *s = findState(ss, name);
         if (s != NULL) continue;
-        return error("undefined state %s on line %d", name, r->row);
+        return error("undefined state '%s' on line %d", name, r->row);
     }
     return NULL;
 }
 
-static char *isStarting(state *s, rules *rs) {
-    int startingRow = 0, continuingRow = 0;
-    rule *r0 = getRule(rs, 0);
-    if (strcmp(s->name, r0->base) == 0) startingRow = r0->row;
+// Check whether rule r shows that state s is a starting state, i.e. s is the
+// base of the first rule, or the target of a rule with a token type.
+static bool showsStarting(state *s, rule *r) {
+    if (strcmp(s->name, r->base) == 0 && r->row == 1) return true;
+    if (strcmp(s->name, r->target) == 0 && isTerminating(r)) return true;
+    return false;
+}
+
+// Check whether rule r shows that state s is a continuing state, i.e. s is the
+// base of a terminating lookahead rule, or the target of a non-lookahead
+// non-terminating rule.
+static bool showsContinuing(state *s, rule *r) {
+    if (strcmp(s->name, r->base) == 0) {
+        if (r->lookahead && isTerminating(r)) return true;
+    }
+    if (strcmp(s->name, r->target) == 0) {
+        if (! r->lookahead && ! isTerminating(r)) return true;
+    }
+    return false;
+}
+
+// Check whether each state is a starting state or continuing state, and check
+// consistency. The first row which shows a state is a starting state (or zero),
+// and the same for continuing, are tracked, to produce a helpful message.
+static char *classify(state *s, rules *rs) {
+    int rowS = 0, rowC = 0;
     for (int i = 0; i < countRules(rs); i++) {
         rule *r = getRule(rs, i);
-        if (strcmp(s->name, r->base) == 0) {
-            if (i == 0) startingRow = r->row;
-            if (r->lookahead && isTerminating(r)) continuingRow = r->row;
-        }
-        else if (strcmp(s->name, r->target) == 0) {
-            if (isTerminating(r)) startingRow = r->row;
-            else if (! r->lookahead) continuingRow = r->row;
-        }
+        if (showsStarting(s, r)) { if (rowS == 0) rowS = r->row; }
+        if (showsContinuing(s, r)) { if (rowC == 0) rowC = r->row; }
     }
-    if (startingRow > 0 && continuingRow > 0) {
+    if (rowS > 0 && rowC > 0) {
         char *message =
             "%s is a starting state (line %d) "
             "and a continuing state (line %d)";
-        return error(message, s->name, startingRow, continuingRow);
+        return error(message, s->name, rowS, rowC);
     }
-    s->starting = (continuingRow == 0);
+    s->starting = (rowC == 0);
     return NULL;
 }
 
-static char *checkTypes(states *ss) {
+// Check the classification of each state.
+static char *checkClassification(states *ss) {
     for (int i = 0; i < ss->n; i++) {
         state *s = ss->a[i];
-        char *m = isStarting(s, ss->rs);
+        char *m = classify(s, ss->rs);
         if (m != NULL) return m;
     }
     return NULL;
 }
 
-static char *checkLookahead(states *ss) {
+// A lookahead rule which continues a token is a jump. It must have base and
+// target states which are both starting or both continuing.
+static char *checkJumps(states *ss) {
     for (int i = 0; i < countRules(ss->rs); i++) {
         rule *r = getRule(ss->rs, i);
         state *base = findState(ss, r->base);
         state *target = findState(ss, r->target);
-        bool differ = (base->starting != target->starting);
-        if (countStrings(r->patterns) == 0 && r->lookahead && differ) {
-            char *m = (
-                "Error in rule on line %d\n"
-                "states are not both starting or both continuing"
-            );
+        if (! r->lookahead || isTerminating(r)) continue;
+        if (base->starting && ! target->starting) {
+            char *m = "line %d jumps from a starting to a continuing state";
+            return error(m, r->row);
+        }
+        else if (! base->starting && target->starting) {
+            char *m = "line %d jumps from a continuing to a starting state";
             return error(m, r->row);
         }
     }
@@ -159,12 +184,7 @@ static char *fillActions(states *ss) {
     for (int i = 0; i < countRules(ss->rs); i++) {
         rule *r = getRule(ss->rs, i);
         state *s = findState(ss, r->base);
-        if (s->actions == NULL) {
-            int n = countStrings(ss->patterns);
-            s->actions = malloc(n * sizeof(action));
-            for (int p = 0; p < n; p++) s->actions[p].op = SKIP;
-        }
-        int op = r->type == NULL ? '.' : r->type[0];
+        int op = findString(ss->types, r->type);
         if (r->lookahead) op = (0x80 | op);
         for (int j = 0; j < countStrings(r->patterns); j++) {
             char *pattern = getString(r->patterns, j);
@@ -209,18 +229,22 @@ static char *checkComplete(states *ss) {
 // for a pattern starting with the character indicates a progress-free jump to
 // another state. Any (non-skip) action for a pattern which is that single
 // character indicates that the character has been dealt with. Return true for
-// success, false for a loop.
+// success, false for a loop. (Search backward through patterns so that longer
+// ones are checked first.)
 static bool visit(states *ss, state *s, char ch) {
+    if (ch == 'x') printf("v %d %d\n", s->visited, s->visiting);
     if (s->visited) return true;
     if (s->visiting) return false;
     s->visiting = true;
-    for (int i = 0; i < countStrings(ss->patterns); i++) {
+    for (int i = countStrings(ss->patterns) - 1; i >= 0; i++) {
         char *p = getString(ss->patterns, i);
-        if (p[0] < ch) continue;
-        if (p[0] > ch) break;
+        if (p[0] > ch) continue;
+        if (p[0] < ch) break;
         unsigned int op = s->actions[i].op;
+        printf("v op=%d t=%d\n", op, s->actions[i].target);
         if (op == SKIP) continue;
         bool lookahead = (op & 0x80) != 0;
+        printf("v op=%s\n", getString(ss->types, op & 0x7F));
         if (lookahead) {
             bool ok = visit(ss, ss->a[s->actions[i].target], ch);
             if (! ok) return false;
@@ -233,34 +257,31 @@ static bool visit(states *ss, state *s, char ch) {
 
 // Report a progress-free loop of states when ch is next in the input.
 static char *reportLoop(states *ss, char ch) {
+    ch = ch & 0x7F;
     char *m = message;
-    m += sprintf(m, "Error: possible infinite loop with no progress\n");
-    m += sprintf(m, "when character '");
+    m += sprintf(m, "Error: possible infinite loop on '");
     if (ch < ' ' || ch == 127) m += sprintf(m, "\\%d", ch);
     else m += sprintf(m, "%c", ch);
-    m += sprintf(m, "' is next in the input.\n");
-    m += sprintf(m, "The states involved are:");
+    m += sprintf(m, "' for states:");
     for (int i = 0; i < ss->n; i++) {
         state *s = ss->a[i];
         if (! s->visiting) continue;
         m += sprintf(m, " %s", s->name);
     }
-    m += sprintf(m, "\n");
-    return m;
+    return message;
 }
 
 // For each character, initialise flags and do a depth first search.
 static char *checkProgress(states *ss) {
-    for (int ch = '\n'; ch <= '~'; ch++) {
-        if (ch > '\n' && ch < ' ') continue;
-        for (int i = 1; i < ss->n; i++) {
+    for (int ch = 0; ch <= 127; ch++) {
+        for (int i = 0; i < ss->n; i++) {
             state *s = ss->a[i];
             s->visiting = s->visited = false;
         }
         for (int i = 0; i < ss->n; i++) {
             state *s = ss->a[i];
-            bool ok = visit(ss, s, ch);
-            if (! ok) return reportLoop(ss, ch);
+            bool ok = visit(ss, s, ch & 0x7F);
+            if (! ok) return reportLoop(ss, ch & 0x7F);
         }
     }
     return NULL;
@@ -269,21 +290,24 @@ static char *checkProgress(states *ss) {
 char *checkAndFillActions(states *ss) {
     if (ss->n > 128) return error("more than 128 states");
     char *m = checkDefined(ss);
-    if (m == NULL) m = checkTypes(ss);
-    if (m == NULL) m = checkLookahead(ss);
+    if (m == NULL) m = checkClassification(ss);
+    if (m == NULL) m = checkJumps(ss);
     if (m == NULL) m = fillActions(ss);
     if (m == NULL) m = checkComplete(ss);
     if (m == NULL) m = checkProgress(ss);
     return m;
 }
 
-action getAction(states *ss, char *s, char *pattern) {
-    state *base = findState(ss, s);
+static action getAction(states *ss, state *base, char *pattern) {
     int p = findPattern(ss->patterns, pattern);
     return base->actions[p];
 }
 
-int getIndex(states *ss, char *s) {
+static char *getType(states *ss, int i) {
+    return getString(ss->types, i);
+}
+
+static int getIndex(states *ss, char *s) {
     state *base = findState(ss, s);
     return base->index;
 }
@@ -310,9 +334,298 @@ void writeTable(states *ss, char const *path) {
 
 #ifdef statesTest
 
+// Each example used in testing has a string (made of concatenated lines)
+// forming a language description, then strings which test some generated table
+// entries (or an error message), then a NULL. Each test checks an entry in the
+// generated table, expressed roughly in the original rule format, except that
+// each rule has a single pattern and the tag is a single character and an
+// explicit . is used to mean continue.
+
+// A basic example.
+char *eg1[] = {
+    "start == != start OP\n"
+    "start start ERROR\n",
+    // ----------------------
+    "start == start OP",
+    "start != start OP",
+    "start ? start ERROR", NULL
+};
+
+// Rule with no tag, continuing the token.
+char *eg2[] = {
+    "start 0..9 number\n"
+    "start start ERROR\n"
+    "number 0..9 start VALUE\n"
+    "number start ERROR\n",
+    //--------------------------
+    "start 0 number",
+    "start 5 number",
+    "start 9 number",
+    "start ? start ERROR",
+    "number 5 start VALUE",
+    "number ? start ERROR", NULL
+};
+
+// Longer pattern takes precedence (= is a prefix of ==). (Can't test here
+// whether the patterns are ordered so that == is before =)
+char *eg3[] = {
+    "start = start SIGN\n"
+    "start == != start OP\n"
+    "start start ERROR\n",
+    //-----------------------
+    "start = start SIGN",
+    "start == start OP", NULL
+};
+
+// Earlier rule for same pattern takes precedence (> is matched by last rule).
+char *eg4[] = {
+    "start < filename\n"
+    "start start ERROR\n"
+    "filename > start QUOTE\n"
+    "filename filename\n",
+    //-------------------------
+    "start < filename",
+    "filename > start QUOTE",
+    "filename ! filename", NULL
+};
+
+// A lookahead rule allows a token's type to be affected by what follows.
+char *eg5[] = {
+    "start a..z A..Z id\n"
+    "start start ERROR\n"
+    "id a..z A..Z 0..9 id\n"
+    "id ( start FUN+\n"
+    "id start ID+\n",
+    //--------------
+    "start f id",
+    "id ( start FUN+",
+    "id ; start ID+", NULL
+};
+
+// A lookahead rule can be a continuing one. It is a jump to another state.
+char *eg6[] = {
+    "start a start ID\n"
+    "start . start2 +\n"
+    "start start ERROR\n"
+    "start2 . start2 DOT\n"
+    "start2 start +\n",
+    //-------------------
+    "start . start2 +", NULL
+};
+
+// Identifier may start with keyword.
+char *eg7[] = {
+    "start a..z A..Z id\n"
+    "start if else for while key\n"
+    "start start ERROR\n"
+    "key a..z A..Z 0..9 id\n"
+    "key start KEY+\n"
+    "id a..z A..Z 0..9 id\n"
+    "id start ID+\n",
+    //--------------
+    "start f id",
+    "start for key",
+    "key m id",
+    "key ; start KEY+", NULL
+};
+
+// Can have multiple starting states.
+char *eg8[] = {
+    "start # hash KEY\n"
+    "start start ERROR\n"
+    "hash include start RESERVED\n"
+    "hash start +\n"
+    "html <% java BRACKET6\n"
+    "html html ERROR\n"
+    "java %> html BRACKET7\n"
+    "java java ERROR\n",
+    //--------------
+    "start # hash KEY",
+    "hash include start RESERVED",
+    "hash x start +",
+    "hash i start +",
+    "html <% java BRACKET6",
+    "html x html ERROR",
+    "java %> html BRACKET7",
+    "java x java ERROR", NULL
+};
+
+// An undefined state.
+char *eg9[] = {
+    "start == != start OP\n"
+    "start unknown ERROR\n",
+    // ----------------------
+    "Error: undefined state 'unknown' on line 2", NULL
+};
+
+// 'start' is a starting state because it is first, but also a continuing state
+// because it is the target of the first non-terminating non-lookahead rule.
+char *eg10[] = {
+    "start x start\n"
+    "start start ERROR\n",
+    //----------------------
+    "Error: start is a starting state (line 1) and a continuing state (line 1)",
+    NULL
+};
+
+// 'start' is a starting state because it is first, but also a continuing state
+// because it is the base of the first terminating lookahead rule.
+char *eg11[] = {
+    "start ; start OP+\n"
+    "start start ERROR\n",
+    //----------------------
+    "Error: start is a starting state (line 1) and a continuing state (line 1)",
+    NULL
+};
+
+// 'prop' is a starting state because of line 4, and continuing state because of
+// lines 6/7.
+char *eg12[] = {
+    "start . dot\n"
+    "start start ERROR\n"
+    "dot 0..9 start NUM\n"
+    "dot a..z A..Z prop SIGN+\n"
+    "dot start ERROR\n"
+    "prop a..z A..Z 0..9 prop\n"
+    "prop start PROPERTY\n",
+    //----------------------
+    "Error: prop is a starting state (line 4) and a continuing state (line 6)",
+    NULL
+};
+
+// The second rule jumps from a starting state to a continuing state.
+char *eg13[] = {
+    "start . dot\n"
+    "start dot +\n"
+    "start start ERROR\n"
+    "dot start ERROR\n",
+    //----------------------
+    "Error: line 2 jumps from a starting to a continuing state",
+    NULL
+};
+
+// The third rule jumps from a continuing state to a starting state.
+char *eg14[] = {
+    "start . dot\n"
+    "start start ERROR\n"
+    "dot start +\n",
+    //----------------------
+    "Error: line 3 jumps from a continuing to a starting state",
+    NULL
+};
+
+// 'start' jumps to itself without making progress (a loop on \0 is reported).
+char *eg15[] = {
+    "start start +\n",
+    //----------------------
+    "Error: possible infinite loop on '\\0' for states: start",
+    NULL
+};
+
+// 'start' jumps to itself without making progress on input 'x'.
+char *eg16[] = {
+    "start 'x' start +\n"
+    "start start ERROR\n",
+    //----------------------
+    "Error: possible infinite loop on '\\0' for states: start",
+    NULL
+};
+
+// Check that, in the named example, the given test succeeds. The test
+// represents an action, i.e. an entry in the generated table. It is expressed
+// in the original rule format (base state name, single pattern, target state
+// name, token type, lookahead marker).
+void checkAction(states *ss, char *name, char *test) {
+    char text[100];
+    strcpy(text, test);
+    strings *tokens = newStrings();
+    splitTokens(1, text, tokens);
+    char *base = getString(tokens, 0);
+    char *pattern = getString(tokens, 1);
+    char *target = getString(tokens, 2);
+    char *type = "";
+    bool lookahead = false;
+    if (countStrings(tokens) >= 4) {
+        type = getString(tokens, 3);
+        int n = strlen(type);
+        if (type[n-1] == '+') {
+            lookahead = true;
+            type[n-1] = '\0';
+        }
+    }
+    freeStrings(tokens);
+    state *sb = findState(ss, base);
+    if (sb == NULL) {
+        printf("Test failed: %s: no state '%s'\n", name, base);
+        exit(1);
+    }
+    action act = getAction(ss, sb, pattern);
+    int t = getIndex(ss, target);
+    bool l = act.op & 0x80;
+    char *s = getType(ss, act.op & 0x7F);
+    bool okType = (strcmp(type, s) == 0);
+    bool okLook = (lookahead == l);
+    bool okTarget = (act.target == t);
+    if (okType && okLook && okTarget) return;
+    fprintf(stderr, "Test failed: %s: %s\n", name, test);
+    if (! okLook) {
+        fprintf(stderr, "lookahead %d not %d\n", l, lookahead);
+    }
+    if (! okType) {
+        fprintf(stderr, "type %s not %s\n", s, type);
+    }
+    if (! okTarget) {
+        fprintf(stderr, "target %d not %d\n", act.target, t);
+    }
+    exit(1);
+}
+
+// Run the tests in an example.
+void runExample(char *name, char *eg[]) {
+    char text[1000];
+    strcpy(text, eg[0]);
+    rules *rs = newRules(text);
+    states *ss = newStates(rs);
+    char *e = checkAndFillActions(ss);
+    if (e != NULL) {
+        if (strcmp(e, eg[1]) != 0) {
+            printf("Test failed: %s: the rules generate error message:\n", name);
+            printf("    %s\n", e);
+            printf("but the expected error message is:\n");
+            printf("    %s\n", eg[1]);
+            exit(0);
+        }
+    }
+    else for (int i = 1; eg[i] != NULL; i++) checkAction(ss, name, eg[i]);
+    freeStates(ss);
+    freeRules(rs);
+}
+
+// Run all the tests. Keep the last few commented out during normal operation
+// because they test error messages.
+void runTests() {
+    /*
+    runExample("eg1", eg1);
+    runExample("eg2", eg2);
+    runExample("eg3", eg3);
+    runExample("eg4", eg4);
+    runExample("eg5", eg5);
+    runExample("eg6", eg6);
+    runExample("eg7", eg7);
+    runExample("eg8", eg8);
+    runExample("eg9", eg9);
+    runExample("eg10", eg10);
+    runExample("eg11", eg11);
+    runExample("eg12", eg12);
+    runExample("eg13", eg13);
+    runExample("eg14", eg14);
+    runExample("eg15", eg15);
+    */
+    runExample("eg16", eg16);
+}
+
 int main(int argc, char const *argv[]) {
-    char *m = error("s=%s, n=%d", "abc", 42);
-    printf("[%s]\n", m);
+    runTests();
     return 0;
 }
 

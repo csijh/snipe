@@ -17,13 +17,9 @@ FLAGS = -std=c11 -Wall -pedantic
 DEBUG = -g -fsanitize=undefined -fsanitize=address -fsanitize=leak
 #DEBUG = -g
 
-compile2: compile2.c states.c rules.c strings.c
-	gcc $(FLAGS) $(DEBUG) compile2.c \
-	states.c rules.c strings.c -o compile2
-
-compile: compile.c
-	gcc $(FLAGS) $(DEBUG) compile.c -o compile
-	cp compile ../compile
+compile: compile.c states.c rules.c strings.c
+	gcc $(FLAGS) $(DEBUG) compile.c \
+	states.c rules.c strings.c -o compile
 
 interpret: interpret.c
 	gcc -std=c11 -Wall -pedantic $(DEBUG) interpret.c -o interpret

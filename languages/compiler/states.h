@@ -29,15 +29,8 @@ void freeStates(states *ss);
 // rule which terminates a token has a continuing state as its base. A lookahead
 // rule which continues a token has base and target states which are both
 // starting or both continuing. Check that each state is complete, covering all
-// input characters. Check that there are no infinite loops, so progress is
-// always made.
+// input characters. Check that there are no progress-free infinite loops.
 char *checkAndFillActions(states *ss);
-
-// Extract one action, for a state and pattern, for testing.
-action getAction(states *ss, char *s, char *p);
-
-// Find the index of a state, for testing.
-int getIndex(states *ss, char *s);
 
 // Write out a binary file containing the names of the states as null-terminated
 // strings, then a null, then the pattern strings, then a null, then the array

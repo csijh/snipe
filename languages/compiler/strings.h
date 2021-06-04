@@ -38,8 +38,14 @@ void setString(strings *ss, int i, char *s);
 // Add a string to a list, returning the index.
 int addString(strings *ss, char *s);
 
-// Treat the list as a set, add a string if not already present.
-int addOrFind(strings *ss, char *s);
+// Find the index of a string in a list, or return -1.
+int findString(strings *ss, char *s);
+
+// Find a string in a list, adding it if not already present.
+int findOrAddString(strings *ss, char *s);
 
 // Remove the last string in the list.
 char *popString(strings *ss);
+
+// Sort a list of strings.
+void sortStrings(strings *ss);
