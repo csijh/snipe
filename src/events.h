@@ -1,36 +1,9 @@
 // Snipe event handling. Free and open source. See licence.txt.
 // TODO: detect shift-click for select, ctrl-click for add cursor
 // TODO: touch scroll
-#include <stdbool.h>
+#include "settings.h"
 
-// Provide event handling, hiding the details of the graphics library used.
-struct events;
-typedef struct events events;
-typedef int event;
-
-// Create an event handler based on the given window, of a type depending on the
-// graphics library.
-events *newEvents(void *handle);
-
-// Release an event handler.
-void freeEvents(events *es);
-
-// Get the next event from the graphics library. Provide its extra info, if any.
-event nextEvent(events *es);
-char *eventText(events *es);
-int eventX(events *es);
-int eventY(events *es);
-
-// Get the name of an event constant as a string (including combinations).
-const char *findEventName(event e);
-
-// Find an event from its name (including S_ or C_ or SC_ prefix).
-event findEvent(char *name);
-
-// Print out an event with a given terminating string, e.g. for testing.
-void printEvent(event e, int r, int c, char const *t, char *end);
-
-// Constant event codes representing keyboard, mouse, window and timer events.
+// Event code constants represent keyboard, mouse, window and timer events.
 // These constants are intended to be independent of the graphics library, and
 // suitable for user-defined key maps.
 
@@ -86,3 +59,14 @@ enum event {
     FRAME, LOAD, BLINK, SAVE, QUIT,
     IGNORE
 };
+
+typedef enum event event;
+
+// Get the name of an event constant as a string (including combinations).
+const char *findEventName(event e);
+
+// Find an event from its name (including S_ or C_ or SC_ prefix).
+event findEvent(char *name);
+
+// Print out an event with a given terminating string, e.g. for testing.
+void printEvent(event e, int r, int c, char const *t, char *end);

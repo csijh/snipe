@@ -1,40 +1,129 @@
-// Path to font file, relative to installation directory
-Font files/DejaVuSansMono.ttf
+# Point size of text (roughly, the line height in pixels), the number of lines
+# to display, the number of characters on each line, the number of seconds
+# between cursor blinks or 0 to switch off blinking, and whether to print events
+# and actions (on or off).
 
-// Nominal pixel size (roughly, the ascent size of the characters)
-FontSize 18
+points = 18
+rows = 24
+columns = 80
+blink = 0.5
+testing = off
 
-// Number of lines to display
-Rows 24
+# -----------------------------------------------------------------------------
+# Browser commands to display help files (in snipe/help/). Each is tried until
+# one works. Put your preference first. The open, start, xdg-open commands run
+# the default browser on macOS, Windows, Linux (but xdg-open is often not set up
+# properly, so it may be better to give a specific browser command).
 
-// Number of characters on each line
-Columns 80
+help = open start chrome google-chrome chromium-browser firefox xdg-open
 
-// Whether to print events and actions (on or off).
-Testing off
+# -----------------------------------------------------------------------------
+# List of font names, and the file for each font (in snipe/fonts/). When a
+# character is not found in a specified font, the fonts following it in the list
+# are searched in turn. The Symbols2 font contains visible pictures of control
+# characters. The Noto family has fonts covering all languages. Install more of
+# them, or any other ttf fonts, in snipe/fonts then include the names here. The
+# fonts need not be monospaced (but Snipe does not currently support combining
+# characters, shaping, or bi-directionality).
 
-// Number of seconds between cursor blinks, or 0 to switch off blinking
-BlinkRate 0.5
+fonts = mono sans italic symbols
+mono = NotoSansMono-Regular.ttf
+sans = NotoSans-Regular.ttf
+italic = NotoSans-Italic.ttf
+symbols = NotoSansSymbols2-Regular.ttf
 
-// Mapping of key/mouse events to actions.
-Map files/map.txt
+# -----------------------------------------------------------------------------
+# Key mappings from events to actions. For event X, if S_X or C_X is missing, it
+# defaults to X, and SC_X defaults to C_X. Save means synchronise, and possibly
+# compile and run. Bigger and Smaller change font size. C_= and C_+ should be
+# the same for keyboards with + above =. C is CTRL, or CMD on macOS.
+# PAGE_UP/PAGE_DOWN/HOME/END are FN_UP/FN_DOWN/FN_LEFT/FN_RIGHT on macOS.
 
-// Command to open help page in browser for each platform, with % replaced
-// by url. See https://www.dwheeler.com/essays/open-files-urls.html
-// On Linux, xdg-open often doesn't work, so it is simpler to run the desired
-// browser directly
-HelpLinux   firefox %
-HelpMacOS   open %
-HelpWindows start %
+BACKSPACE = CutLeftChar
+ENTER     = Newline
+LEFT      = MoveLeftChar
+RIGHT     = MoveRightChar
+UP        = MoveUpLine
+DOWN      = MoveDownLine
+PAGE_UP   = PageUp
+PAGE_DOWN = PageDown
+C_O       = Open
+C_X       = Cut
+C_C       = Copy
+C_V       = Paste
+C_Q       = Quit
+C_H       = Help
+C_S       = Save
+C_+       = Bigger
+C_=       = Bigger
+C_-       = Smaller
+C_ENTER   = CycleTheme
 
-// Help index file
-HelpIndex help/index.xhtml
+# These actions are not yet implemented.
+# C_BACKSPACE = CutLeftWord
+# HOME        = MoveStartLine
+# S_HOME      = MarkStartLine
+# END         = MoveEndLine
+# S_END       = MarkEndLine
+# S_LEFT      = MarkLeftChar
+# C_LEFT      = MoveLeftWord
+# SC_LEFT     = MarkLeftWord
+# S_RIGHT     = MarkRightChar
+# C_RIGHT     = MoveRightWord
+# SC_RIGHT    = MarkRightWord
+# S_UP        = MarkUpLine
+# S_DOWN      = MarkDownLine
+# DELETE      = CutRightChar
+# C_DELETE    = CutRightWord
+# C_Y         = Redo
+# C_Z         = Undo
 
-// Theme files: cycle through with CTRL+Enter. By default, provide switching
-// between dark and light solarized.
-Theme files/solarized-dark.txt
-Theme files/solarized-light.txt
-// Theme files/monokai.txt
+# -----------------------------------------------------------------------------
+# Named colours in hex rgb format. (These are the Solarized colours.)
 
-// Languages where multiline comments are nestable.
-NestedComments .d .hs .lhs .rs .scala .swift
+base03  = #002b36
+base02  = #073642
+base01  = #586e75
+base00  = #657b83
+base0   = #839496
+base1   = #93a1a1
+base2   = #eee8d5
+base3   = #fdf6e3
+yellow  = #b58900
+orange  = #cb4b16
+cyan    = #2aa198
+blue    = #268bd2
+red     = #dc322f
+magenta = #d33682
+violet  = #6c71c4
+green   = #859900
+
+# -----------------------------------------------------------------------------
+# Named styles. A style is the name of a foreground colour, the name of a
+# background colour, and the name of a font. If the font, or font and background
+# colour, are missing, then the ones defined for the cursor in the current theme
+# are used.
+
+light = base01 base3 mono
+dark  = base1 base03 mono
+badL  = base01 red mono
+badD  = base1 red mono
+
+# -----------------------------------------------------------------------------
+# Themes (Solarized Light and Dark). The list of themes gives the default style
+# for each theme. Each row after that defines the highlighting for a token type.
+# Each column represents a theme. Each entry is a style name or a colour name.
+
+themes    = light   dark
+COMMENTED = base1   base01
+ERROR     = badL    badD
+FUNCTION  = violet  violet
+ID        = base00  base0
+KEY       = cyan    cyan
+OP        = magenta magenta
+PROPERTY  = red     red
+QUOTED    = yellow  yellow
+RESERVED  = orange  orange
+SIGN      = base00  base0
+TYPE      = blue    blue
+VALUE     = green   green

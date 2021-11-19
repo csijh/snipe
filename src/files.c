@@ -35,12 +35,6 @@ struct files {
     char *current, *install, *home, *prefs;
 };
 
-// Give an error message and stop.
-static void crash(char const *message, char const *s) {
-    fprintf(stderr, "Bug: %s %s\n", message, s);
-    exit(1);
-}
-
 // Get the current working directory with trailing / on the end.
 static char *findCurrent() {
     size_t size = 24;
@@ -83,7 +77,7 @@ static char *findInstall(char const *args0, char const *current) {
         install = s;
     }
     char *suffix = strrchr(install, '/');
-    if (suffix == NULL) crash("no / in", install);
+    if (suffix == NULL) crash("no / in %s", install);
     suffix[1] = '\0';
     if (strcmp(suffix - 4, "/src/") == 0) suffix[-3] = '\0';
     return install;
@@ -228,7 +222,7 @@ static void err(char *e, char const *p) { printf("Error, %s: %s\n", e, p); }
 
 // Use binary mode, so that the number of bytes read equals the file size.
 static char *readFile(char const *path) {
-    if (path[strlen(path) - 1] == '/') crash("readFile on dir", path);
+    if (path[strlen(path) - 1] == '/') crash("readFile on dir %s", path);
     int size = fileSize(path);
     if (size < 0) { err("can't read", path); return NULL; }
     FILE *file = fopen(path, "rb");
@@ -421,7 +415,7 @@ static bool isDir(char const *dir, char *name) {
 }
 
 static char *readDirectory(char const *path) {
-    if (path[strlen(path) - 1] != '/') crash("dir not ending /", path);
+    if (path[strlen(path) - 1] != '/') crash("dir %s not ending /", path);
     char **names = readEntries(path);
     int count = 1;
     for (int i = 1; names[i] != NULL; i++) {
@@ -477,9 +471,9 @@ void writeFile(char const *path, int size, char data[size]) {
     fclose(file);
 }
 
-// Unit testing.
+// ---------- Unit testing -----------------------------------------------------
 
-#ifdef filesTest
+#ifdef TESTfiles
 #include <assert.h>
 
 static void testAbsolute() {

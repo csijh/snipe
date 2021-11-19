@@ -1,191 +1,103 @@
 // Snipe settings. Free and open source. See licence.txt.
 #include "settings.h"
-#include "unicode.h"
-#include <allegro5/allegro.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <assert.h>
 
-// Use Allegro's config file support, hold memory for items.
 struct settings {
-    ALLEGRO_CONFIG *cfg;
-    int size, rows, cols;
-    float blink;
-    char **help;
-    char **fontNames;
-    char **fonts;
-    char **colourNames;
-    int *colours;
-    char **styleNames;
-    int *styles;
+    char *text;
+    char **lines;
+    char ***variables;
 };
 
-// Get a single config value.
-static char const *get(ALLEGRO_CONFIG *cfg, char *x, char *y) {
-    return al_get_config_value(cfg, x, y);
-}
-
-// Find the number of tokens in s (i.e. number of spaces plus one)
-static int countTokens(char const *s) {
-    int n = 1;
-    for (int i = 0; i < strlen(s); i++) if (s[i] == ' ') n++;
-    return n;
-}
-
-// Allocate and make a NULL terminated list of strings from a single value.
-static char **tokens(ALLEGRO_CONFIG *cfg, char *x, char *y) {
-    char const *s = al_get_config_value(cfg, x, y);
-    int n = countTokens(s);
-    char **ps = malloc((n+1) * sizeof(char *) + strlen(s) + 1);
-    char *t = (char *)(ps + n + 1);
-    strcpy(t, s);
-    for (int i = 0; i < strlen(s); i++) if (t[i] == ' ') t[i] = '\0';
-    for (int i = 0; i < n; i++) {
-        ps[i] = t;
-        t = t + strlen(t) + 1;
-    }
-    ps[n] = NULL;
-    return ps;
-}
-
-// Info gathered from a section: number of keys, memory needed for key strings,
-// number of tokens in the values, memory needed for tokens.
-struct info { int nkeys, memkeys, ntokens, memtokens; };
-typedef struct info info;
-
-// Find the info about a section.
-static info measureSection(ALLEGRO_CONFIG *cfg, char const *section) {
-    ALLEGRO_CONFIG_ENTRY *iterator;
-    char const *key = al_get_first_config_entry(cfg, section, &iterator);
-    info x = { 0, 0, 0, 0 };
-    for ( ; key != NULL; x.nkeys++) {
-        x.memkeys += strlen(key) + 1;
-        char const *value = al_get_config_value(cfg, section, key);
-        x.ntokens += countTokens(value);
-        x.memtokens += strlen(value) + 1;
-        key = al_get_next_config_entry(&iterator);
-    }
-    return x;
-}
-
-// Allocate and make a NULL terminated list of the keys in a section.
-static char **keys(ALLEGRO_CONFIG *cfg, char const *section) {
-    info x = measureSection(cfg, section);
-    char **ks = malloc((x.nkeys+1) * sizeof(char *) + x.memkeys);
-    char *vs = (char *)(ks + x.nkeys + 1);
-    ALLEGRO_CONFIG_ENTRY *iterator;
-    char const *key = al_get_first_config_entry(cfg, section, &iterator);
-    for (int i = 0; i < x.nkeys; i++) {
-        strcpy(vs, key);
-        ks[i] = vs;
-        vs = vs + strlen(key) + 1;
-        key = al_get_next_config_entry(&iterator);
-    }
-    ks[x.nkeys] = NULL;
-    return ks;
-}
-
-// Get the colours, given the colour names.
-static int *colours(ALLEGRO_CONFIG *cfg, char **colourNames) {
+static void splitLines(settings *ss) {
+    char *text = ss->text;
     int n = 0;
-    for (int i = 0; colourNames[i] != NULL; i++) n++;
-    int *cs = malloc((n + 1) * sizeof(int));
-    for (int i = 0; colourNames[i] != NULL; i++) {
-        char *name = colourNames[i];
-        char const *v = al_get_config_value(cfg, "colours", name);
-        cs[i] = strtoul(v, NULL, 16);
+    for (int i = 0; text[i] != '\0'; i++) if (text[i] == '\n') n++;
+    ss->lines = malloc((n+1) * sizeof(char *));
+    ss->lines[n] = NULL;
+    int row = 0;
+    char *line = text;
+    for (int i = 0; text[i] != '\0'; i++) {
+        if (text[i] != '\n') continue;
+        text[i] = '\0';
+        if (i > 0 && text[i-1] == '\r') text[i-1] = '\0';
+        ss->lines[row++] = line;
+        line = &text[i+1];
     }
-    cs[n] = -1;
-    return cs;
+    ss->variables = malloc((n+1) * sizeof(char **));
+    ss->variables[n] = NULL;
 }
 
-// Allocate and make a NULL terminated list of the value strings from a section,
-// given the keys.
-static char **values(ALLEGRO_CONFIG *cfg, char *section, char **keys) {
-    int n = 0, m = 0;
-    for (int i = 0; keys[i] != NULL; i++) {
-        n++;
-        char *key = keys[i];
-        char const *v = al_get_config_value(cfg, section, key);
-        m = m + strlen(v) + 1;
-    }
-    char **vs = malloc((n + 1) * sizeof(char *) + m);
-    char *t = (char *)(vs + n + 1);
-    for (int i = 0; keys[i] != NULL; i++) {
-        char *key = keys[i];
-        char const *v = al_get_config_value(cfg, section, key);
-        strcpy(t, v);
-        vs[i] = t;
-        t = t + strlen(v) + 1;
-    }
-    vs[n] = NULL;
-    return vs;
-}
-
-// Allocate and make a -1 terminated list of styles, given the style names.
-static int *styles(ALLEGRO_CONFIG *cfg, char **keys) {
+static void splitWords(settings *ss, int r) {
+    char *line = ss->lines[r];
+    if (line[0] == '#') { ss->variables[r] = NULL; return; }
     int n = 0;
-    for (int i = 0; keys[i] != NULL; i++) n++;
-    char const *cursor = al_get_config_value(cfg, "themes", "cursor");
-    int t = countTokens(cursor);
-    int *data = malloc(n * t * sizeof(int) + 1);
-    for (int i = 0; keys[i] != NULL; i++) {
-        char const *value = al_get_config_value(cfg, "themes", keys[i]);
+    for (int i = 0; line[i] != '\0'; i++) {
+        if (line[i] == ' ') continue;
+        if (i == 0 || line[i-1] == ' ') n++;
+    }
+    if (n == 0) { ss->variables[r] = NULL; return; }
+    ss->variables[r] = malloc((n+1) * sizeof(char *));
+    ss->variables[r][n] = NULL;
+    int w = 0;
+    for (int i = 0; line[i] != '\0'; i++) {
+        if (line[i] == ' ') { line[i] = '\0'; continue; }
+        if (i == 0 || line[i-1] == '\0') ss->variables[r][w++] = &line[i];
+    }
+    if (n < 2 || strcmp(ss->variables[r][1], "=") != 0) {
+        crash("bad setting in settings.txt line %d", r+1);
     }
 }
 
 settings *newSettings(files *fs) {
-    settings *ss = calloc(1, sizeof(settings));
-    char *filename = join(2, prefsDir(fs), "snipe.cfg");
-    ss->cfg = al_load_config_file(filename);
+    settings *ss = malloc(sizeof(settings));
+    char *filename = join(2, installDir(fs), "settings.txt");
+    ss->text = readPath(filename);
     free(filename);
-    if (ss->cfg == NULL) {
-        filename = join(2, installDir(fs), "snipe.cfg");
-        ss->cfg = al_load_config_file(filename);
-        free(filename);
+    splitLines(ss);
+    for (int r = 0; ss->lines[r] != NULL; r++) {
+        splitWords(ss, r);
     }
-    if (ss->cfg == NULL) crash("can't load %s", filename);
-    ss->size = atoi(get(ss->cfg, "", "size"));
-    ss->rows = atoi(get(ss->cfg, "", "rows"));
-    ss->cols = atoi(get(ss->cfg, "", "cols"));
-    ss->blink = atof(get(ss->cfg, "", "blink"));
-    ss->help = tokens(ss->cfg, "", "help");
-    ss->fontNames = keys(ss->cfg, "fonts");
-    ss->fonts = values(ss->cfg, "fonts", ss->fontNames);
-    ss->colourNames = keys(ss->cfg, "colours");
-    ss->colours = colours(ss->cfg, ss->colourNames);
-    ss->styleNames = keys(ss->cfg, "themes");
     return ss;
 }
 
 void freeSettings(settings *ss) {
-    if (ss->cfg != NULL) al_destroy_config(ss->cfg);
-    if (ss->help != NULL) free(ss->help);
-    if (ss->fontNames != NULL) free(ss->fontNames);
-    if (ss->fonts != NULL) free(ss->fonts);
-    if (ss->colourNames != NULL) free(ss->colourNames);
-    if (ss->colours != NULL) free(ss->colours);
-    if (ss->styleNames != NULL) free(ss->styleNames);
+    for (int r = 0; ss->lines[r] != NULL; r++) {
+        if (ss->variables[r] != NULL) free(ss->variables[r]);
+    }
+    free(ss->variables);
+    free(ss->lines);
+    free(ss->text);
     free(ss);
 }
 
-int size0(settings *ss) { return ss->size; }
-int rows0(settings *ss) { return ss->rows; }
-int cols0(settings *ss) { return ss->cols; }
-float blink0(settings *ss) { return ss->blink; }
-char **help0(settings *ss) { return ss->help; }
-char **fonts0(settings *ss) { return ss->fonts; }
-int *colours0(settings *ss) { return ss->colours; }
+// Get the i'th value of the given variable, or NULL.
+char const *getSetting(settings *ss, char const *v, int i) {
+    for (int r = 0; ss->lines[r] != NULL; r++) {
+        if (ss->variables[r] == NULL) continue;
+        if (strcmp(ss->variables[r][0], v) != 0) continue;
+        return ss->variables[r][2+i];
+    }
+    crash("no setting found for %s", v);
+    return NULL;
+}
 
-#ifdef settingsTest
+#ifdef TESTsettings
 
 int main(int n, char const *args[]) {
     files *fs = newFiles(args[0]);
     settings *ss = newSettings(fs);
-    assert(rows0(ss) == 24);
-    assert(cols0(ss) == 80);
-    assert(blink0(ss) == 0.5);
-    for (int i = 0; ss->styleNames[i] != NULL; i++) printf("%s\n", ss->styleNames[i]);
+    assert(strcmp(getSetting(ss, "points", 0), "18") == 0);
+    assert(strcmp(getSetting(ss, "rows", 0), "24") == 0);
+    assert(strcmp(getSetting(ss, "columns", 0), "80") == 0);
+    assert(strcmp(getSetting(ss, "help", 0), "open") == 0);
+    assert(strcmp(getSetting(ss, "help", 1), "start") == 0);
+    assert(strcmp(getSetting(ss, "help", 2), "chrome") == 0);
     freeSettings(ss);
     freeFiles(fs);
+    printf("Settings module OK\n");
     return 0;
 }
 

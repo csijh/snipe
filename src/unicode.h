@@ -11,6 +11,9 @@ bool uvalid(int n, char s[n]);
 // Get the next character from the given text.
 character getCode(const char *s);
 
+// Write a Unicode code point to the given character array.
+void putUTF8(unsigned int code, char *s);
+
 // Crash the program with an error message, in printf style.
 void crash(char const *fmt, ...);
 

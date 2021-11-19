@@ -210,13 +210,13 @@ static char *checkComplete(states *ss) {
             if (strlen(ps) != 1) continue;
             if (s->actions[p].op == SKIP) {
                 char temp[10];
-                if ((ps[0] & 0x7F) < ' ') {
-                    sprintf(temp, "\\%d", (ps[0] & 0x7F));
+                if (ps[0] < ' ') {
+                    sprintf(temp, "\\%d", ps[0]);
                     ps = temp;
                 }
                 return error(
-                    "state %s has no rule for character '%s' p=%d %s",
-                    s->name, ps, p, ps
+                    "state %s has no rule for character '%s'",
+                    s->name, ps
                 );
             }
         }
@@ -232,25 +232,23 @@ static char *checkComplete(states *ss) {
 // success, false for a loop. (Search backward through patterns so that longer
 // ones are checked first.)
 static bool visit(states *ss, state *s, char ch) {
-    if (ch == 'x') printf("v %d %d\n", s->visited, s->visiting);
     if (s->visited) return true;
     if (s->visiting) return false;
     s->visiting = true;
-    for (int i = countStrings(ss->patterns) - 1; i >= 0; i++) {
+    for (int i = countStrings(ss->patterns) - 1; i >= 0; i--) {
         char *p = getString(ss->patterns, i);
         if (p[0] > ch) continue;
         if (p[0] < ch) break;
         unsigned int op = s->actions[i].op;
-        printf("v op=%d t=%d\n", op, s->actions[i].target);
         if (op == SKIP) continue;
         bool lookahead = (op & 0x80) != 0;
-        printf("v op=%s\n", getString(ss->types, op & 0x7F));
         if (lookahead) {
             bool ok = visit(ss, ss->a[s->actions[i].target], ch);
             if (! ok) return false;
         }
         if (strlen(p) == 1) break;
     }
+    s->visiting = false;
     s->visited = true;
     return true;
 }
@@ -259,10 +257,11 @@ static bool visit(states *ss, state *s, char ch) {
 static char *reportLoop(states *ss, char ch) {
     ch = ch & 0x7F;
     char *m = message;
-    m += sprintf(m, "Error: possible infinite loop on '");
-    if (ch < ' ' || ch == 127) m += sprintf(m, "\\%d", ch);
-    else m += sprintf(m, "%c", ch);
-    m += sprintf(m, "' for states:");
+    m += sprintf(m, "Error: possible infinite loop on ");
+    if (ch == '\'') m += sprintf(m, "'");
+    else if (ch < ' ' || ch == 127) m += sprintf(m, "\\%d", ch);
+    else m += sprintf(m, "'%c'", ch);
+    m += sprintf(m, " for states:");
     for (int i = 0; i < ss->n; i++) {
         state *s = ss->a[i];
         if (! s->visiting) continue;
@@ -322,6 +321,11 @@ void writeTable(states *ss, char const *path) {
     for (int i = 0; i < countStrings(ss->patterns); i++) {
         char *p = getString(ss->patterns, i);
         fprintf(fp, "%s%c", p, '\0');
+    }
+    fprintf(fp, "%c", '\0');
+    for (int i = 0; i < countStrings(ss->types); i++) {
+        char *t = getString(ss->types, i);
+        fprintf(fp, "%s%c", t, '\0');
     }
     fprintf(fp, "%c", '\0');
     int np = countStrings(ss->patterns);
@@ -459,7 +463,7 @@ char *eg9[] = {
 };
 
 // 'start' is a starting state because it is first, but also a continuing state
-// because it is the target of the first non-terminating non-lookahead rule.
+// because it is the target of a non-terminating non-lookahead rule.
 char *eg10[] = {
     "start x start\n"
     "start start ERROR\n",
@@ -514,20 +518,43 @@ char *eg14[] = {
     NULL
 };
 
-// 'start' jumps to itself without making progress (a loop on \0 is reported).
+// The 'dot' state is not complete.
 char *eg15[] = {
+    "start . dot\n"
+    "start start ERROR\n"
+    "dot \\1..w y..\\127 start DOT\n",
+    //----------------------
+    "Error: state dot has no rule for character 'x'",
+    NULL
+};
+
+// 'start' jumps to itself without making progress (a loop on \1 is reported).
+char *eg16[] = {
     "start start +\n",
     //----------------------
-    "Error: possible infinite loop on '\\0' for states: start",
+    "Error: possible infinite loop on \\1 for states: start",
     NULL
 };
 
 // 'start' jumps to itself without making progress on input 'x'.
-char *eg16[] = {
-    "start 'x' start +\n"
+char *eg17[] = {
+    "start x start +\n"
     "start start ERROR\n",
     //----------------------
-    "Error: possible infinite loop on '\\0' for states: start",
+    "Error: possible infinite loop on 'x' for states: start",
+    NULL
+};
+
+// The states cycle on input 'x'.
+char *eg18[] = {
+    "start x three +\n"
+    "start start ERROR\n"
+    "two x start +\n"
+    "two start ERROR\n"
+    "three x two +\n"
+    "three start ERROR\n",
+    //----------------------
+    "Error: possible infinite loop on 'x' for states: start two three",
     NULL
 };
 
@@ -604,7 +631,6 @@ void runExample(char *name, char *eg[]) {
 // Run all the tests. Keep the last few commented out during normal operation
 // because they test error messages.
 void runTests() {
-    /*
     runExample("eg1", eg1);
     runExample("eg2", eg2);
     runExample("eg3", eg3);
@@ -620,8 +646,9 @@ void runTests() {
     runExample("eg13", eg13);
     runExample("eg14", eg14);
     runExample("eg15", eg15);
-    */
     runExample("eg16", eg16);
+    runExample("eg17", eg17);
+    runExample("eg18", eg18);
 }
 
 int main(int argc, char const *argv[]) {

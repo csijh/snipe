@@ -3,7 +3,6 @@
 // TODO: and carets (inserted bytes?, separate issue?)
 // TODO: decide how to access text (get(+-), ~ auto)
 #include "display.h"
-#include "unicode.h"
 #include <stdio.h>
 #include <allegro5/allegro.h>
 #include <allegro5/allegro_font.h>
@@ -16,6 +15,7 @@ struct cell { unsigned short bytes, pixels; };
 typedef struct cell cell;
 
 struct display {
+    handler *h;
     ALLEGRO_DISPLAY *display;
     ALLEGRO_FONT *font;
     ALLEGRO_COLOR theme[16];
@@ -114,10 +114,12 @@ display *newDisplay() {
     d->display = al_create_display(d->width, d->height);
     try(d->display != NULL, "Failed to create display.");
     setTheme(d, soll);
+    d->h = newHandler(d->display);
     return d;
 }
 
 void freeDisplay(display *d) {
+    freeHandler(d->h);
     free(d->grid);
     al_destroy_font(d->font);
     al_destroy_display(d->display);
@@ -209,7 +211,12 @@ rowCol findPosition(display *d, int x, int y) {
     return (rowCol) { row, col };
 }
 
-#ifdef displayTest
+event nextEvent(display *d) { return getNextEvent(d->h); }
+char *eventText(display *d) { return getEventText(d->h); }
+int eventX(display *d) { return getEventX(d->h); }
+int eventY(display *d) { return getEventY(d->h); }
+
+#ifdef TESTdisplay
 
 // styles for bad tokens, selected text, continuation byte or combiner
 enum { b = 0x2c, h = 0x14, c = 0xFF };

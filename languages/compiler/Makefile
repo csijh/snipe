@@ -3,7 +3,9 @@
 #    make interpret;  cd ..;  ./interpret x
 # To test a module, make one of these.
 strings = strings.c
-rules = rules.c $(strings)
+lists = lists.c $(strings)
+rules = rules.c $(lists)
+
 states = states.c $(rules)
 
 
@@ -30,6 +32,6 @@ interpret: interpret.c
 
 # Default rule for building and testing a module.
 %: %.c
-	gcc $(FLAGS) $(DEBUG) -D$@Test $($@) -o test
+	gcc $(FLAGS) $(DEBUG) -DTEST$@ $($@) -o test
 	./test
 	rm test

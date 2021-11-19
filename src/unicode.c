@@ -65,6 +65,30 @@ extern inline character getCode(const char *s) {
     return ch;
 }
 
+void putUTF8(unsigned int code, char *s) {
+    if (code < 0x7f) {
+        s[0] = code;
+        s[1] = '\0';
+    } else if (code < 0x7ff) {
+        s[0] = 0xC0 | (code >> 6);
+        s[1] = 0x80 | (code & 0x3F);
+        s[2] = '\0';
+    } else if (code < 0xffff) {
+        s[0] = 0xE0 | (code >> 12);
+        s[1] = 0x80 | ((code >> 6) & 0x3F);
+        s[2] = 0x80 | (code & 0x3F);
+        s[3] = '\0';
+    } else if (code <= 0x10FFFF) {
+        s[0] = 0xF0 | (code >> 18);
+        s[1] = 0x80 | ((code >> 12) & 0x3F);
+        s[2] = 0x80 | ((code >> 6) & 0x3F);
+        s[3] = 0x80 | (code & 0x3F);
+        s[4] = '\0';
+    } else {
+        s[0] = '\0';
+    }
+}
+
 void crash(char const *fmt, ...) {
     fprintf(stderr, "Error: ");
     va_list args;
@@ -86,7 +110,7 @@ void try(bool ok, char const *fmt, ...) {
 	exit(EXIT_FAILURE);
 }
 
-#ifdef unicodeTest
+#ifdef TESTunicode
 // ----------------------------------------------------------------------------
 
 // Test a UTF-8 byte sequence.

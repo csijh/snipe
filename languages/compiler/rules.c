@@ -7,6 +7,105 @@
 #include <ctype.h>
 #include <assert.h>
 
+struct rule {
+    int row;
+    string *base;
+    list *patterns;
+    string *target;
+    string *type;
+    bool lookahead;
+};
+
+// Make a rule from words. Assume 1st word starts with lower case letter.
+static rule *newRule(list *words, int row) {
+    rule *r = malloc(sizeof(rule));
+    *r = (rule) {
+        .row = row, .patterns = newList(), .type = NULL, .lookahead = false
+    };
+    int n = size(words);
+    if (n < 3) crash("bad rule on line %d", row);
+    r->base = get(words,0);
+    string *plus = get(words, n-1);
+    if (length(plus) == 1 && at(plus,0) == '+') {
+        freeString(plus);
+        r->lookahead = true;
+        n--;
+        if (n < 3) crash("bad rule on line %d", row);
+    }
+    string *type = get(words, n-1);
+    byte ch = at(type, 0);
+    if ('A' <= ch && ch <= 'Z') {
+        r->type = type;
+        n--;
+        if (n < 3) crash("bad rule on line %d", row);
+    }
+    string *target = get(words, n-1);
+    ch = at(target, 0);
+    if (ch < 'a' || 'z' < ch) crash("bad target state on line %d", row);
+    r->target = target;
+    for (int i = 1; i < n-1; i++) {
+        string *pat = get(words, i);
+        unescape(pat, row);
+        checkPattern(pat, row);
+        add(r->patterns, pat);
+    }
+    return r;
+}
+
+int row(rule *r) { return r->row; }
+string *base(rule *r) { return r->base; }
+list *patterns(rule *r) { return r->patterns; }
+string *target(rule *r) { return r->target; }
+string *type(rule *r) { return r->type; }
+bool lookahead(rule *r) { return r->lookahead; }
+
+struct rules { int count, max; rule **a; };
+
+static void addRule(rules *rs, rule *r) {
+    if (rs->count >= rs->max) {
+        rs->max = 2 * rs->max;
+        rs->a = realloc(rs->a, rs->max * sizeof(rule *));
+    }
+    rs->a[rs->count++] = r;
+}
+
+// Discard line if comment, check starts lower case letter, convert to rule.
+static void addLine(rules *rs, int row, string *line) {
+    list *words = splitWords(line);
+    if (size(words) == 0) return;
+    string *base = get(words, 0);
+    byte ch = at(base, 0);
+    if ('A' <= ch && ch <= 'Z') crash("bad rule on line %d", row);
+    if ('0' <= ch && ch <= '9') crash("bad rule on line %d", row);
+    if (ch < 'a' || 'z' < ch) {
+        addRule(rs, newRule(words, row));
+        freeList(words, false);
+    }
+    else freeList(words, true);
+}
+
+rules *newRules(list *lines) {
+    int max0 = 8;
+    rule **a = malloc(max0 * sizeof(rule *));
+    rules *rs = malloc(sizeof(rules));
+    *rs = (rules) { .count = 0, .max = max0, .a = a };
+    for (int i = 0; i < size(lines); i++) addLine(rs, i+1, get(lines,i));
+    return rs;
+}
+
+void freeRules(rules *rs) {
+    free(rs);
+}
+
+int count(rules *rs) {
+    return rs->count;
+}
+
+rule *getRule(rules *rs, int i) {
+    return rs->a[i];
+}
+
+/*
 struct rules { int c, n; rule **a; strings *patterns; strings *types; };
 
 // Space for one-character patterns.
@@ -19,35 +118,12 @@ static char *single(int ch) {
 
 // Initialise one-character patterns and add to patterns list.
 static void addSingles(strings *patterns) {
-    for (int ch = 0; ch < 128; ch++) {
+    for (int ch = 1; ch < 128; ch++) {
         char *s = singles[ch];
         s[0] = ch;
         if (ch == 0) s[0] = (char) 0x80;
         s[1] = '\0';
         addString(patterns, s);
-    }
-}
-
-// Convert numerical escape sequences in a pattern string to characters, in
-// place, replacing a null sequence \0 by the character 0x80. The row (line
-// number) is used in generating an error message for a sequence outside the
-// range \0..\127. Return an error message or NULL;
-static void unescape(char *p, int row) {
-    int n = strlen(p);
-    for (int i = 0; i < n; i++) {
-        if (p[i] != '\\') continue;
-        if (! isdigit(p[i+1])) continue;
-        if (p[i+1] == '0' && isdigit(p[i+2])) {
-            crash("bad escape on line %d", row);
-        }
-        int j = i+1;
-        int ch = atoi(&p[j]);
-        while (isdigit(p[j])) j++;
-        if (ch <= 0 || ch > 127) crash("character out of range on line %d", row);
-        if (ch == 0) ch = 0x80;
-        p[i] = ch;
-        for (int k = j; k <= n; k++) p[i+1+k-j] = p[k];
-        n = n - (j - i - 1);
     }
 }
 
@@ -68,16 +144,6 @@ void freeRules(rules *rs) {
     for (int i = 0; i < rs->n; i++) free((struct rule *)rs->a[i]);
     free(rs->a);
     free(rs);
-}
-
-static struct rule *addRule(rules *rs) {
-    struct rule *r = malloc(sizeof(rule));
-    if (rs->n >= rs->c) {
-        rs->c = 2 * rs->c;
-        rs->a = realloc(rs->a, rs->c * sizeof(rule *));
-    }
-    rs->a[rs->n++] = r;
-    return r;
 }
 
 // Add a pattern to a rule, handling ranges and escapes.
@@ -181,9 +247,9 @@ strings *getTypes(rules *rs) {
     sortStrings(rs->types);
     return rs->types;
 }
-
-#ifdef rulesTest
-
+*/
+#ifdef TESTrules
+/*
 void testUnescape() {
     char s[] = "ab\\33cd\\32xy";
     unescape(s, 1);
@@ -219,8 +285,9 @@ void testRule(char const *s, char const *t) {
     freeStrings(tokens);
     freeRules(rs);
 }
-
+*/
 int main(int argc, char const *argv[]) {
+    /*
     testUnescape();
     testRule("s + t SIGN",       "s + t SIGN");
     testRule("s + t",            "s + t");
@@ -237,6 +304,7 @@ int main(int argc, char const *argv[]) {
         "a b c d e f g h i j k l m n o p q r s t u v w x y z "
         "{ | } ~ \\127 t X"
     );
+    */
     return 0;
 }
 

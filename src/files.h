@@ -5,7 +5,7 @@
 // files. Read directories. In paths / is used exclusively as the separator.
 // (Windows libraries accept / even though Windows apps don't.) File names
 // containing \ or / are ignored and directory names have / at the end.
-#include <stdbool.h>
+#include "unicode.h"
 
 // A files object holds system paths and supports read/write of files/dirs.
 struct files;

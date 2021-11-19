@@ -11,6 +11,10 @@ settings *newSettings(files *fs);
 // Free the settings object.
 void freeSettings(settings *ss);
 
+// Get the i'th value of the given variable, or NULL.
+char const *getSetting(settings *ss, char const *v, int i);
+
+/*
 // Get the settings items: font size in pixels, screen size in characters, blink
 // rate in seconds, name of command to show help files in browser.
 int size0(settings *ss);
@@ -36,3 +40,4 @@ int *themes0(settings *ss);
 // Get the keymap settings as a list of strings. Each pair of strings is an
 // event name, and an action name.
 char **keys0(settings *ss);
+*/

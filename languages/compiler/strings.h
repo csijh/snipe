@@ -1,51 +1,50 @@
 // Snipe language compiler. Free and open source. See licence.txt.
 #include <stdbool.h>
 
-// Lists of strings, implemented as flexible arrays.
-struct strings;
-typedef struct strings strings;
+// A string is a read-only UTF-8 array of bytes, which may contain nulls.
+struct string;
+typedef struct string string;
+typedef unsigned char byte;
+
+// Create a string as a copy of an array of char.
+string *newString(int n, char *s);
+
+// Free a string.
+void freeString(string *s);
+
+// For a pattern, restrict the length to 127 bytes. If the string contains ..
+// then check it is a valid range.
+void checkPattern(string *s, int row);
+
+// Find the length of a string.
+int length(string *s);
+
+// Get the i'th byte of a string.
+byte at(string *s, int i);
+
+// Compare two strings in UTF-8 lexicographic order.
+int compare(string const *s1, string const *s2);
+
+// Create a substring of a string, from byte position i to byte position j.
+string *substring(string *s, int i, int j);
+
+// Convert escape sequences in a string, in place, into characters. The row
+// number is used in error messages.
+void unescape(string *s, int row);
+
+// Check if a string is a range pattern such as 0..9. Crash if there isn't a
+// single character either side (or the pattern is ..).
+bool isRange(string *s, int row);
+
+// Find the from/to code point from a range.
+int from(string *s);
+int to(string *s);
+
+// Make a new range pattern string.
+string *newRange(int from, int to);
+
+// Read a text file as a string. Convert \t or \r to ' '. Ensure final newline.
+string *readFile(char const *path);
 
 // Give error message, with printf-style parameters, and exit.
 void crash(char const *message, ...);
-
-// Read a binary or text file. If text, add a newline and a null terminator.
-char *readFile(char const *path, bool binary);
-
-// Split the text into a list of lines, replacing newlines in the text by nulls.
-void splitLines(char *text, strings *ss);
-
-// Split a line into the given list of tokens, replacing spaces by nulls.
-void splitTokens(int row, char *line, strings *tokens);
-
-// Create a list of strings.
-strings *newStrings();
-
-// Free a list of strings.
-void freeStrings(strings *ss);
-
-// Find the length of a list of strings.
-int countStrings(strings *ss);
-
-// Set the length of a list of strings to zero.
-void clearStrings(strings *ss);
-
-// Get the i'th string in the list.
-char *getString(strings *ss, int i);
-
-// Set the i'th string in the list.
-void setString(strings *ss, int i, char *s);
-
-// Add a string to a list, returning the index.
-int addString(strings *ss, char *s);
-
-// Find the index of a string in a list, or return -1.
-int findString(strings *ss, char *s);
-
-// Find a string in a list, adding it if not already present.
-int findOrAddString(strings *ss, char *s);
-
-// Remove the last string in the list.
-char *popString(strings *ss);
-
-// Sort a list of strings.
-void sortStrings(strings *ss);

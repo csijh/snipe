@@ -1,3 +1,16 @@
+Unicode:
+    Code points.
+    Not grapheme clusters? (Depends on font & font lib.)
+Scanning:
+    Want dynamic loading, but not regexes. Therefore current approach.
+    Escaped chars? Only as whole patterns, then can't have \10 inside a pattern.
+    No lookahead past newlines, then can re-start.
+    Where store state? Per line.
+Store:
+    Gap buffer still looks good, but need good API.
+    Store more per line.
+    Use row/col positions throughout.
+================================================================================
 TODO Switch to using Allegro.
 Find out from allegro.cc how to package for different platforms.
 Check that the result is small on each platform.

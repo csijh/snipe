@@ -5,6 +5,7 @@
 // TODO: theme = colours (synonyms?)
 // TODO: syntax = map token types to fg(/bg)(@font)
 // TODO: keymap = ?
+#include "handler.h"
 
 // A display structure deals with the graphics aspects of the editor window.
 struct display;
@@ -50,3 +51,9 @@ rowCol findPosition(display *d, int x, int y);
 
 // Switch to the next available theme.
 void switchTheme(display *d);
+
+// Get the next event, and associated info if any.
+event nextEvent(display *d);
+char *eventText(display *d);
+int eventX(display *d);
+int eventY(display *d);

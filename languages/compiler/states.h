@@ -33,6 +33,6 @@ void freeStates(states *ss);
 char *checkAndFillActions(states *ss);
 
 // Write out a binary file containing the names of the states as null-terminated
-// strings, then a null, then the pattern strings, then a null, then the array
-// of actions for each state.
+// strings, then a null, then the pattern strings, then a null, then the token
+// type strings, then a null, then the array of actions for each state.
 void writeTable(states *ss, char const *path);
