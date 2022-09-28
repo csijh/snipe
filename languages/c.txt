@@ -1,0 +1,205 @@
+// C language definition, based on the C11 standard
+// See http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1548.pdf
+// The source text is assumed to be normalised, with no control characters
+// other than \n and no digraphs or trigraphs.
+// Backslash newline is only supported between tokens or in string literals.
+// A few ids such as bool, false, true from <stdbool.h> are treated as keywords.
+
+// =============================================================================
+// Scanning rules for C.
+
+// Keywords which are types or related to types. The type state checks for
+// additional characters which mean the token is an id.
+// TODO: + - suffix on base state?
+start   _Atomic _Bool _Complex _Generic _Imaginary      type
+start   bool char double float int long                 type
+start   short signed unsigned void                      type
+type    a..z A..Z 0..9 _ \U \u                          id
+type+   ..                                              start TYPE
+
+// Other keywords. The key state checks for additional characters. The enum and
+// struct keywords are picked out for later handling of curly brackets.
+start   _Alignas _Noreturn _Static_assert _Thread_Local         key
+start   alignof auto break case const continue default do else  key
+start   enum extern false for goto if inline register restrict  key
+start   return sizeof static struct switch true typedef union   key
+start   volatile while                                          key
+key     a..z A..Z 0..9 _ \U \u                                  id
+key+    ..                                                      start KEY
+
+// Identifiers
+start   a..z A..Z _ \U \u           id
+id      a..z A..Z 0..9 _ \U \u      id
+id+     (                           start FUN
+id+     ..                          start ID
+
+// Numbers with possible exponents.
+start   0..9          num
+num     . 0..9        num
+num     e+ e- E+ E-   num
+num     p+ p- P+ P-   num
+num     ..            start VALUE >
+
+// Operators and signs.
+start   != ! % && &= & *= * ++ += + -- -= - /= / ?  start OP
+start   <<= << <= < == >= >>= >> > ^= ^ |= || | ~   start OP
+start   ## %= , ... ; : -> =                        start SIGN
+
+// Brackets.
+start   (   start OPENr
+start   )   start CLOSEr
+start   [   start OPENs
+start   ]   start CLOSEs
+start   {   curly OPENb
+start   }   start CLOSEb
+
+// A dot starts a number, or is a sign.
+start   .           dot
+dot     0..9        num
+dot+    ..          start
+
+// Preprocessor directives, e.g. # include <filename>
+start     #                                 hash RESERVED
+hash      \s                                hash GAP
+hash      include                           include RESERVED
+hash      define elif else endif error if   start RESERVED
+hash      ifdef ifndef line pragma undef    start RESERVED
+hash+     ..                                start
+include   <                                 filename
+include   ..                                start +
+filename  >                                 start QUOTED
+filename  \n                                start ERROR+
+filename  ..                                filename
+
+// Character quotes (no test for single character content or legal escapes).
+start   '   char
+char    \'  char
+char    '   start QUOTED
+char+   \n  start ERROR
+char    ..  char
+
+// String quotes. Allow \ newline. Mark \s as gap. Mark /* or */ as warning.
+start       "        string
+string+     \s \b\n  stringGap QUOTED
+string+     /* */    stringBad QUOTED
+string+     \n       start ERROR
+string      \"       string
+string      "        start QUOTED
+string      ..       string
+stringGap   \s \b\n  string GAP xxx
+stringGap+  ..       string GAP
+stringBad   /* */    string ERROR
+stringGap+  ..       string ERROR
+
+// One-line comment. Mark /* or */ as warning.
+start    //     note
+note     \n     start COMMENT+
+note     /* */  noteBad
+note     ..     note
+noteBad  /* */  note ERROR
+noteBad+ ..     note ERROR
+
+// Multi-line comment.
+// TODO: handle by bracketing
+start /* comment
+comment \s       commentGap COMMENT+
+comment \n commentGap COMMENT
+comment */ start COMMENT
+comment .. comment
+commentGap \s       commentGap
+commentGap .. comment COMMENT
+
+// A backslash followed by a newline is marked as a token, to join lines.
+start  \b\n  start GAP
+
+// Spaces and newlines
+start   \s      gap
+gap     \s      gap
+gap     ..      start GAP
+start   \n      start NEWLINE
+
+// An illegal character is a one-character error token
+start .. start ERROR
+
+// =============================================================================
+// Context rules. Distinguished by starting with upper case letter. Apply when
+// base token is created.
+
+// On edit, widen the range leftward by the max lookahead, and rightward by the
+// max lookback. Then re-scan should be straightforward.
+
+ID   ->   PROPERTY
+ID   .    PROPERTY
+
+// To help support automatic semicolon handling, mark an open curly bracket
+// either as OPENb (for blocks) or OPENi (for initialisers etc.).  Catch the
+// most common contexts.
+
+OPENb   enum              OPENi
+OPENb   enum ID           OPENi
+OPENb   struct            OPENi
+OPENb   struct ID         OPENi
+OPENb   =                 OPENi
+OPENb   = ( ID )          OPENi
+OPENb   = ( struct ID )   OPENi
+
+// =============================================================================
+// Fixity of each tag, for semicolon insertion.
+
+$infix  OPENb CLOSEb
+$prefix CLOSEi
+
+// =============================================================================
+// Bracket rules. Distinguished by = < > ! ? symbols. Rules starting with an
+// opener are relevant to the forward algorithm. Rules starting with a closer
+// are relevant to the backward algorithm.
+
+// Match rules.
+// Establish the bracket tags, which are openers, which closers, and which match
+OpenRound = CloseRound
+OpenSquare = CloseSquare
+OpenCurly = CloseBlock <-> CloseCurly  // OCB has become OC, non-block
+OpenBlock = CloseBlock    // transfer the info, back and forth
+OpenComment = CloseComment
+
+// Mismatch rules
+OpenRound < CloseSquare   // < means mark opener as mismatched and pair up
+OpenRound < CloseCurly
+OpenRound < CloseBlock
+OpenSquare < CloseCurly
+OpenSquare < CloseBlock
+OpenSquare > CloseRound   // > means mark closer as mismatched and pair up
+OpenCurly > CloseSquare
+OpenCurly > CloseRound
+OpenBlock > CloseSquare
+OpenBlock > CloseRound
+
+// TODO: OpenRound `consumes/ignores` any
+OpenRound + $
+$ + CloseRound
+
+// By default, any open followed by any open means push
+// By default, closer-closer rules are symmetrical.
+OpenRound < OpenSquare
+...
+
+// For comments, mark all following tokens as comments (or errors)
+// TODO: implement by adding and removing a flag
+OpenComment + OpenComment <-> BadComment
+OpenComment + KEY <-> CKEY
+...
+
+// =============================================================================
+// Theme mappings, distinguished by #
+// Theme tags are COMMENTED, ERROR, FUNCTION, ID, KEY, OP, PROPERTY, QUOTED,
+// RESERVED, SIGN, TYPE, VALUE
+
+#SIGN OpenRound CloseRound ...
+
+// Maybe single-letter mappings for tests. Maybe same as theme.
+// What do tests look like now?
+// Distinguished by single letter start.
+I Id
+
+// =============================================================================
+// Maybe tests included (again!)

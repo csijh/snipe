@@ -1,7 +1,7 @@
-# Point size of text (roughly, the line height in pixels), the number of lines
-# to display, the number of characters on each line, the number of seconds
-# between cursor blinks or 0 to switch off blinking, and whether to print events
-# and actions (on or off).
+# Point size of text (the line height in pixels), the number of lines to
+# display, the number of characters on each line, the number of seconds between
+# cursor blinks or 0 to switch off blinking, and whether to print events and
+# actions (on or off).
 
 points = 18
 rows = 24

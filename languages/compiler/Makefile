@@ -8,6 +8,8 @@ rules = rules.c $(lists)
 
 states = states.c $(rules)
 
+scan = scan.c
+scan2 = scan2.c
 
 tags = tags.c $(strings)
 patterns = patterns.c $(strings)

@@ -3,7 +3,7 @@
 
 // Recognising / as the start of a regex such as /abc/ instead of a division
 // operator is a problem. In the standard, grammar-dependent contexts are used.
-// Here, regex strings are recognised after open brackets, signs and operators.
+// Here, regexes are recognised after open brackets, signs and operators.
 // The approach fails on regex strings containing spaces, and in rare situations
 // such as if(a)/re/ or ++/re/.
 

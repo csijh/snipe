@@ -33,15 +33,12 @@ of a scanner in a compiler. On the one hand the scanner:</p>
 
 <p>One common reason for a scanner to be approximate is that the lexical rules
 for a language depend on syntactic context. A multi-language editor doesn't
-normally support full parsing of languages. Another common reason is that a
-language allows multi-line comments to nest. A state machine can't model
-unlimited nesting, but can implement nesting to a small fixed maximum level. On
-the other hand, the scanner:</p>
+normally support full parsing of languages. On the other hand, the scanner:</p>
 
 <ul>
-<li>must include all characters, including comments, in tokens</li>
+<li>must partition the whole text into tokens</li>
 <li>must be able to handle any text, whether valid or not</li>
-<li>must produce token types suitable for syntax highlighting</li>
+<li>must produce token types suitable for editor features</li>
 </ul>
 
 <p>In addition, the scanner for Snipe is designed to be able to support other
@@ -64,23 +61,22 @@ compact. Each language has a description in a text file, which is compiled into
 a table in a binary file. These binary files can then be loaded dynamically as
 necessary by Snipe.</p>
 
-<p>A language scanner is described by a plain text file. For example, the C
-language is described by the <code>scanner.txt</code> file in the directory
-<code>snipe/languages/c</code>. The file is a description of a string-matching
+<p>A language scanner is described by a text file. For example, the C language
+is described by the <code>c.txt</code> file in the directory
+<code>snipe/languages</code>. The file is a description of a string-matching
 state machine. A generic interpreter uses the state machine to perform
 scanning.</p>
 
 <h2>Rules</h2>
 
-<p>A language description file is a plain UTF-8 text file. A line which is blank
-or begins with a non-letter such as <code>#</code> or <code>/</code> is a
-comment line which is ignored. Otherwise, a line represents a string-matching
-rule.</p>
+<p>A language description file is a plain text file. A line which is blank or
+begins with a non-letter such as <code>#</code> or <code>/</code> is a comment
+line which is ignored. Otherwise, a line represents a string-matching rule.</p>
 
 <p>A simple rule has a base state name, a list of patterns to match, a target
 state name, and a token type, all separated by spaces. A state name begins with
 a lower case letter. A pattern is a sequence of non-space characters. A token
-type starts with an upper case letter or a non-letter. For example:</p>
+type starts with an upper case letter. For example:</p>
 
 <pre>start == != start OP
 </pre>
@@ -91,8 +87,8 @@ characters, and goes into the target state. The current token is terminated
 after the matched characters and given that type. With the above rule, if the
 scanner is in the <code>start</code> state and either of the equality operators
 <code>==</code> or <code>!=</code> appears next in the input, then the scanner
-moves past the operator, gives it the token type <code>OP</code>, and remains in
-the <code>start</code> state.</p>
+moves past the operator, marks it as a token with type <code>OP</code>, and
+remains in the <code>start</code> state.</p>
 
 <p>A rule need not include a token type, in which case scanning of the current
 token is continued. In the following example, when in the <code>start</code>
@@ -125,19 +121,31 @@ the input, it is not immediately included in the current token. The scanner goes
 into the target state <code>escape</code>, which is responsible for handling the
 backslash.</p>
 
-<p>A pattern in a rule must be non-empty and may not contain spaces, newlines,
-or control characters. These can be represented using an escape mechanism. A
-backslash followed by one or more digits represents the decimal code for a
-character. For example, <code>\10</code> represents a newline and
-<code>\32</code> represents a space:</p>
+<p>A pattern in a rule must be non-empty, and must consist of printable basic
+latin characters (often called ASCII, even though that refers to a long-obsolete
+and non-international standard). It may not directly contain spaces, newlines,
+or other control characters. A pattern normally matches a sequence of characters
+in the text. For example, the keyword <code>while</code> can be matched with the
+rule:</p>
 
-<pre>start \10 start NEWLINE
-start \32 start GAP
+<pre>start while start KEY
 </pre>
 
-<p>A backslash that is not followed by a digit has no special meaning - it
-stands for itself. A pattern consisting of two dots with a character on either
-side represents a range of one-character patterns, e.g. <code>0..9</code> stands
+<p>Although there is no provision for matching characters beyond basic latin,
+any such character in the text is matched by the scanner, regardless of
+language, anywhere a letter is allowed, which covers the most common conventions
+for allowing such characters in identifiers, comments and string literals.</p>
+
+<p>A pattern consisting of digits is a decimal character code. In particular,
+<code>32</code> can be used for a space and <code>10</code> can be used for
+a newline. For example:</p>
+
+<pre>start 32 start GAP
+start 10 start NEWLINE
+</pre>
+
+<p>A pattern can consist of two dots with a printable character on either side.
+It represents a range of one-character patterns, e.g. <code>0..9</code> stands
 for <code>0 1 2 3 4 5 6 7 8 9</code>:</p>
 
 <pre>start 0..9 number
@@ -145,44 +153,20 @@ for <code>0 1 2 3 4 5 6 7 8 9</code>:</p>
 
 <p>This rule says that if the scanner is in the <code>start</code> state, and a
 digit appears next in the input, the scanner matches the digit and goes into the
-<code>number</code> state. There is no token type, so the current token is not
-terminated, and scanning of the token continues in the <code>number</code>
-state, after the matched digit.</p>
+<code>number</code> state.</p>
 
-<p>If the first character, before the two dots, is missing, it is taken to be
-<code>\0</code> and if the final character is missing, it is taken to be
-<code>\1114111</code>. For example:</p>
+<p>A pattern consisting just of two dots is used to represent any remaining
+basic latin character which has not already been dealt with. For example:</p>
 
-<pre>start ..\31 \127 control
-start a..z A..Z \128.. id
+<pre>id .. start ID +
 </pre>
 
-<p>The first rule says that if any ASCII character outside the printable range
-(<code>' '</code> to <code>~</code>) is found, it is accepted and the scanner
-enters the <code>control</code> state.  The second rule specifies that an id
-starts with a letter or with any non-ASCII Unicode character. In fact, a
-reasonable approximate approach to Unicode in any language definition is to
-allow any non-ASCII character wherever a letter is allowed. This covers most
-common cases where such characters are allowed by programming languages, e.g. in
-identifiers, string literals or comments.</p>
+<p>This is a default rule which says that, while scanning an id, if any
+unexpected character is encountered, other than a letter or digit, the id should
+be terminated before that character.</p>
 
-<p>A pattern consisting of just two dots, i.e. with both characters missing,
-represents any single character, which is useful for expressing default rules.
-For example:</p>
-
-<pre>start .. start ERROR
-
-id .. start ID +
-</pre>
-
-<p>The first rule says that in the start state, any character not already dealt
-with forms a one-character error token. The second says that if any character
-not already dealt with is encountered while scanning an id, the id should be
-terminated before that character, and the start state entered to deal with
-it.</p>
-
-<p>If a lookahead rule with no patterns has no token type, it is effectively an
-unconditional jump to another state. For example,</p>
+<p>If a lookahead default rule has no token type, it is effectively an
+unconditional jump to another state. For example:</p>
 
 <pre>directive .. start +
 </pre>
@@ -191,33 +175,11 @@ unconditional jump to another state. For example,</p>
 sequence of tokens. This rule says that if anything further appears in the
 input, the scanner reverts to the <code>start</code> state to handle it.</p>
 
-<p>If, for example, there is a need to match two dots explicitly in the text,
-the matching can be done in two steps using an extra state. For example:</p>
-
-<pre>start . dot
-dot . dots
-</pre>
-
-<p>The first rule recognises a dot, and the second rule recognises a following
-dot.</p>
-
 <h2>States</h2>
 
 <p>A state is defined by the rules which have that state as their base state.
-The rules defining a state don't have to be contiguous. For example, all the
-rules relevant to each type of token may be gathered together, even though that
-means the rules for the <code>start</code> state are scattered:</p>
-
-<pre># One line comments
-start // note
-note \10 start COMMENT
-note note
-
-# Multi-line comments
-start /* comment
-comment */ start COMMENT
-...
-</pre>
+The rules defining a state need not necessarily be contiguous, but the order
+that they appear in matters.</p>
 
 <p>If the input matches a pattern mentioned in any one of the rules for a state,
 that rule is applied. In the following example, in the <code>start</code> state,
@@ -239,11 +201,11 @@ start == != start OP
 </pre>
 
 <p>If the same pattern is matched by multiple rules, the earlier rule takes
-precedence. Thus later rules act as defaults and, even though the rules for a
-state need not be contiguous, the order in which they appear in the description
-file may matter. For example:</p>
+precedence. Thus later rules act as defaults. Even though the rules for a state
+need not be contiguous, the order in which they appear in the description file
+may matter. For example:</p>
 
-<pre>string " start QUOTE
+<pre>string " start QUOTED
 string .. string
 </pre>
 
@@ -284,23 +246,15 @@ into the <code>id</code> state and the token ends up being given type
 <p>When a language description is processed, various checks are made for correct
 behaviour. The checks ensure that the scanner never fails, creates non-empty
 tokens, partitions the input by including every character in a token, handles
-all possible inputs, terminates without getting stuck in a loop, and supports
-incremental re-scanning.</p>
+all possible inputs, and terminates without getting stuck in a loop</p>
 
 <p>Every target state mentioned in the rules must be a defined state, i.e. one
 which appears as the base state of at least one rule.</p>
 
-<p>Every state must handle all possible inputs. A check is made that each
-possible single character which could appear next in the input is mentioned in
-the state's rules. The easiest way to ensure that is for each state to have a
-final default rule using <code>..</code> which handles all cases not covered in
-the previous rules. For example, a state for identifiers might have a default
-rule which says that if anything other than a letter or digit appears next in
-the input, the token is terminated:</p>
-
-<pre>id a..z A..Z 0..9 id
-id .. start ID +
-</pre>
+<p>Every state must handle all possible inputs. A simple check is made that each
+state has a default rule using the <code>..</code> notation. There is also a
+check that the default rule is last, because rules after a default rule would be
+unreachable.</p>
 
 <p>Every state is classified either as a <dfn>starting</dfn> state, which the
 scanner is in when between tokens, or a <dfn>continuing</dfn> state, which the
@@ -332,7 +286,7 @@ starting states which recognize each of the two sublanguages.</p>
 
 <p>If a state is the target of a non-lookahead rule which has no token type,
 then it is a continuing state. For example, the <code>id</code> state must
-be a continuing state if it contains the rule:</p>
+be a continuing state if the scanner includes this rule:</p>
 
 <pre>start a..z A..Z id
 </pre>
@@ -376,17 +330,17 @@ both because it is the target of its own first rule, and because it completes a
 writing:</p>
 
 <pre>dot 0..9 number
-dot .. propStart SIGN +
+dot .. prop0 SIGN +
 
-propStart a..z A..Z prop
-propStart .. start +
+prop0 a..z A..Z prop1
+prop0 .. start +
 
-prop a..z A..Z 0..9 prop
-prop .. start PROPERTY +
+prop1 a..z A..Z 0..9 prop1
+prop1 .. start PROPERTY +
 </pre>
 
-<p>Now, <code>prop</code> is a starting state which matches only the first
-letter, and <code>prop2</code> is a continuing state which recognizes the rest
+<p>Now, <code>prop0</code> is a starting state which matches only the first
+letter, and <code>prop1</code> is a continuing state which recognizes the rest
 of the token.</p>
 
 <p>A lookahead rule makes no progress in the input, so there is a check that
@@ -400,115 +354,137 @@ odd a..z even +
 <p>These rules would cause the scanner to continue indefinitely if a letter
 appeared next in the input.</p>
 
-<p>Finally, there is a check that a newline character <code>\10</code> never
-appears in a token or a lookahead pattern anywhere other than at the end.
-Examples might be:</p>
+<h2>Conventions</h2>
 
-<pre>start \10\32 indent
+<p>==========</p>
 
-comment \10 comment
+<p>Source text to be scanned is normalized, so that it does not contain any
+control characters such as tabs or carriage returns. The only basic latin
+characters that cannot be matched explicitly are spaces and newlines, and these
+can be handled by empty and default rules. For example:</p>
 
-id \10( start FUN +
+<pre>start !..~ start ERROR
+start start NEWLINE
+start .. start GAP
 </pre>
 
-<p>This ensures that the scanner state can be stored immediately after each
-newline is dealt with, to allow scanning to be re-started at the beginning of
-the following line. The <code>start</code> rule would mean that the scanner
-could be in the middle of matching a pattern rather than in a specific state
-just after matching a newline. The <code>comment</code> rule would result in a
-newline which wasn't at the end of a token, i.e. the next line would start
-inside a token. The <code>id</code> rule would mean that lookahead characters on
-the next line could affect scanning, and therefore the scan state at the start
-of a line could depend on some of the characters in that line.</p>
+<p>The first rule handles any printable characters that have not already been
+handled, the second handles a newline, and the third handles a space as the only
+remaining character.</p>
 
-<h2>Conventions</h2>
+<p>TODO: spaces are adapted automatically. Spaces within a token divide it into
+similar tokens, with each space marked as <code>_</code> to indicate a gap.
+CHECK: a space appears on its own at least once (start state?), and is always
+marked as the same type (GAP).</p>
+
+<p>TODO: Newlines are adapted automatically. A newline within a token is treated
+like a space. A newline on its own (or at the end of a token) is marked with
+<code>.</code> as an active newline, causing automating indenting on the next
+line. CHECK: a newline on its own is always marked with the same type
+(NEWLINE).</p>
+
+<p>TODO: Brackets are adapted automatically. A bracket has a type with a digit
+suffix. CHECK: each digit is always attached to a type starting with the same
+letter.</p>
+
+<p>TODO: types are determined only by their first letter, which is not built
+into Snipe. But those first letters must match the style settings. However, the
+letter for white space (G) active newline (N) and bracket type (B, or 0..9
+mapping) are noted.</p>
+
+<p>TODO: warn if token ends in newline.</p>
 
 <p>The Snipe scanner does not just give each token a type for syntax
 highlighting purposes. It also supports further editor features, and some
-conventions are needed for this to work.</p>
+conventions are needed for this to work. Not all these conventions can be
+tested, but if a violation is detected, a warning is issued rather than an
+error.</p>
 
-<p>To ease the writing of tests and the handling of some extra features, each
-token type can be abbreviated to its first character, so the first characters
-need to be unique. For example, the type names might be:</p>
+<p>Source files are normalised by Snipe so, in the scanner, spaces and newlines
+are the only characters that need to be represented by their codes. To support
+commands that move the cursor a 'word' at a time, and to allow incremental
+scanning, each space and newline is treated as a one-character token. Thus a
+long comment or quoted literal needs to be divided into mini-tokens. For
+example, a multi-line comment might be dealt with like this:</p>
 
-<p class="indent"><code>(BRACKET )BRACKET [BRACKET ]BRACKET {BRACKET }BRACKET
-&lt;BRACKET >BRACKET COMMENT ERROR FUNCTION GAP ID KEY NEWLINE OP
-PROPERTY QUOTE RESERVED SIGN TYPE VALUE</code></p>
+<pre>start /* comment
+comment */ start COMMENTED
+comment !..~ comment
+comment commentGap COMMENTED +
+comment .. commentGap COMMENTED +
+commentGap comment GAP
+commentGap .. comment GAP
+</pre>
 
-<p>To handle automatic bracket matching, brackets should be given types starting
-with <code>( ) [ ] { } &lt; ></code>, which represent brackets in order of
-increasing priority. For a curly bracket language, brackets might be handled
-like this:</p>
+<p>In these rules, a space or a newline is marked as a separate <code>GAP</code>
+token, so that the editor can recognise it and skip past it when moving a 'word'
+at a time. Scanning is incremental because the scanner state can be stored at
+each space or newline and after an edit, scanning can be re-started at the
+nearest preceding space or newline. Note that it is not possible to lookahead
+past a space or newline, because it can't be included in a longer pattern, so
+the scanner state at that point does not depend on any of the following
+characters.</p>
 
-<pre>start ( start (BRACKET
-start ) start )BRACKET
-start [ start [BRACKET
-start ] start ]BRACKET
-start { start {BRACKET
-start } start }BRACKET
+<p>To handle automatic indenting, a newline should be given the token type
+<code>NEWLINE</code> if it is 'active', i.e. not included in a comment or quote,
+so that the immediately following line is one that should be indented:</p>
+
+<pre>start start NEWLINE
+</pre>
+
+<p>Newlines which are inactive, because they are in comments or quoted literals,
+should have type <code>GAP</code>.</p>
+
+<p>To handle automatic bracket matching, a bracket should be given one of the
+types <code>OPEN0, CLOSE0, OPEN1, CLOSE1, OPEN2, CLOSE2, OPEN3, CLOSE3</code>
+which represent increasing priority. For a curly bracket language, brackets
+might be handled like this:</p>
+
+<pre>start ( start OPEN0
+start ) start CLOSE0
+start [ start OPEN1
+start ] start CLOSE1
+start { start OPEN2
+start } start CLOSE2
 </pre>
 
 <p>In a language where keywords <code>begin</code> and <code>end</code> are used
 for blocks instead of curly brackets, the last two rules might be replaced
 by:</p>
 
-<pre>start begin start {BRACKET
-start end start }BRACKET
+<pre>start begin start OPEN2
+start end start CLOSE2
 </pre>
 
-<p>If a bracket is not active, i.e. it is inside a comment or string literal, it
-should have, or be part of a token with, some other type such as
-<code>COMMENT</code> or <code>QUOTE</code>.</p>
+<p>If a bracket is not active because it is inside a comment or string literal,
+it should have, or be part of a token with, type <code>COMMENTED</code> or
+<code>QUOTED</code>.</p>
 
-<p>----------</p>
+<p>To ease the writing of tests, each token type can be abbreviated to a single
+character. The full set of token types is currently:</p>
 
+<p class="indent"><code>OPEN0 CLOSE0 OPEN1 CLOSE1 OPEN2 CLOSE2 OPEN3 CLOSE3
+COMMENTED ERROR FUNCTION GAP ID KEY NEWLINE OP PROPERTY QUOTED RESERVED SIGN
+TYPE VALUE</code></p>
 
-
-<p>To handle automatic indenting, a newline should only be given the token type
-<code>NEWLINE</code> if it is 'active', i.e. not included in a comment or quote,
-so that the immediately following line is one that should be indented:</p>
-
-<pre>start \10 start NEWLINE
-</pre>
-
-<p>Brackets which are inactive, because they are in comments or quoted literals,
-should have other token types such as <code>COMMENT</code> or
-<code>QUOTE</code>.</p>
-
-<p>For the scanner to support commands that move the cursor a 'word' at a time,
-a long comment or quoted literal should be divided into mini-tokens. Each
-newline, or sequence of one or more spaces, should be treated as a token in its
-own right. For example, a multi-line comment might be dealt with like this:</p>
-
-<pre>start /* comment
-comment \32 \10 commentGap COMMENT +
-comment */ start COMMENT
-comment .. comment
-commentGap .. comment COMMENT
-</pre>
-
-<p>In these rules, a space or a newline is marked as a separate token, so that
-the editor can recognise it and skip past it when moving a 'word' at a time. A
-newline is marked as a <code>COMMENT</code> token rather than as a
-<code>NEWLINE</code> token, to indicate to the editor that the newline is not
-active, i.e. automatic indenting rules do not apply to the following line.</p>
-
-<p>----------</p>
-
-
-<p>Each of these can be abbreviated unambiguously to its first character, except
-for the bracket types which can be abbreviated to their suffix digit.</p>
+<p>These can all be abbreviated to their first characters, except for the
+brackets, which are abbreviated to <code>( ) [ ] { } &lt; ></code>. In addition,
+<code>GAP</code> or <code>NEWLINE</code> can be written as a space or a dot
+rather than a <code>G</code> or an <code>N</code>.</p>
 
 <p>A typical test might appear something like this:</p>
 
 <pre>struct *point = { x, (y+1) }; int ns = [(n+2),3];
-K.....GSI....GSG4GISG0IOV1G5SGK..GI.GSG20IOV1SV3S
+K+++++ SI++++ S { IS (IOV) }S K++ I+ S [(IOV)SV]S.
+K+++++_SI++++_S_4_IS_0IOV1_5S_K++_I+_S_20IOV1SV3S.
 </pre>
 
 <p>The first line represents some input text, and the line below represents the
 result of scanning. The first character of each token is marked below by the
 one-character abbreviation of its token type, and the remaining characters of a
-token are marked by dots.</p>
+token are marked by dashes.</p>
+
+<p></p>
 
 <h2>Compiling...</h2>
 
@@ -551,127 +527,7 @@ alternative start states for tokens can be used to handle unusual
 situations.</p>
 
 
-<h2>Matching</h2>
-
-<!-- Best approach for compactness: allocate 256 values 'dynamically' to both
-"tag x overridden with tag y" pairs, and "scanner starting state x overridden
-with space tag" and even "original indent x overridden with newline". Can we
-work out from language definition whether we will run out? -->
-
-<p>The way in which brackets and delimiters are matched for a language is
-defined in a file <code>match.txt</code> in the language directory. A blank line
-or a line starting with one or two symbols (e.g. <code>#</code> or
-<code>//</code>) is a comment line. Each rule in the file begins with a
-two-letter upper case keyword followed by triples of symbol tags, for
-example:</p>
-
-<pre>EQ (-) [-] {-} '=' "=" /*. &lt;*>
-</pre>
-
-<p>The first and third symbols in a triple are token type tags, as allocated in
-the <code>tokens.txt</code> file. The first is an opener, i.e. the token type of
-an opening bracket or delimiter, and the third is a closer. The middle symbol is
-an operator such as a comparison which specifies what happens when the opener
-and closer meet during matching. The <code>=</code> symbol indicates that the
-opener and closer match. A rule with a minus sign as a tag (or no tag) specifies
-that the openers and closers are brackets, and the token types of the tokens
-between matching brackets remain unchanged. A rule may also deal with
-mismatches:</p>
-
-<pre>LT (?] [?}
-</pre>
-
-<p>This establishes a precedence between the brackets when they don't match, and
-the token type given to any mismatched brackets. The triple <code>(&lt;]</code>
-means that when <code>(</code> is the most recent open bracket and
-<code>]</code> is the next close bracket, then the <code>(</code> is marked with
-type <code>?</code> and subsequently ignored. Implicit further comparisons are
-automatically deduced from the ones given, in this case:</p>
-
-<pre>LT (?}
-GT [?) {?) {?]
-</pre>
-
-<p>A suitable rules for quotes would be:</p>
-
-<pre>EQ '=' "="
-</pre>
-
-<p>This establishes which quotes match, and specifies that the type
-<code>=</code> (quoted text) overrides the original types of the quotes and the
-tokens between them. A further rule might be:</p>
-
-<pre>MM '?. "?.
-</pre>
-
-<p>This rule specifies that the quotes are on one line. The dot is the token
-type of a newline, and <code>'?.</code> means that the opening quote and the
-newline 'match'. Using <code>MM</code> instead of <code>EQ</code> means that a
-different token type than the normal one for the opener can be used, in this
-case the quoted text is tagged as an error.</p>
-
-<p>Comments might be specified using:</p>
-
-<pre>EQ #*. &lt;*>
-</pre>
-
-<p>This says that a one-line comment, where the opening delimiter has been
-tagged with type <code>#</code>, is matched by the next newline and that all the
-tokens making up the comment have their types overridden with <code>*</code>
-(commented text). Assuming that multi-line comment delimiters have been given
-types <code>&lt;</code> and <code>></code>, the triple <code>&lt;=></code> makes
-them match.</p>
-
-<p>In some languages multi-line comments nest, but in many others they don't. To
-specify that multi-line comments nest, a rule like this can be used:</p>
-
-<pre>PL &lt;*&lt; >*>
-</pre>
-
-<p>The PL operation refers to two openers or two closers to indicate that one
-pair is allowed inside another. In the forward matching algorithm, the triple
-<code>&lt;*&lt;</code> indicates that when <code>&lt;</code> is on the stack of
-unmatched openers, and a further <code>&lt;</code> is encountered, it is pushed
-onto the stack. To specify instead that multi-line comments are non-nesting,
-rules like this can be used:</p>
-
-<pre>GT &lt;*&lt; >?>
-</pre>
-
-<p>The first rule indicates that, when scanning forwards, a later
-start-of-comment token is mismatched, but tagged as commented text rather than
-as an error. When scanning backwards, an earlier end-of-comment token takes
-precedence and the later one is tagged as an error.</p>
-
-<h3>Example: reinterpretation</h3>
-
-<p>In C or a similar language, the text <code>"*/"//"</code> would be
-scanned as something like:</p>
-
-<pre>"*/"//"
-">-"#-"
-</pre>
-
-<p>After scanning, if there is no multiline comment in progress at the start of
-the sequence, the first two quotes are matched, the one-line comment delimiter
-is matched with the end of the line, and the tags are temporarily overridden
-as:</p>
-
-<pre>"*/"//"
-==-=*-*
-</pre>
-
-<p>On the other hand, if a multiline comment is in progress, it ends at the
-<code>*/</code> delimiter, the last two quotes are matched, and the phrase is
-instead temporarily overridden as:</p>
-
-<pre>"*/"//"
-**-====
-</pre>
-
-<p>If bracket matching is incremental as well as scanning, then these
-readjustments can also be incremental, and the whole process need not be very
-expensive.</p>
+<h3>Bracket Matching</h3>
 
 <p>TODO: explain forward algorithm. Assume only brackets. As well as text, there
 are two stacks: unmatched and matched. (Picture with ... for cursor position.)
@@ -689,19 +545,6 @@ insertions and deletions happen at the cursor.</p>
 <p>TODO: explain inwards algorithm. The two stacks are compared inwards.
 Mismatching pairs are highlighted red. Remaining surplus brackets are
 highlighted red. Give examples showing 'just typed' effects.</p>
-
-<p>TODO: explain delimiters. Not same because (a) they are usually not nested
-and (b) they may be limited to one line (c) open and close may be the same or
-there may not be an explicit closer and (d) they affect the highlighting of the
-tokens in between. Nested comments same as brackets, non-nested comments more
-interesting. When inside a comment, an open comment delimiter is always the top
-opener on the unmatched stack. Ordinary tokens are included in algorithm, and
-have their highlighting overridden as you go past them, according to the top
-opener, but they don't end up on either stack. Unnested algorithm described
-below. Multiline literal (often """) similar, also unnested (can't nest if start
-and end delimiter are the same). Describe quotes and forward and backward.
-Describe one-line comment (memo). Must wait until found and then re-mark to end
-of line - not purely local but not bad.</p>
 
 <p>After scanning into tokens, a matching algorithm is used to pair up brackets
 and delimiters. Some aims of the Snipe approach are to:</p>
@@ -806,93 +649,6 @@ unmatched.</p>
 <p>During the sequence, the only changes on the screen are immediately adjacent
 to the cursor, with possibly one change of highlighting to a delimiter further
 away. And the changes are, arguably, very intuitive.</p>
-
-<h3>Notes</h3>
-
-<p>Can bracket/delimiter matching be defined in a custom way too?</p>
-
-<pre>Brackets, in increasing priority order
-M () [] {} &lt;> (match, mismatch and excess ? Covers PU, MA, EX, LT, GT
-S ~)? ~]? ~}? (start excess)
-G {] {) [)
-L (] (} [}
-Quote delimiters (match with morph)
-M ''=  ""=  @@=
-M '.? ".?   (mismatch both, implicitly not NL)
-One-line delimiters terminated at NL
-Don't need GL rules because first=last
-Since . ends ' and " and // backward matching needs retro morph
-Comment delimiters
-D #.*  /\*  (i.e. // ends at \n and /* ends at */)
-G //?       (i.e. /* /* mismatch R)
-X ^^
-/* /* GT   but  {- {- = PU
-</pre>
-
-<pre>M = start of text
-() = Rr   [] = Aa  {} = Ww
-'"T = QDT  // = C  /**/ = Xx   {--} = Yy
-
-// Make sure tags have no override flags when not on any of the stacks.
-// (Note indent MAYBE grapheme continuation of preceding NL).
-enum action {
-    XX,  // Not relevant.
-    PU,  // push next onto openers, then check it against closers
-    MA,  // match with popped opener, push pair onto matched
-    EX,  // excess: mark next as mismatched  (EQUALS G ???)
-    LT,  // less: pop and mismatch opener, repeat
-    GT,  // mismatch next (and push on matched ???)
-    IN,  // incomplete (same as LT, but don't touch NL ???)
-    SK,  // skip past ordinary token
-    CO,  // skip, and override as commented
-    QU,  // skip, and override as quoted
-};
-
-// Table which compares the most recent opener with the next token, to decide
-// what action to take in forward matching. Use M (MISS) for start of text.
-int table[COUNT][COUNT] = {
-    // At start of text, no openers
-    [M][R]=PU, [M][A]=PU, [M][W]=PU, [M][r]=EX, [M][a]=EX, [M][w]=EX,
-    [M][Q]=PU, [M][D]=PU, [M][T]=PU, [M][C]=PU, [M][X]=PU, [M][x]=EX,
-    [M][Y]=PU, [M][y]=EX, [M][N]=SK, [M][I]=SK,
-    // (
-    [R][R]=PU, [R][A]=PU, [R][W]=PU, [R][r]=MA, [R][a]=LT, [R][w]=LT,
-    [R][Q]=PU, [R][D]=PU, [R][T]=PU, [R][C]=PU, [R][X]=PU, [R][x]=EX,
-    [R][Y]=PU, [R][y]=EX, [R][N]=SK, [R][I]=SK,
-    // [
-    [A][R]=PU, [A][A]=PU, [A][W]=PU, [A][r]=GT, [A][a]=MA, [A][w]=LT,
-    [A][Q]=PU, [A][D]=PU, [A][T]=PU, [A][C]=PU, [A][X]=PU, [A][x]=EX,
-    [A][Y]=PU, [A][y]=EX, [A][N]=SK, [A][I]=SK,
-    // {
-    [W][R]=PU, [W][A]=PU, [W][W]=PU, [W][r]=GT, [W][a]=GT, [W][w]=MA,
-    [W][Q]=PU, [W][D]=PU, [W][T]=PU, [W][C]=PU, [W][X]=PU, [W][x]=EX,
-    [W][Y]=PU, [W][y]=EX, [W][N]=SK, [W][I]=SK,
-    // '
-    [Q][R]=QU, [Q][A]=QU, [Q][W]=QU, [Q][r]=QU, [Q][a]=QU, [Q][w]=QU,
-    [Q][Q]=MA, [Q][D]=QU, [Q][T]=QU, [Q][C]=QU, [Q][X]=QU, [Q][x]=QU,
-    [Q][Y]=QU, [Q][y]=QU, [Q][N]=IN, [Q][I]=QU,
-    // "
-    [D][R]=QU, [D][A]=QU, [D][W]=QU, [D][r]=QU, [D][a]=QU, [D][w]=QU,
-    [D][Q]=QU, [D][D]=MA, [D][T]=QU, [D][C]=QU, [D][X]=QU, [D][x]=QU,
-    [D][Y]=QU, [D][y]=QU, [D][N]=IN, [D][I]=QU,
-    // """
-    [T][R]=QU, [T][A]=QU, [T][W]=QU, [T][r]=QU, [T][a]=QU, [T][w]=QU,
-    [T][Q]=QU, [T][D]=QU, [T][T]=MA, [T][C]=QU, [T][X]=QU, [T][x]=QU,
-    [T][Y]=QU, [T][y]=QU, [T][N]=SK, [T][I]=QU,
-    // //
-    [C][R]=CO, [C][A]=CO, [C][W]=CO, [C][r]=CO, [C][a]=CO, [C][w]=CO,
-    [C][Q]=CO, [C][D]=CO, [C][T]=CO, [C][C]=CO, [C][X]=CO, [C][x]=CO,
-    [C][Y]=CO, [C][y]=CO, [C][N]=MA, [C][I]=CO,
-    // /*
-    [X][R]=CO, [X][A]=CO, [X][W]=CO, [X][r]=CO, [X][a]=CO, [X][w]=CO,
-    [X][Q]=CO, [X][D]=CO, [X][T]=CO, [X][C]=CO, [X][X]=GT, [X][x]=MA,
-    [X][Y]=CO, [X][y]=CO, [X][N]=SK, [X][I]=CO,
-    // {-
-    [Y][R]=CO, [Y][A]=CO, [Y][W]=CO, [Y][r]=CO, [Y][a]=CO, [Y][w]=CO,
-    [Y][Q]=CO, [Y][D]=CO, [Y][T]=CO, [Y][C]=CO, [Y][X]=CO, [Y][x]=CO,
-    [Y][Y]=PU, [Y][y]=MA, [Y][N]=SK, [Y][I]=CO,
-};
-</pre>
 
 </body>
 </html>
