@@ -1,10 +1,12 @@
 # Definitive list of compiler modules in dependency order.
-langC = langC.c
-lang = lang.c $(c)
+lang = lang.c
+langC = langC.c $(lang)
+
+try = try.c
 
 # C compiler and options for debugging or optimisation. On macOS, 'gcc'
 # refers to 'clang'.
-GCC = gcc -std=c17 -pedantic -Wall -Wextra
+GCC = gcc -std=c11 -pedantic -Wall -Wextra
 DEBUG = -g -fsanitize=undefined -fsanitize=address
 OPT = -O2 -flto
 

@@ -21,8 +21,6 @@ Table driven with possible <-> replacements.
 Language files should contain context-sensitive adjustments, and a theme.
 Adjustments for bracket/id matching, indenting, semicolons:
     classify every token as Non, Pre, In, Post
-    if a PreIn operator follows Pre or In, reclassify it as Pre, else In
-    if a PrePost operator follows Pre or In, reclassify it as Pre, else Post
     if OB/CB are block brackets and CB/CC are non-block-curly-brackets
         = OB   -->   OC
         = ( ... ) OB   -->   OC   (using bracket matching)

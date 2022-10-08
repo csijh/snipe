@@ -1,3 +1,37 @@
+abc
+I--.
+
+(def)
+(I--).
+
+if (b) n = 1;
+K-_(I)_I_S_VS.
+
+if (b) { n = 1; }
+K-_(I)_{_I_S_VS_}.
+
+// Type-keyword followed by id.
+int n;
+K--_IS.
+
+// Programmer defined type followed by id.
+string s;
+I-----_IS.
+
+enum suit { Club, Diamond, Heart, Spade };
+K---_I---_{_I---S_I------S_I----S_I----_}S.
+
+int ns[] = { 1, 2, 34};
+K--_I-[]_S_{_VS_VS_V-}S.
+
+// String quotes and escapes. Escapes are (temporarily) marked as error tokens.
+char *s = "a\nb\0c\04d";
+K---_OI_S_"I?-I?-I?--I"S.
+
+// Three-digit and two-digit octal escape, hex escape.
+char *s = "\037e\038f\xffg"
+K---_OI_S_"?---I?--VI?---I".
+
 // Comment sequence with two interpretations. Same tokens either way.
 s = "*/"//"; /* abc "*/"//"
 I_S_"\-"#-"S_/-_I--_"\-"#-".
