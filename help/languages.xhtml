@@ -31,7 +31,10 @@ of a scanner in a compiler. On the one hand the scanner:</p>
 <li>may be approximate</li>
 </ul>
 
-<p>One common reason for a scanner to be approximate is that the lexical rules
+<p>One common reason for a scanner to be approximate is when the language has
+unlimited nesting of multi-line comments. A scanner based on regular expressions or a state machine can only support nesting to a small fixed depth.
+Another common reason is if
+the lexical rules
 for a language depend on syntactic context. A multi-language editor doesn't
 normally support full parsing of languages. On the other hand, the scanner:</p>
 
@@ -39,24 +42,15 @@ normally support full parsing of languages. On the other hand, the scanner:</p>
 <li>must partition the whole text into tokens</li>
 <li>must be able to handle any text, whether valid or not</li>
 <li>must produce token types suitable for editor features</li>
-</ul>
-
-<p>In addition, the scanner for Snipe is designed to be able to support other
-editor features such as:</p>
-
-<ul>
-<li>dynamic loading of language definitions</li>
-<li>incremental rescanning</li>
-<li>cursor movement a 'word' at a time</li>
-<li>bracket matching</li>
-<li>line wrapping</li>
-<li>indenting</li>
-<li>semicolon insertion</li>
+<li>may support dynamic loading of language definitions</li>
+<li>may support incremental rescanning</li>
+<li>may help with 'word'-based reflow or cursor movement</li>
+<li>may help with bracket matching, line wrapping, indenting or semicolon insertion</li>
 </ul>
 
 <p>Scanners for multi-language editors are often expressed using regular
 expressions. Scanners for Snipe are instead expressed as state machine tables.
-These are simpler, easier to read and maintain, and only a little less
+These are easier to read and maintain, and only a little less
 compact. Each language has a description in a text file, which is compiled into
 a table in a binary file. These binary files can then be loaded dynamically as
 necessary by Snipe.</p>
@@ -65,39 +59,52 @@ necessary by Snipe.</p>
 is described by the <code>c.txt</code> file in the directory
 <code>snipe/languages</code>. The file is a description of a string-matching
 state machine. A generic interpreter uses the state machine to perform
-scanning.</p>
+scanning. To support incremental rescanning and help with word-based operations,
+spaces and newlines are never included in tokens. Long sequences such as comments
+and string literals are broken up into mini-tokens.</p>
 
 <h2>Rules</h2>
 
-<p>A language description file is a plain text file. A line which is blank or
+<p>A language description file contains <u title="aka ASCII (obsolete and non-international)">basic latin</u> text, and excludes control characters other than newlines.
+The rules in the file specify how basic latin source code characters are divided into tokens.
+An interpreter which uses the file may treat every Unicode character beyond basic latin
+in the same way as a letter such as <code>z</code>. That is sufficient to handle the common
+uses of Unicode in identifiers, string literals and comments.</p>
+
+<p>In a language description file, a line which is blank or
 begins with a non-letter such as <code>#</code> or <code>/</code> is a comment
 line which is ignored. Otherwise, a line represents a string-matching rule.</p>
 
-<p>A simple rule has a base state name, a list of patterns to match, a target
-state name, and a token type, all separated by spaces. A state name begins with
-a lower case letter. A pattern is a sequence of non-space characters. A token
-type starts with an upper case letter. For example:</p>
+<p>A rule has a base state name, a list of patterns to match, and a target
+state name, all separated by spaces. A state name is
+a letter followed by letters or digits. A pattern is a sequence of non-space characters.
+For example:</p>
 
-<pre>start == != start OP
+<pre>start " string
 </pre>
 
 <p>When the scanner is in the base state of a rule and one of the patterns in
 the list appears next in the input, the scanner moves past the matched
-characters, and goes into the target state. The current token is terminated
-after the matched characters and given that type. With the above rule, if the
+characters to include them in the token currently being scanned, and goes into the target state. In this case, in the <code>start</code> state, if a
+double quote character appears next in the input, the scanner moves past it and goes into the <code>string</code> state. If a state name starts with an upper case letter, the current token is ended and the state name is used as a tag to describe the type of the token. For example:</p>
+
+<pre>start == != OP
+</pre>
+
+<p>With this rule, if the
 scanner is in the <code>start</code> state and either of the equality operators
 <code>==</code> or <code>!=</code> appears next in the input, then the scanner
 moves past the operator, marks it as a token with type <code>OP</code>, and
-remains in the <code>start</code> state.</p>
+goes to the <code>OP</code> state.</p>
+
+<hr/>
+
 
 <p>A rule need not include a token type, in which case scanning of the current
 token is continued. In the following example, when in the <code>start</code>
 state, if a double quote character appears next in the input, the scanner moves
 past it and goes into the <code>string</code> state to deal with the rest of the
 token:</p>
-
-<pre>start " string
-</pre>
 
 <p>A limited form of lookahead is provided. A lookahead rule has a plus sign
 character at the end. For example:</p>
