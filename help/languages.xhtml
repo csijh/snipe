@@ -97,17 +97,35 @@ scanner is in the <code>start</code> state and either of the equality operators
 moves past the operator, marks it as a token with type <code>OP</code>, and
 goes to the <code>OP</code> state.</p>
 
+<p>A pattern can consist of two dots with a character on either side.
+It represents a range of one-character patterns, e.g. <code>0..9</code> stands
+for <code>0 1 2 3 4 5 6 7 8 9</code>. For example:</p>
+
+<pre>start 0..9 number
+</pre>
+
+<p>This rule says that if the scanner is in the <code>start</code> state, and a
+digit appears next in the input, the scanner matches the digit and goes into the
+<code>number</code> state. The pattern <code>!..~</code> can be used to match
+any single character (other than a space, a newline or a control character).</p>
+
+<p>A limited form of lookahead is provided. A pattern which starts with a backslash <code>\</code>
+character indicates a string to be matched without being included in the current token. For example:</p>
+
+<pre>id \( FUNCTION
+</pre>
+
+<p>In the <code>id</code> state, which presumably normally recognises identifier tokens, if the next character in the source code is an open bracket, the current token is marked as a <code>FUNCTION</code> instead. A lookahead pattern can also be a range:</p>
+
+<pre>dot \0..9 float
+</pre>
+
+<p>In the <code>dot</code> state, presumably just after recognising a dot character, if a digit appears next in the source code, the scanner goes to the <code>float</code> state without
+moving past the digit.</p>
+
 <hr/>
 
 
-<p>A rule need not include a token type, in which case scanning of the current
-token is continued. In the following example, when in the <code>start</code>
-state, if a double quote character appears next in the input, the scanner moves
-past it and goes into the <code>string</code> state to deal with the rest of the
-token:</p>
-
-<p>A limited form of lookahead is provided. A lookahead rule has a plus sign
-character at the end. For example:</p>
 
 <pre>id ( start FUNCTION +
 </pre>
@@ -150,17 +168,6 @@ a newline. For example:</p>
 <pre>start 32 start GAP
 start 10 start NEWLINE
 </pre>
-
-<p>A pattern can consist of two dots with a printable character on either side.
-It represents a range of one-character patterns, e.g. <code>0..9</code> stands
-for <code>0 1 2 3 4 5 6 7 8 9</code>:</p>
-
-<pre>start 0..9 number
-</pre>
-
-<p>This rule says that if the scanner is in the <code>start</code> state, and a
-digit appears next in the input, the scanner matches the digit and goes into the
-<code>number</code> state.</p>
 
 <p>A pattern consisting just of two dots is used to represent any remaining
 basic latin character which has not already been dealt with. For example:</p>
