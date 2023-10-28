@@ -44,31 +44,29 @@ parsing of languages. On the other hand, the scanner:</p>
 <li>may support dynamic loading of language definitions</li>
 <li>may support incremental rescanning</li>
 <li>may help with 'word'-based reflow or cursor movement</li>
-<li>may help with bracket matching, line wrapping, indenting or semicolon insertion</li>
+<li>may help with bracket matching, indenting or semicolon insertion</li>
 </ul>
 
-<p>Scanners for multi-language editors are often expressed using regular
-expressions. Scanners for Snipe are instead expressed as state machine tables.
-These are easier to read and maintain, and only a little less compact. Each
-language has a description in a text file, which is compiled into a table in a
-binary file. These binary files can then be loaded dynamically as necessary by
-Snipe.</p>
+<p>Languages for programming editors are often expressed using regular
+expressions. Languages for Snipe are instead expressed as string-matching
+state machine tables. These are easier to read and maintain, and only a little
+less compact. For example, the C language is described by the
+<code>c.txt</code> file in the directory <code>snipe/languages</code>. A
+generic scanner uses the state machine table in the file to scan source text
+in the C language.</p>
 
-<p>A language scanner is described by a text file. For example, the C language
-is described by the <code>c.txt</code> file in the directory
-<code>snipe/languages</code>. The file is a description of a string-matching
-state machine. A generic interpreter uses the state machine to perform
-scanning. To support incremental rescanning and help with word-based
-operations, spaces and newlines are never included in tokens. Long sequences
-such as comments and string literals are broken up into mini-tokens. A line of
-source text can be re-scanned in isolation, given only a suitable starting
-state at the beginning of the line.</p>
+<p>To support incremental rescanning and help with word-based operations,
+spaces and newlines are never included in normal tokens, but form separator
+tokens on their own. Long sequences such as comments and string literals are
+broken up into mini-tokens. A line of source text can be re-scanned in
+isolation, given only a suitable starting state at the beginning of the
+line.</p>
 
 <h2>Rules</h2>
 
 <p>A language description contains <u title="aka ASCII (obsolete and
 non-international)">basic latin</u> text, excluding control characters other
-than newlines. The rules in the file specify how basic latin source code
+than newlines. The rules in the file specify how basic latin source text
 characters, excluding control characters, are divided into tokens. An
 interpreter which uses the description may treat every Unicode character
 beyond basic latin in the same way as a letter such as <code>z</code>. That is
@@ -78,7 +76,8 @@ them or marking them as illegal tokens.</p>
 
 <p>In a language description file, a line which is blank or begins with a
 non-letter such as <code>#</code> or <code>/</code> is a comment line which is
-ignored. Otherwise, a line represents a string-matching rule.</p>
+ignored, or a line used for testing. Otherwise, a line represents a
+string-matching rule.</p>
 
 <p>A rule has a base state name, a list of patterns to match, and a target
 state name, optionally followed by a tag, all separated by spaces. A state
@@ -125,23 +124,23 @@ matched without being included in the current token. For example:</p>
 <pre>id \( start FUNCTION
 </pre>
 
-<p>In the <code>id</code> state, which presumably recognises identifier
-tokens, if the next character in the source code is an open bracket, the
+<p>In the <code>id</code> state, which presumably recognizes identifier
+tokens, if the next character in the source text is an open bracket, the
 current token is marked as a <code>FUNCTION</code> instead of the usual
 identifier type. A lookahead pattern can also be a range:</p>
 
 <pre>dot \0..9 float
 </pre>
 
-<p>In the <code>dot</code> state, presumably just after recognising a dot
-character, if a digit appears next in the source code, the scanner goes to the
+<p>In the <code>dot</code> state, presumably just after recognizing a dot
+character, if a digit appears next in the source text, the scanner goes to the
 <code>float</code> state without moving past the digit.</p>
 
 <p>A lookahead pattern <code>\s</code> matches a space character, and
 <code>\n</code> matches a newline. Neither a space nor a newline can be
-recognised other than as a lookahead. Other single-letter lookahead patterns
+recognized other than as a lookahead. Other single-letter lookahead patterns
 are reserved for future development. A literal single letter such as
-<code>x</code> can be recognised as a lookahead using a range such as
+<code>x</code> can be recognized as a lookahead using a range such as
 <code>\x..x</code>.  The scanner skips the space or newline, marking it as a
 separator token, then scanning continues in the target state.</p>
 
@@ -153,11 +152,11 @@ characters. For example:</p>
 </pre>
 
 <p>This is effectively a jump from the <code>id</code> state, just after
-recognising an identifier, to the <code>start</code> state. Since only visible
+recognizing an identifier, to the <code>start</code> state. Since only visible
 basic latin characters, plus spaces and newlines, are explicitly handled by a
 language definition, the rule is equivalent to:</p>
 
-<pre>id !..~ \s \n start ID
+<pre>id \!..~ \s \n start ID
 </pre>
 
 <p>A pattern beginning with two backslashes such as <code>\\u</code> is a
@@ -199,12 +198,12 @@ rule applies.</p>
 <p>If a single character is matched directly by one pattern and as part of a
 range in another pattern, the direct pattern takes precedence:</p>
 
-<pre>string " start STRING
-string !..~ string
+<pre>string !..~ string
+string " start STRING
 </pre>
 
-<p>Here, if a double quote <code>"</code> is next in the input, the first rule
-is applied, even though <code>"</code> is included in the range in the second
+<p>Here, if a double quote <code>"</code> is next in the input, the second rule
+is applied, even though <code>"</code> is included in the range in the first
 rule.</p>
 
 <p>Any other ambiguity between two patterns in the rules for a state, where
@@ -216,27 +215,28 @@ non-empty tokens, partitions the input by including every character in a
 token, treats spaces and newlines as separator tokens, handles all possible
 inputs, and terminates without getting stuck in a loop.</p>
 
-<p>Every state must have at least one rule, and must handle all possible
-inputs, either by including a <code>\</code> lookahead pattern or by including
-patterns such as <code>!..~ \s \n</code> which cover all single characters.  A
-rule with a <code>\s</code> or <code>\n</code> lookahead pattern must have a
-tag to terminate the current token. Where a lookahead pattern causes a jump
-between states without consuming input, There is a check that the scanner
-eventually reaches a state without lookahead patterns.</p>
+<p>There is a check that every state has at least one rule, and handles all
+possible inputs, either by including a <code>\</code> lookahead pattern or by
+including patterns such as <code>!..~ \s \n</code> which cover all single
+characters.  A rule with a <code>\s</code> or <code>\n</code> lookahead
+pattern must have a tag to terminate the current token. Where a lookahead
+pattern causes a jump between states without consuming input, there is a check
+that the scanner eventually reaches a state without lookahead patterns.</p>
 
-<p>Every state is classified either as a <dfn>starting</dfn> state, which the
-scanner is in when between tokens, or a <dfn>continuing</dfn> state, which the
+<p>Every state is classified either as a <dfn>between</dfn> state, which the
+scanner is in when between tokens, or a <dfn>within</dfn> state, which the
 scanner is in when within a token. A check is made to ensure that each state
 is consistently treated as one or the other, to guarantee that tokens are
 non-empty.</p>
 
 <h2>Examples</h2>
 
-<p>Rules like these can be used for a language where an identifier is allowed
-to start with a keyword:</p>
+<p>In many programming languages, an identifier is allowed
+to start with a keyword. In that case, identifiers can be handled by rules
+like these:</p>
 
-<pre>start a..z A..Z id
-start if else for while key
+<pre>start if else for while key
+start a..z A..Z id
 
 key a..z A..Z 0..9 id
 key \ start KEY
@@ -245,16 +245,14 @@ id a..z A..Z 0..9 id
 id \ start ID
 </pre>
 
-<p>Suppose the keyword <code>for</code> appears next in the input. Since
-<code>for</code> is longer than the single letter <code>f</code>, the second
-rule for the <code>start</code> state applies rather than the first and the
+<p>Suppose the keyword <code>for</code> appears next in the input. The
 scanner goes to the <code>key</code> state which gives the token the type
 <code>KEY</code>.</p>
 
 <p>Suppose instead that the identifier <code>form</code> appears next in the
 input. The prefix <code>for</code> is matched and the scanner goes into the
 <code>key</code> state. Then the <code>m</code> is matched, the scanner goes
-into the <code>id</code> state, and the token ends up being given type
+into the <code>id</code> state, and the token ends up being given the type
 <code>ID</code>.</p>
 
 <p>One-line comments, say starting with <code>//</code> and continuing to the
@@ -302,9 +300,8 @@ comment2 */ comment1 COMMENT
 odd \a..z even
 </pre>
 
-<p>An error would be reported, because  This would result in an infinite loop
-when scanning, if a letter appeared next in the input. An more subtle example
-of an error might be:</p>
+<p>An error would be reported, because this could result in an infinite loop
+when scanning. A more subtle example of an error might be:</p>
 
 <pre>start . dot
 
@@ -336,7 +333,7 @@ prop1 .. start PROPERTY +
 </pre>
 
 <p>Now, <code>prop0</code> is a starting state which matches only the first
-letter, and <code>prop1</code> is a continuing state which recognises the rest
+letter, and <code>prop1</code> is a continuing state which recognizes the rest
 of the token.</p>
 
 <hr/>
@@ -345,11 +342,11 @@ of the token.</p>
 
 <p>A language description can contain tests, which then also act as examples
 illustrating the operation of the rules. A line starting with <code>></code>
-and a space represents a line of source code. A line starting with
+and a space represents a line of source text. A line starting with
 <code>&lt;</code> and a space represents the output from the scanner, as a
 state followed by a sequence of tokens, each followed by its type. The state
-is the start state or the state At the end of the previous line of source
-code.</p>
+is the start state or the state at the end of the previous line of source
+text.</p>
 
 <h2>Conventions</h2>
 
@@ -390,19 +387,16 @@ literal, it should have, or be part of a token with, type
 single character. The full set of token types is currently:</p>
 
 <p class="indent"><code>OPEN0 CLOSE0 OPEN1 CLOSE1 OPEN2 CLOSE2 OPEN3 CLOSE3
-COMMENTED ERROR FUNCTION GAP ID KEY NEWLINE OP PROPERTY QUOTED RESERVED SIGN
+COMMENTED ERROR FUNCTION ID KEY OP PROPERTY QUOTED RESERVED SIGN
 TYPE VALUE</code></p>
 
 <p>These can all be abbreviated to their first characters, except for the
-brackets, which are abbreviated to <code>( ) [ ] { } &lt; ></code>. In addition,
-<code>GAP</code> or <code>NEWLINE</code> can be written as a space or a dot
-rather than a <code>G</code> or an <code>N</code>.</p>
+brackets, which are abbreviated to <code>( ) [ ] { } &lt; ></code>.</p>
 
 <p>A typical test might appear something like this:</p>
 
 <pre>struct *point = { x, (y+1) }; int ns = [(n+2),3];
-K+++++ SI++++ S { IS (IOV) }S K++ I+ S [(IOV)SV]S.
-K+++++_SI++++_S_4_IS_0IOV1_5S_K++_I+_S_20IOV1SV3S.
+K+++++ SI++++ S { IS (IOV) }S K++ I+ S [(IOV)SV]S
 </pre>
 
 <p>The first line represents some input text, and the line below represents the

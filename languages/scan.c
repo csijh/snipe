@@ -1,4 +1,4 @@
-// The Snipe editor is free and open source, see licence.txt.
+// Free and open source, see licence.txt.
 // Provide a standalone scanner to test and compile language definitions.
 #include "style.h"
 #include <stdio.h>
@@ -6,17 +6,64 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
+#include <ctype.h>
 #include <assert.h>
 
-// ---------- Arrays ----------------------------------------------------------
+// ---------- Lists ----------------------------------------------------------
+// A list is an array with built-in length and capacity.
 
-// Read a file as a string. Ignore errors. Normalise line endings.
+// Prefix in front of allocated memory.
+struct prefix { int length, max, size, fill; };
+typedef struct prefix prefix;
+
+// Like calloc, allocate a list of given capacity and item-size.
+void *allocate(int max, int size) {
+    int total = sizeof(prefix) + max * size;
+    prefix *p = malloc(total);
+    *p = (prefix) {.length=0, .max=max, .size=size};
+    return p + 1;
+}
+
+// Like realloc, reallocate a list to new capacity. 
+void *reallocate(void *a, int max) {
+    prefix *p = ((prefix *)a) - 1;
+    int total = sizeof(prefix) + max * p->size;
+    p = realloc(p, total);
+    p->max = max;
+    return p + 1;
+}
+
+// Like free, release memory for a list.
+void release(void *a) {
+    prefix *p = ((prefix *)a) - 1;
+    free(p);    
+}
+
+// Get and set the length, get the capacity.
+int getLength(void *a) {
+    prefix *p = ((prefix *)a) - 1;
+    return p->length;
+}
+
+void setLength(void *a, int length) {
+    prefix *p = ((prefix *)a) - 1;
+    p->length = length;
+}
+
+int getMax(void *a) {
+    prefix *p = ((prefix *)a) - 1;
+    return p->max;  
+}
+
+// ---------- Rows ----------------------------------------------------------
+
+// Read a file as a string. Ignore errors. Normalize line endings.
 char *readFile(char const *path) {
     FILE *file = fopen(path, "rb");
     fseek(file, 0, SEEK_END);
     int size = ftell(file);
     fseek(file, 0, SEEK_SET);
-    char *data = malloc(size + 1);
+    char *data =  malloc(size + 1);
     fread(data, 1, size, file);
     data[size] = '\0';
     fclose(file);
@@ -28,26 +75,9 @@ char *readFile(char const *path) {
     return data;
 }
 
-// Split a string in place into a NULL-terminated array of lines.
-char **splitLines(char *s) {
-    int n = 0;
-    for (int i = 0; s[i] != '\0'; i++) if (s[i] == '\n') n++;
-    char **lines = malloc((n+1) * sizeof(char *));
-    n = 0;
-    lines[n] = &s[0];
-    for (int i = 0; s[i] != '\0'; i++) {
-        if (s[i] != '\n') continue;
-        s[i] = '\0';
-        n++;
-        lines[n] = &s[i+1];
-    }
-    lines[n] = NULL;
-    return lines;
-}
-
 // Report an error on line n.
 void report(int n, char *s) {
-    fprintf(stderr, "Error on line %d: %s", n, s);
+    fprintf(stderr, "Error on line %d: %s", n+1, s);
     exit(1);
 }
 
@@ -59,7 +89,7 @@ void check(int n, char *s) {
     }
 }
 
-// Get rid of leading, trailing and multiple spaces from a string.
+// Get rid of leading, trailing and multiple spaces from a line.
 void despace(char *s) {
     int j = 0;
     for (int i = 0; s[i] != '\0'; i++) {
@@ -70,38 +100,90 @@ void despace(char *s) {
     s[j] = '\0';
 }
 
-// Split a line in place into a NULL-terminated array of words.
-char **splitWords(char *s) {
+// Split a string in place into a list of normalized lines.
+char **splitLines(char *s) {
+    int n = 0;
+    for (int i = 0; s[i] != '\0'; i++) if (s[i] == '\n') n++;
+    char **lines = allocate(n, sizeof(char *));
+    setLength(lines, n);
+    n = 0;
+    lines[n] = &s[0];
+    for (int i = 0; s[i] != '\0'; i++) {
+        if (s[i] != '\n') continue;
+        s[i] = '\0';
+        n++;
+        lines[n] = &s[i+1];
+    }
+    n++;
+    for (int i = 0; i < n; i++) {
+        check (i, lines[i]);
+        despace(lines[i]);
+    }
+    return lines;
+}
+
+// Check if a token is a state name or a tag name. 
+bool isStateName(char *s) { return islower(s[0]); }
+bool isTagName(char *s) { return isupper(s[0]); }
+
+// Split a line in place into a list of tokens. Add a final "?" if the
+// line is a rule without a tag.
+char **splitTokens(char *s) {
     int n = 0;
     for (int i = 0; s[i] != '\0'; i++) if (s[i] == ' ') n++;
-    char **words = malloc((n+2) * sizeof(char *));
+    char **tokens = allocate(n+2, sizeof(char *));
     n = 0;
-    words[n] = &s[0];
+    tokens[n] = &s[0];
     for (int i = 0; s[i] != '\0'; i++) {
         if (s[i] != ' ') continue;
         s[i] = '\0';
         n++;
-        words[n] = &s[i+1];
+        tokens[n] = &s[i+1];
     }
-    words[n+1] = NULL;
-    return words;
+    if (isStateName(tokens[0]) && ! isTagName(tokens[n])) {
+        tokens[n+1] = "?";
+        setLength(tokens, n+2);
+    }
+    else setLength(tokens, n+1);
+    return tokens;
 }
 
-// Convert an array of lines into an array of arrays of words.
-char ***makeRules(char **lines) {
-    int n = 0;
-    for (int i = 0; lines[i] != NULL; i++) n++;
-    char ***rules = malloc((n+1) * sizeof(char **));
-    for (int i = 0; lines[i] != NULL; i++) {
-        rules[i] = splitWords(lines[i]);
+// A row holds a list of tokens and, for rules, base and target indexes into
+// the global list of states, and a tag index into the global list of tags. 
+struct row { char **tokens; short base, target, tag; };
+typedef struct row row;
+
+// Convert a list of lines into a list of rows with negative indexes.
+row *makeRows(char **lines) {
+    int n = getLength(lines);
+    row *rows = allocate(n, sizeof(row));
+    setLength(rows, n);
+    for (int i = 0; i < n; i++) {
+        rows[i].tokens = splitTokens(lines[i]);
+        rows[i].base = rows[i].target = rows[i].tag = -1;
     }
-    rules[n] = NULL;
-    free(lines);
-    return rules;
+    release(lines);
+    return rows;
 }
 
-enum { MaxTags = 100,  MaxStates = 1000 };
+// ---------- Tags -------------------------------------------------------------
 
+// Find a string in, or add it to, a set of strings, returning its index. For a
+// new entry, copy the string to a string store.
+int add(char **set, char *s, char *store) {
+    int n = getLength(set);
+    for (int i = 0; i < n; i++) {
+        if (strcmp(set[i], s) == 0) return i;
+    }
+    int m = getLength(store);
+    strcpy(&store[m], s);
+    s = &store[m];
+    setLength(store, strlen(s) + 1);
+    set[n] = s;
+    setLength(set, n+1);
+    return n;
+}
+/*
 // Create an empty set of strings.
 char **empty(int max) {
     char **set = malloc((max+1) * sizeof(char *));
@@ -109,18 +191,7 @@ char **empty(int max) {
     return set;
 }
 
-// Add a string to a set of strings.
-void add(char **set, char *s, int max, int ln) {
-    int n;
-    for (n = 0; set[n] != NULL; n++) {
-        if (strcmp(set[n], s) == 0) return;
-    }
-    n++;
-    if (n > max) report(ln, "too many strings");
-    set[n] = s;
-    set[n+1] = NULL;
-}
-
+*/
 int main() {
     char *text = readFile("c.txt");
     printf("Chars: %lu\n", strlen(text));
@@ -131,11 +202,11 @@ int main() {
     char s[20] = " a  bb ccc ";
     despace(s);
     printf("(%s)\n", s);
-    char **words = splitWords(s);
-    for (int i = 0; words[i] != NULL; i++) {
-        printf("%d: %s\n", i, words[i]);
+    char **tokens = splitTokens(s);
+    for (int i = 0; tokens[i] != NULL; i++) {
+        printf("%d: %s\n", i, tokens[i]);
     }
-    printf("%d %d\n", MaxTags, MaxStates);
+    printf("%d %lu\n", 42, sizeof(prefix));
 }
 
 /*
