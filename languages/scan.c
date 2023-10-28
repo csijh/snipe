@@ -166,7 +166,7 @@ row *makeRows(char **lines) {
     return rows;
 }
 
-// ---------- Tags -------------------------------------------------------------
+// ---------- Strings ----------------------------------------------------------
 
 // Find a string in, or add it to, a set of strings, returning its index. For a
 // new entry, copy the string to a string store.
