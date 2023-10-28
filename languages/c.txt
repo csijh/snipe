@@ -123,5 +123,4 @@ filename  \s                                filename QUOTED
 filename  > \n                              start QUOTED
 
 // TODO: check tags are COMMENT, FUNCTION, ID, JOIN, KEY, OP, PROPERTY, QUOTE,
-// RESERVED, SIGN, TYPE, VALUE, BEGINi, ENDi
-
+// RESERVED, SIGN, TYPE, VALUE, BEGINi, ENDi, (GAP, NEWLINE)

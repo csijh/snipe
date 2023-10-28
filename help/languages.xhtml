@@ -136,13 +136,14 @@ identifier type. A lookahead pattern can also be a range:</p>
 character, if a digit appears next in the source text, the scanner goes to the
 <code>float</code> state without moving past the digit.</p>
 
-<p>A lookahead pattern <code>\s</code> matches a space character, and
-<code>\n</code> matches a newline. Neither a space nor a newline can be
-recognized other than as a lookahead. Other single-letter lookahead patterns
-are reserved for future development. A literal single letter such as
-<code>x</code> can be recognized as a lookahead using a range such as
-<code>\x..x</code>.  The scanner skips the space or newline, marking it as a
-separator token, then scanning continues in the target state.</p>
+<p>A lookahead pattern <code>\s</code> matches a gap consisting of space
+characters, and <code>\n</code> matches a gap which includes at least one
+newline. Neither a space nor a newline can be recognized other than as a
+lookahead. Other single-letter lookahead patterns are reserved for future
+development. A literal single letter such as <code>x</code> can be recognized
+as a lookahead using a range such as <code>\x..x</code>.  The scanner skips
+the gap, marking it as one or more separator tokens, then scanning continues
+in the target state.</p>
 
 <p>A pattern consisting of a backslash <code>\</code> on its own is a
 lookahead for the empty string. It always matches without consuming any
@@ -220,14 +221,13 @@ possible inputs, either by including a <code>\</code> lookahead pattern or by
 including patterns such as <code>!..~ \s \n</code> which cover all single
 characters.  A rule with a <code>\s</code> or <code>\n</code> lookahead
 pattern must have a tag to terminate the current token. Where a lookahead
-pattern causes a jump between states without consuming input, there is a check
-that the scanner eventually reaches a state without lookahead patterns.</p>
+pattern other than <code>\s</code> or <code>\n</code> causes a jump between
+states without consuming input, there is a check that the scanner eventually
+reaches a state without lookahead patterns.</p>
 
-<p>Every state is classified either as a <dfn>between</dfn> state, which the
-scanner is in when between tokens, or a <dfn>within</dfn> state, which the
-scanner is in when within a token. A check is made to ensure that each state
-is consistently treated as one or the other, to guarantee that tokens are
-non-empty.</p>
+<p>There is a check that no empty tokens can be created. Every state must
+either never occur at the beginning of a token, or else must not contain any
+lookahead pattern other than <code>\s</code> or <code>\n</code>.</p>
 
 <h2>Examples</h2>
 

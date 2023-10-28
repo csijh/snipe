@@ -126,10 +126,16 @@ char **splitLines(char *s) {
 bool isStateName(char *s) { return islower(s[0]); }
 bool isTagName(char *s) { return isupper(s[0]); }
 
-// Split a line in place into a list of tokens. Add a final "?" if the
-// line is a rule without a tag.
+// Split a line in place into a list of tokens, if it is a rule. Add a final
+// "?" if the rule has no tag.
 char **splitTokens(char *s) {
     int n = 0;
+    if (! islower(s[0])) {
+        char **tokens = allocate(1, sizeof(char *));
+        tokens[0] = s;
+        setLength(tokens, 1);
+        return tokens;
+    }
     for (int i = 0; s[i] != '\0'; i++) if (s[i] == ' ') n++;
     char **tokens = allocate(n+2, sizeof(char *));
     n = 0;
@@ -148,21 +154,21 @@ char **splitTokens(char *s) {
     return tokens;
 }
 
-// A row holds a list of tokens and, for rules, base and target indexes into
-// the global list of states, and a tag index into the global list of tags. 
-struct row { char **tokens; short base, target, tag; };
+// A row holds a list of tokens, a line number, and for rules, base and target and
+// tag indexes into the global lists of states and tags.
+struct row { char **tokens; short ln, base, target, tag; };
 typedef struct row row;
 
-// Convert a list of lines into a list of rows with negative indexes.
+// Convert a list of lines into a list of rows, with negative indexes.
 row *makeRows(char **lines) {
     int n = getLength(lines);
     row *rows = allocate(n, sizeof(row));
     setLength(rows, n);
     for (int i = 0; i < n; i++) {
         rows[i].tokens = splitTokens(lines[i]);
+        rows[i].ln = i;
         rows[i].base = rows[i].target = rows[i].tag = -1;
     }
-    release(lines);
     return rows;
 }
 
@@ -183,30 +189,47 @@ int add(char **set, char *s, char *store) {
     setLength(set, n+1);
     return n;
 }
-/*
-// Create an empty set of strings.
-char **empty(int max) {
-    char **set = malloc((max+1) * sizeof(char *));
-    set[0] = NULL;
-    return set;
+
+// For each row, find the indexes while building up the lists of states and tags.
+// Also report simple errors.
+void index(row *rows, char *states, char **tags, char *strings) {
+    for (int i; i < getLength(rows); i++) {
+        row *r = &rows[i];
+        if (isTagName(r->tokens[0])) report(i, "unexpected tag");
+        if (! isStateName(r->tokens[0])) continue;
+        int n = getLength(r->tokens);
+        if (n < 4) report(i, "incomplete rule");
+        if (! isStateName(r->tokens[n-2])) report(i, "expecting target state");
+        r->base = add(states, r->tokens[0], strings);
+        r->target = add(states, r->tokens[n-2], strings);
+        r->tag = add(tags, r->tokens[n-1], strings);
+    }
 }
 
-*/
+// -----------
+
+// The number of rows is an upper bound for the number of states, and the
+// number of tags. The number of rows times 10 + 128 is a reasonable upper
+// bound for the number of patterns. The patterns are going to have to be
+// sorted!
+
 int main() {
     char *text = readFile("c.txt");
     printf("Chars: %lu\n", strlen(text));
     char **lines = splitLines(text);
-    int n = 0;
-    while (lines[n] != NULL) n++;
-    printf("Lines: %d\n", n);
-    char s[20] = " a  bb ccc ";
-    despace(s);
-    printf("(%s)\n", s);
-    char **tokens = splitTokens(s);
-    for (int i = 0; tokens[i] != NULL; i++) {
-        printf("%d: %s\n", i, tokens[i]);
+    printf("Lines: %d\n", getLength(lines));
+    row *rows = makeRows(lines);
+    printf("Rows: %d\n", getLength(rows));
+
+    /*
+    for (int i=0; i<getLength(rows); i++) {
+        printf("%d", i+1);
+        for (int j=0; j < getLength(rows[i].tokens); j++) {
+            printf("_%s", rows[i].tokens[j]);
+        }
+        printf("\n");
     }
-    printf("%d %lu\n", 42, sizeof(prefix));
+    */
 }
 
 /*
