@@ -13,15 +13,19 @@ start   short signed unsigned void                      type
 type    a..z A..Z 0..9 _ \\U \\u                        id
 type    \                                               start TYPE
 
-// Other keywords. The key state checks for additional characters.
+// Other keywords. The key states check for additional characters.
+// The enum and struct keywords cause bracket checking.
 
 start   _Alignas _Noreturn _Static_assert _Thread_Local         key
 start   alignof auto break case const continue default do else  key
-start   enum extern false for goto if inline register restrict  key
-start   return sizeof static struct switch true typedef union   key
+start   extern false for goto if inline register restrict       key
+start   return sizeof static switch true typedef union          key
 start   volatile while                                          key
+start   enum struct                                             key2
 key     a..z A..Z 0..9 _ \\U \\u                                id
 key     \                                                       start KEY
+key2    a..z A..Z 0..9 _ \\U \\u                                id
+key2 
 
 // Operators and signs.
 
@@ -35,29 +39,46 @@ start   a..z A..Z _ \\U \\u        id
 id      a..z A..Z 0..9 _ \\U \\u   id
 id      \                          start ID
 
-// Brackets. By default { and } are block brackets, level 4. (They are later
-// adjusted to structure brackets, level 3, if they are declaration or
-// initialiser brackets, to help with semicolon insertion.)
-// TODO for semicolon insertion
-// enum {            ->   OPEN3 (then matching } goes to CLOSE3)
-// enum ID {
-// struct {
-// struct ID {
+// Brackets. By default { and } are block brackets, level 1. To help with
+// semicolon insertion, the opener { is marked as a structure bracket BEGIN2
+// instead, by the rules below. The closer } is changed from BEGIN1 to BEGIN2
+// to match by Snipe during bracket matching.
+
+start  {   start BEGIN1
+start  }   start END1
+start  [   start BEGIN3
+start  ]   start END3
+start  (   start BEGIN4
+start  )   start END4
+
+// Check for { as a structure bracket in these contexts:
+// enum {       OR    struct {
+// enum ID {    OR    struct ID {
 // = {
 // = ( ID ) {
 // = ( struct ID ) {
-// $infix  OPENb CLOSEb
-// $prefix CLOSEi
 
-start  (   start OPEN1
-start  )   start CLOSE1
-start  [   start OPEN2
-start  ]   start CLOSE2
-start  {   start OPEN4
-start  }   start CLOSE4
+check0    {                          start BEGIN2
+check0    a..z A..Z _ \\U \\u        check1
+check0    \                          start
+check1    a..z A..Z 0..9 _ \\U \\u   check1
+check1    \                          check2 ID
+check2    {                          start BEGIN2
+check2    \                          start
+check3    {                          start BEGIN2
+check3    (                          check4 BEGIN4
+check3    \                          start
+check4    struct                     check4 KEY
+check4    a..z A..Z _ \\U \\u        check5
+check4    \                          start
+check5    a..z A..Z 0..9 _ \\U \\u   check5
+check5    \                          check6 ID
+check6    )                          check7 END4
+check6    \                          start
+check7    {                          start BEGIN2
+check7    \                          start
 
 // A dot starts a number, or is a sign.
-// TODO  .id or ->id becomes PROPERTY
 
 start   .           dot
 dot     \0..9       float

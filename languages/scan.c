@@ -211,7 +211,13 @@ void index(row *rows, char *states, char **tags, char *strings) {
 // The number of rows is an upper bound for the number of states, and the
 // number of tags. The number of rows times 10 + 128 is a reasonable upper
 // bound for the number of patterns. The patterns are going to have to be
-// sorted!
+// sorted! A jump should not be followed by another jump.
+// MAYBE a pattern contains an array with an action per state. Makes
+// it easier to sort patterns.
+// STATE PROPERTIES.
+// Ender: rule has tag and lookahead including \s \n
+// Can start a token: start + after tag + after jump from starter.
+// Jumps. Has lookahead not \s\n. No double jump (for same pattern).
 
 int main() {
     char *text = readFile("c.txt");
