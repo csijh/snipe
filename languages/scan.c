@@ -5,16 +5,18 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdarg.h>
 #include <string.h>
 #include <ctype.h>
 #include <assert.h>
 
-// ---------- Lists ----------------------------------------------------------
+// ---------- Lists ------------------------------------------------------------
 // A list is an array with built-in length and capacity.
 
 // Prefix in front of allocated memory.
 struct prefix { int length, max, size, fill; };
 typedef struct prefix prefix;
+prefix* pre(void *a) { return ((prefix *)a) - 1; }
 
 // Like calloc, allocate a list of given capacity and item-size.
 void *allocate(int max, int size) {
@@ -26,7 +28,7 @@ void *allocate(int max, int size) {
 
 // Like realloc, reallocate a list to new capacity. 
 void *reallocate(void *a, int max) {
-    prefix *p = ((prefix *)a) - 1;
+    prefix *p = pre(a);
     int total = sizeof(prefix) + max * p->size;
     p = realloc(p, total);
     p->max = max;
@@ -34,28 +36,16 @@ void *reallocate(void *a, int max) {
 }
 
 // Like free, release memory for a list.
-void release(void *a) {
-    prefix *p = ((prefix *)a) - 1;
-    free(p);    
-}
+void release(void *a) { free(pre(a)); }
 
 // Get and set the length, get the capacity.
-int getLength(void *a) {
-    prefix *p = ((prefix *)a) - 1;
-    return p->length;
-}
+int getLength(void *a) { return pre(a)->length; }
+void setLength(void *a, int n) { prefix *p = pre(a); p->length = n; }
+int getMax(void *a) { return (pre(a))->max; }
 
-void setLength(void *a, int length) {
-    prefix *p = ((prefix *)a) - 1;
-    p->length = length;
-}
-
-int getMax(void *a) {
-    prefix *p = ((prefix *)a) - 1;
-    return p->max;  
-}
-
-// ---------- Rows ----------------------------------------------------------
+// ---------- Rows -------------------------------------------------------------
+// A row is a line of text, split into a list of tokens. Read in a language
+// description and split it into a list of rows.
 
 // Read a file as a string. Ignore errors. Normalize line endings.
 char *readFile(char const *path) {
@@ -73,6 +63,15 @@ char *readFile(char const *path) {
         data[i] = '\n';
     }
     return data;
+}
+
+void error(char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    vfprintf(stderr, format, args);
+    va_end(args);
+    fprintf(stderr, "\n");
+    exit(1);
 }
 
 // Report an error on line n.
@@ -154,9 +153,9 @@ char **splitTokens(char *s) {
     return tokens;
 }
 
-// A row holds a list of tokens, a line number, and for rules, base and target and
-// tag indexes into the global lists of states and tags.
-struct row { char **tokens; short ln, base, target, tag; };
+// A row holds a list of tokens, a line number, and for rules, base and target
+// and tag indexes into the global lists of states and tags.
+struct row { char **tokens; short tag; };
 typedef struct row row;
 
 // Convert a list of lines into a list of rows, with negative indexes.
@@ -166,43 +165,163 @@ row *makeRows(char **lines) {
     setLength(rows, n);
     for (int i = 0; i < n; i++) {
         rows[i].tokens = splitTokens(lines[i]);
-        rows[i].ln = i;
-        rows[i].base = rows[i].target = rows[i].tag = -1;
+        rows[i].tag = -1;
     }
     return rows;
 }
 
-// ---------- Strings ----------------------------------------------------------
+// ---------- States and patterns ----------------------------------------------
 
-// Find a string in, or add it to, a set of strings, returning its index. For a
-// new entry, copy the string to a string store.
-int add(char **set, char *s, char *store) {
-    int n = getLength(set);
+// A pattern is a string to be matched and the action it leads to.
+struct pattern { char *s; bool lookahead; char tag; int target; };
+typedef struct pattern pattern;
+
+// A state is a name and a list of patterns.
+struct state { char *name; pattern *patterns; };
+typedef struct state state;
+
+// Find a state in, or add it to, the list of states, returning its index.
+int find(state *states, char *name) {
+    int n = getLength(states);
     for (int i = 0; i < n; i++) {
-        if (strcmp(set[i], s) == 0) return i;
+        if (strcmp(states[i].name, name) == 0) return i;
     }
-    int m = getLength(store);
-    strcpy(&store[m], s);
-    s = &store[m];
-    setLength(store, strlen(s) + 1);
-    set[n] = s;
-    setLength(set, n+1);
+    pattern *patterns = allocate(256, sizeof(pattern));
+    states[n] = (state) { .name=name, .patterns=patterns };
+    setLength(states, n+1);
     return n;
 }
 
-// For each row, find the indexes while building up the lists of states and tags.
-// Also report simple errors.
-void index(row *rows, char *states, char **tags, char *strings) {
-    for (int i; i < getLength(rows); i++) {
+// Convert a string, target and tag to a pattern. Take off a backslash
+// indicating a lookahead, and convert a double backslash into a single.
+// Reduce a tag to a single character.
+void convert(char *s, int target, char *tag, pattern *p) {
+    p->target = target;
+    if (tag[0] == 'B') {
+        p->tag = tag[strlen(tag)-1];
+    }
+    else if (tag[0] == 'E') {
+        p->tag = 'a' - '0' + tag[strlen(tag)-1];
+    }
+    else p->tag = tag[0];
+    p->lookahead = false;
+    if (s[0] == '\\' && (s[1] != '\\' || s[2] == '\\')) {
+        p->lookahead = true;
+        s = &s[1];
+    }
+    if (s[0] == '\\' && s[1] == '\\') s = &s[1];
+    p->s = s;
+}
+
+// Transfer the patterns from the rules to the states.
+void transfer(row *rows, state *states) {
+   for (int i = 0; i < getLength(rows); i++) {
         row *r = &rows[i];
         if (isTagName(r->tokens[0])) report(i, "unexpected tag");
         if (! isStateName(r->tokens[0])) continue;
         int n = getLength(r->tokens);
         if (n < 4) report(i, "incomplete rule");
         if (! isStateName(r->tokens[n-2])) report(i, "expecting target state");
-        r->base = add(states, r->tokens[0], strings);
-        r->target = add(states, r->tokens[n-2], strings);
-        r->tag = add(tags, r->tokens[n-1], strings);
+        char *tag = r->tokens[n-1];
+        int baseIndex = find(states, r->tokens[0]);
+        int target = find(states, r->tokens[n-2]);
+        state *base = &states[baseIndex];
+        int pl = getLength(base->patterns);
+        for (int j = 1; j < n-2; j++) {
+            pattern *p = &base->patterns[pl++];
+            setLength(base->patterns, pl);
+            char *s = r->tokens[j];
+            convert(s, target, tag, p);
+        }
+   }    
+}
+
+// ---------- Ranges -----------------------------------------------------------
+// A range such as 0..9 is equivalent to several one-character patterns, except
+// that more specific patterns take precedence. Ranges are expanded by
+// repeatedly finding a range with no shorter range inside it, and replacing it
+// by one-character patterns for those characters not already handled.
+
+bool isRange(char *s) {
+    if (strlen(s) != 4) return false;
+    if (s[1] != '.' || s[2] != '.') return false;
+    return true;    
+}
+
+bool subRange(char *s, char *t) {
+    return s[0] >= t[0] && s[3] <= t[3];
+}
+
+bool overlap(char *s, char *t) {
+    if (s[0] < t[0] && s[3] >= t[0] && s[3] < t[3]) return true;
+    if (t[0] < s[0] && t[3] >= s[0] && t[3] < s[3]) return true;
+    return false;
+}
+
+// Get an array of one-character strings.
+char **getSingles() {
+    char *bytes = malloc(256);
+    char **singles = malloc(128 * sizeof(char *));
+    for (int ch = 0; ch < 128; ch++) {
+        bytes[2*ch] = ch;
+        bytes[2*ch+1] = '\0';
+        singles[ch] = &bytes[2*ch];
+    }
+    return singles;
+}
+
+// Expand the range at the given offset in the list of patterns for one state.
+void derange(pattern *patterns, int r, char **singles) {
+    char *range = patterns[r].s;
+    int n = getLength(patterns);
+    for (char ch = range[0]; ch <= range[3]; ch++) {
+        bool found = false;
+        for (int i = 0; i < n; i++) {
+            char *s = patterns[i].s;
+            if (s[0] == ch && s[1] == '\0') { found = true; break; }
+        }
+        if (found) continue;
+        patterns[n] = patterns[r];
+        patterns[n].s = singles[ch];
+        n++;
+        setLength(patterns, n);
+    }
+    n--;
+    patterns[r] = patterns[n];
+    setLength(patterns, n);
+}
+
+// Expand all ranges in a state.
+void derangeState(state *st, char **singles) {
+    pattern *ps = st->patterns;
+    bool done = false;
+    while (! done) {
+        int r = -1;
+        for (int i = 0; i < getLength(ps); i++) {
+            if (! isRange(ps[i].s)) continue;
+            printf("r: %s\n", ps[i].s);
+            if (r >= 0) {
+                if (overlap(ps[r].s, ps[i].s)) {
+                    error("state %s has overlapping ranges %s %s",
+                        st->name, ps[r].s, ps[i].s);
+                }
+                if (subRange(ps[i].s, ps[r].s)) r = i;
+            }
+            else r = i;
+//            printf("r: %s\n", ps[i].s);
+            if (r < 0) done = true;
+            else derange(ps, r, singles);
+        }
+        break;
+    }
+}
+
+// Expand all ranges.
+void derangeAll(state *states, char **singles) {
+    for (int i = 0; i < getLength(states); i++) {
+                   printf("i: %d\n", i);
+ 
+        derangeState(&states[i], singles);
     }
 }
 
@@ -226,7 +345,26 @@ int main() {
     printf("Lines: %d\n", getLength(lines));
     row *rows = makeRows(lines);
     printf("Rows: %d\n", getLength(rows));
-
+    state *states = allocate(256, sizeof(state));
+    transfer(rows, states);
+    printf("States: %d\n", getLength(states));
+    char **singles = getSingles();
+    int n = getLength(states[0].patterns);
+    for (int i = 0; i < n; i++) {
+        printf("%s", states[0].patterns[i].s);
+        printf(" %d", states[0].patterns[i].lookahead);
+        printf(" %c", states[0].patterns[i].tag);
+        printf(" %d\n", states[0].patterns[i].target);
+    }
+    derangeAll(states, singles);
+    printf("%s:\n", states[0].name);
+    //int n = getLength(states[0].patterns);
+    for (int i = 0; i < n; i++) {
+        printf("%s", states[0].patterns[i].s);
+        printf(" %d", states[0].patterns[i].lookahead);
+        printf(" %c", states[0].patterns[i].tag);
+        printf(" %d\n", states[0].patterns[i].target);
+    }
     /*
     for (int i=0; i<getLength(rows); i++) {
         printf("%d", i+1);

@@ -25,13 +25,14 @@ start   enum struct                                             key2
 key     a..z A..Z 0..9 _ \\U \\u                                id
 key     \                                                       start KEY
 key2    a..z A..Z 0..9 _ \\U \\u                                id
-key2 
+key2    \                                                       check0 KEY
 
 // Operators and signs.
 
 start   != ! % && &= & *= * ++ += + -- -= - /= / ?  start OP
 start   <<= << <= < == >= >>= >> > ^= ^ |= || | ~   start OP
-start   ## %= , ... ; : -> =                        start SIGN
+start   ## %= , ... ; : ->                          start SIGN
+start   =                                           check3 SIGN
 
 // Identifiers
 
