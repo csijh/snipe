@@ -118,8 +118,8 @@ the <code>number</code> state. The pattern <code>!..~</code> can be used to
 match any single visible character.</p>
 
 <p>A limited form of lookahead is provided. A pattern which starts with a
-backslash <code>\</code> is a lookahead pattern. It indicates a string to be
-matched without being included in the current token. For example:</p>
+single backslash <code>\</code> is a lookahead pattern. It indicates a string
+to be matched without being included in the current token. For example:</p>
 
 <pre>id \( start FUNCTION
 </pre>
@@ -145,24 +145,10 @@ as a lookahead using a range such as <code>\x..x</code>.  The scanner skips
 the gap, marking it as one or more separator tokens, then scanning continues
 in the target state.</p>
 
-<p>A pattern consisting of a backslash <code>\</code> on its own is a
-lookahead for the empty string. It always matches without consuming any
-characters. For example:</p>
-
-<pre>id \ start ID
-</pre>
-
-<p>This is effectively a jump from the <code>id</code> state, just after
-recognizing an identifier, to the <code>start</code> state. Since only visible
-basic latin characters, plus spaces and newlines, are explicitly handled by a
-language definition, the rule is equivalent to:</p>
-
-<pre>id \!..~ \s \n start ID
-</pre>
-
-<p>A pattern beginning with two backslashes such as <code>\\u</code> is a
-non-lookahead pattern matching a string such as <code>\u</code> starting with
-a single backslash. A pattern beginning with three backslashes such as
+<p>A pattern <code>\</code> consisting of just a backslash is an error. A
+pattern beginning with two backslashes such as <code>\\u</code> is a
+non-lookahead pattern matching a string such as <code>\u</code> starting with a
+single backslash. A pattern beginning with three backslashes such as
 <code>\\\u</code> is a lookahead for a string such as <code>\u</code> starting
 with a single backslash. A backslash anywhere else in a pattern stands for
 itself.</p>
@@ -205,29 +191,36 @@ string " start STRING
 
 <p>Here, if a double quote <code>"</code> is next in the input, the second rule
 is applied, even though <code>"</code> is included in the range in the first
-rule.</p>
+rule. If a single character is matched by two ranges, and one is a subrange of
+the other, the subrange takes precedence. For example:</p>
 
-<p>Any other ambiguity between two patterns in the rules for a state, where
-one is not obviously more specific than the other, is an error.</p>
+<pre>id a..z A..Z 0..9 id
+id \!..~ \s \n    start ID
+</pre>
 
-<p>When a language description is processed, various checks are made for
-correct behaviour. The checks ensure that the scanner never fails, creates
-non-empty tokens, partitions the input by including every character in a
-token, treats spaces and newlines as separator tokens, handles all possible
-inputs, and terminates without getting stuck in a loop.</p>
+<p>If a letter or digit appears next, the first rule applies. If any other
+character appears, the second rule applies. Any other ambiguity between two
+patterns in the rules for a state, where one is not obviously more specific
+than the other, is an error.</p>
 
-<p>There is a check that every state has at least one rule, and handles all
-possible inputs, either by including a <code>\</code> lookahead pattern or by
-including patterns such as <code>!..~ \s \n</code> which cover all single
-characters.  A rule with a <code>\s</code> or <code>\n</code> lookahead
+<p>When a language description is processed, various checks are made to ensure
+that the scanner never fails, creates non-empty tokens, partitions the input by
+including every character in a token, treats spaces and newlines as separator
+tokens, handles all possible inputs, and terminates without getting stuck in a
+loop.</p>
+
+<p>There is a check that every state has at least one rule, does not contain
+duplicate patterns, and handles all possible inputs, by including all single
+characters as patterns in some way, e.g. by including <code>!..~ \s \n</code>
+as patterns.  A rule with a <code>\s</code> or <code>\n</code> lookahead
 pattern must have a tag to terminate the current token. Where a lookahead
 pattern other than <code>\s</code> or <code>\n</code> causes a jump between
-states without consuming input, there is a check that the scanner eventually
-reaches a state without lookahead patterns.</p>
+states without consuming input, there is a check that the target state consumes
+at least one of the lookahead characters.</p>
 
 <p>There is a check that no empty tokens can be created. Every state must
-either never occur at the beginning of a token, or else must not contain any
-lookahead pattern other than <code>\s</code> or <code>\n</code>.</p>
+either never occur at the beginning of a token, or else must not be able to
+terminate a token without consuming any characters.</p>
 
 <h2>Examples</h2>
 

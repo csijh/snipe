@@ -11,6 +11,7 @@
 #include <assert.h>
 
 // ---------- Lists ------------------------------------------------------------
+
 // A list is an array with built-in length and capacity.
 
 // Prefix in front of allocated memory.
@@ -44,6 +45,7 @@ void setLength(void *a, int n) { prefix *p = pre(a); p->length = n; }
 int getMax(void *a) { return (pre(a))->max; }
 
 // ---------- Rows -------------------------------------------------------------
+
 // A row is a line of text, split into a list of tokens. Read in a language
 // description and split it into a list of rows.
 
@@ -67,24 +69,19 @@ char *readFile(char const *path) {
 
 void error(char *format, ...) {
     va_list args;
+    fprintf(stderr, "Error: ");
     va_start(args, format);
     vfprintf(stderr, format, args);
     va_end(args);
-    fprintf(stderr, "\n");
-    exit(1);
-}
-
-// Report an error on line n.
-void report(int n, char *s) {
-    fprintf(stderr, "Error on line %d: %s", n+1, s);
+    fprintf(stderr, ".\n");
     exit(1);
 }
 
 // Check a line for illegal characters.
 void check(int n, char *s) {
     for (int i = 0; s[i] != '\0'; i++) {
-        if ((s[i] & 0x80) != 0) report(n, "non-ascii character");
-        if (s[i] < ' ' || s[i] > '~') report(n, "control character");
+        if ((s[i] & 0x80) != 0) error("non-ascii character on line %d", n);
+        if (s[i] < ' ' || s[i] > '~') error("control character on line %d", n);
     }
 }
 
@@ -103,6 +100,7 @@ void despace(char *s) {
 char **splitLines(char *s) {
     int n = 0;
     for (int i = 0; s[i] != '\0'; i++) if (s[i] == '\n') n++;
+    n++;
     char **lines = allocate(n, sizeof(char *));
     setLength(lines, n);
     n = 0;
@@ -115,7 +113,7 @@ char **splitLines(char *s) {
     }
     n++;
     for (int i = 0; i < n; i++) {
-        check (i, lines[i]);
+        check (i+1, lines[i]);
         despace(lines[i]);
     }
     return lines;
@@ -153,31 +151,29 @@ char **splitTokens(char *s) {
     return tokens;
 }
 
-// A row holds a list of tokens, a line number, and for rules, base and target
-// and tag indexes into the global lists of states and tags.
-struct row { char **tokens; short tag; };
-typedef struct row row;
-
 // Convert a list of lines into a list of rows, with negative indexes.
-row *makeRows(char **lines) {
+char ***makeRows(char **lines) {
     int n = getLength(lines);
-    row *rows = allocate(n, sizeof(row));
+    char ***rows = allocate(n, sizeof(char **));
     setLength(rows, n);
     for (int i = 0; i < n; i++) {
-        rows[i].tokens = splitTokens(lines[i]);
-        rows[i].tag = -1;
+        rows[i] = splitTokens(lines[i]);
     }
     return rows;
 }
 
 // ---------- States and patterns ----------------------------------------------
 
+// Convert the rules in the language description into a list of states, each of
+// which has a list of patterns.
+
 // A pattern is a string to be matched and the action it leads to.
 struct pattern { char *s; bool lookahead; char tag; int target; };
 typedef struct pattern pattern;
 
-// A state is a name and a list of patterns.
-struct state { char *name; pattern *patterns; };
+// A state is a name, a list of patterns, and flags to say whether the state can
+// be at the start, in the middle, or at the end of a token. 
+struct state { char *name; pattern *patterns; bool starter, inner, ender; };
 typedef struct state state;
 
 // Find a state in, or add it to, the list of states, returning its index.
@@ -187,7 +183,10 @@ int find(state *states, char *name) {
         if (strcmp(states[i].name, name) == 0) return i;
     }
     pattern *patterns = allocate(256, sizeof(pattern));
-    states[n] = (state) { .name=name, .patterns=patterns };
+    states[n] = (state) {
+        .name=name, .patterns=patterns,
+        .starter=false, .inner=false, .ender=false
+    };
     setLength(states, n+1);
     return n;
 }
@@ -208,39 +207,53 @@ void convert(char *s, int target, char *tag, pattern *p) {
     if (s[0] == '\\' && (s[1] != '\\' || s[2] == '\\')) {
         p->lookahead = true;
         s = &s[1];
+        if (strcmp(s, "s") == 0) s[0] = ' ';
+        if (strcmp(s, "n") == 0) s[0] = '\n';
     }
     if (s[0] == '\\' && s[1] == '\\') s = &s[1];
     p->s = s;
 }
 
 // Transfer the patterns from the rules to the states.
-void transfer(row *rows, state *states) {
+void transfer(char ***rows, state *states) {
    for (int i = 0; i < getLength(rows); i++) {
-        row *r = &rows[i];
-        if (isTagName(r->tokens[0])) report(i, "unexpected tag");
-        if (! isStateName(r->tokens[0])) continue;
-        int n = getLength(r->tokens);
-        if (n < 4) report(i, "incomplete rule");
-        if (! isStateName(r->tokens[n-2])) report(i, "expecting target state");
-        char *tag = r->tokens[n-1];
-        int baseIndex = find(states, r->tokens[0]);
-        int target = find(states, r->tokens[n-2]);
+        char **tokens = rows[i];
+        if (isTagName(tokens[0])) error("unexpected tag on line %d", i+1);
+        if (! isStateName(tokens[0])) continue;
+        int n = getLength(tokens);
+        if (n < 4) error("incomplete rule on line %d", i+1);
+        if (! isStateName(tokens[n-2])) {
+            error("expecting target state on line %d", i+1);
+        }
+        char *tag = tokens[n-1];
+        int baseIndex = find(states, tokens[0]);
+        int target = find(states, tokens[n-2]);
         state *base = &states[baseIndex];
         int pl = getLength(base->patterns);
         for (int j = 1; j < n-2; j++) {
             pattern *p = &base->patterns[pl++];
             setLength(base->patterns, pl);
-            char *s = r->tokens[j];
+            char *s = tokens[j];
+            if (strcmp(s, "\\") == 0) error("empty lookahead on line %d", i+1);
+            if (s[0] == '\\' && 'a' <= s[1] && s[1] <= 'z' && s[2] == '\0') {
+                if (s[1] != 's' && s[1] != 'n') {
+                    error("bad lookahead on line %d", i+1);
+                }
+//                if (strcmp(tag, "?") == 0) {
+//                    error("rule with \\s or \\n but no tag on line %d", i+1);
+//                }
+            }
             convert(s, target, tag, p);
         }
    }    
 }
 
 // ---------- Ranges -----------------------------------------------------------
+
 // A range such as 0..9 is equivalent to several one-character patterns, except
 // that more specific patterns take precedence. Ranges are expanded by
-// repeatedly finding a range with no shorter range inside it, and replacing it
-// by one-character patterns for those characters not already handled.
+// repeatedly finding a range with no subrange, and replacing it by
+// one-character patterns for those characters not already handled.
 
 bool isRange(char *s) {
     if (strlen(s) != 4) return false;
@@ -270,25 +283,33 @@ char **getSingles() {
     return singles;
 }
 
+void print(pattern *patterns) {
+    int n = getLength(patterns);
+    printf("n=%d\n", n);
+    for (int i=0; i<n; i++) {
+        printf("i: %d s: %s\n", i, patterns[i].s);
+    }
+}
+
 // Expand the range at the given offset in the list of patterns for one state.
 void derange(pattern *patterns, int r, char **singles) {
-    char *range = patterns[r].s;
     int n = getLength(patterns);
-    for (char ch = range[0]; ch <= range[3]; ch++) {
+    pattern p = patterns[r];
+    n--;
+    patterns[r] = patterns[n];
+    setLength(patterns, n);
+    for (char ch = p.s[0]; ch <= p.s[3]; ch++) {
         bool found = false;
         for (int i = 0; i < n; i++) {
             char *s = patterns[i].s;
             if (s[0] == ch && s[1] == '\0') { found = true; break; }
         }
         if (found) continue;
-        patterns[n] = patterns[r];
-        patterns[n].s = singles[ch];
+        patterns[n] = p;
+        patterns[n].s = singles[(int)ch];
         n++;
         setLength(patterns, n);
     }
-    n--;
-    patterns[r] = patterns[n];
-    setLength(patterns, n);
 }
 
 // Expand all ranges in a state.
@@ -299,33 +320,140 @@ void derangeState(state *st, char **singles) {
         int r = -1;
         for (int i = 0; i < getLength(ps); i++) {
             if (! isRange(ps[i].s)) continue;
-            printf("r: %s\n", ps[i].s);
             if (r >= 0) {
                 if (overlap(ps[r].s, ps[i].s)) {
                     error("state %s has overlapping ranges %s %s",
                         st->name, ps[r].s, ps[i].s);
                 }
-                if (subRange(ps[i].s, ps[r].s)) r = i;
+                if (subRange(ps[i].s, ps[r].s)) {
+                    printf("sub %s %s\n", ps[i].s, ps[r].s);
+                    r = i;
+                }
             }
             else r = i;
-//            printf("r: %s\n", ps[i].s);
-            if (r < 0) done = true;
-            else derange(ps, r, singles);
         }
-        break;
+        if (r < 0) done = true;
+        else derange(ps, r, singles);
     }
 }
 
 // Expand all ranges.
 void derangeAll(state *states, char **singles) {
     for (int i = 0; i < getLength(states); i++) {
-                   printf("i: %d\n", i);
- 
         derangeState(&states[i], singles);
     }
 }
 
-// -----------
+// ---------- Checks -----------------------------------------------------------
+// TODO check states \s \n without tag!
+
+// Check that a state is defined, i.e. has at least one pattern.
+void isDefined(state *st) {
+    if (getLength(st->patterns) > 0) return;
+    error("state %s has no rules", st->name); 
+}
+
+// Check that a state doesn't have duplicate patterns.
+void noDuplicate(state *st) {
+    int n = getLength(st->patterns);
+    for (int i = 0; i < n; i++) {
+        char *si = st->patterns[i].s;
+        for (int j = i+1; j < n; j++) {
+            char *sj = st->patterns[j].s;
+            if (strcmp(si,sj) != 0) continue;
+            error("state %s has pattern %s twice", st->name, si);
+        }
+    }
+}
+
+// Check that a state handles a given character. 
+void handles(state *st, char ch) {
+    char s[] = { ch, '\0'};
+    bool found = false;
+    for (int i = 0; i < getLength(st->patterns); i++) {
+        if (strcmp(st->patterns[i].s, s) == 0) found = true;
+    }
+    if (found) return;
+    if (ch == ' ') error("state %s doesn't handle \\s", st->name);
+    else if (ch == '\n') error("state %s doesn't handle \\n", st->name);
+    else error("state %s doesn't handle %c", st->name, ch);
+}
+
+// Check that a state handles every character.
+void complete(state *st) {
+    for (char ch = '!'; ch <= '~'; ch++) handles(st, ch);
+    handles(st, ' ');
+    handles(st, '\n');
+}
+
+// Check that if a state has a lookahead pattern causing a jump to a target
+// state, the target can't jump again on the same input (the target doesn't
+// have a compatible lookahead pattern).
+void noDoubleJump(state *st, state *states) {
+    for (int i = 0; i < getLength(st->patterns); i++) {
+        pattern *p = &st->patterns[i];
+        if (! p->lookahead) continue;
+        if (p->s[0] == ' ' || p->s[0] == '\n') continue;
+        state *target = &states[p->target];
+        for (int j = 0; j < getLength(target->patterns); j++) {
+            if (! target->patterns[j].lookahead) continue;
+            char *s1 = p->s, *s2 = target->patterns[j].s;
+            int n1 = strlen(s1), n2 = strlen(s2);
+            int n = (n1 < n2) ? n1 : n2;
+            if (strncmp(s1, s2, n) != 0) continue;
+            error("double jump from state %s on %s", st->name, s1);
+        }
+    }    
+}
+
+// Work out which states are starters (the first state, the target of a tagged
+// pattern, the target of a lookahead other than \s \n from a starter state).
+// Note that the lack of double jumps means we don't have to follow chains.
+void markStarters(state *states) {
+    states[0].starter = true;
+    for (int i = 0; i < getLength(states); i++) {
+        state *st = &states[i];
+        for (int j = 0; j < getLength(st->patterns); j++) {
+            pattern *p = &st->patterns[j];
+            if (p->tag != '?') states[p->target].starter = true;
+            if (p->lookahead) {
+                if (strcmp(p->s, " ") != 0 && strcmp(p->s, "\n") != 0) {
+                    states[p->target].starter = true;
+                }
+            }
+        }
+    }
+}
+
+// Check every state.
+void checkStates(state *states) {
+    for (int i = 0; i < getLength(states); i++) {
+        state *st = &states[i];
+        isDefined(st);
+        noDuplicate(st);
+        complete(st);
+        noDoubleJump(st, states);
+        printf("A\n");
+        markStarters(states);
+        for (int i=0; i<getLength(states); i++) {
+            if (! states[i].starter) continue;
+            printf("starter %s\n", states[i].name);
+        }
+    }
+}
+
+/*
+<p>A rule with a
+<code>\s</code> or <code>\n</code> lookahead pattern must have a tag to
+terminate the current token. Where a lookahead pattern other than
+<code>\s</code> or <code>\n</code> causes a jump between states without
+consuming input, there is a check that the target state consumes at least one
+of the lookahead characters.</p>
+
+<p>There is a check that no empty tokens can be created. Every state must
+either never occur at the beginning of a token, or else must not be able to
+terminate a token without consuming any characters.</p>
+*/
 
 // The number of rows is an upper bound for the number of states, and the
 // number of tags. The number of rows times 10 + 128 is a reasonable upper
@@ -343,28 +471,15 @@ int main() {
     printf("Chars: %lu\n", strlen(text));
     char **lines = splitLines(text);
     printf("Lines: %d\n", getLength(lines));
-    row *rows = makeRows(lines);
+    char ***rows = makeRows(lines);
     printf("Rows: %d\n", getLength(rows));
     state *states = allocate(256, sizeof(state));
     transfer(rows, states);
     printf("States: %d\n", getLength(states));
     char **singles = getSingles();
-    int n = getLength(states[0].patterns);
-    for (int i = 0; i < n; i++) {
-        printf("%s", states[0].patterns[i].s);
-        printf(" %d", states[0].patterns[i].lookahead);
-        printf(" %c", states[0].patterns[i].tag);
-        printf(" %d\n", states[0].patterns[i].target);
-    }
     derangeAll(states, singles);
-    printf("%s:\n", states[0].name);
-    //int n = getLength(states[0].patterns);
-    for (int i = 0; i < n; i++) {
-        printf("%s", states[0].patterns[i].s);
-        printf(" %d", states[0].patterns[i].lookahead);
-        printf(" %c", states[0].patterns[i].tag);
-        printf(" %d\n", states[0].patterns[i].target);
-    }
+    checkStates(states);
+//    printf("%s:\n", states[1].name);
     /*
     for (int i=0; i<getLength(rows); i++) {
         printf("%d", i+1);
