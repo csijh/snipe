@@ -90,14 +90,14 @@ dot     \!..~ \s \n   start SIGN
 start   '      char
 char    !..~   char
 char    \\'    char
-char    \s     char QUOTED
-char    ' \n   start QUOTED
+char    \s     char QUOTE
+char    ' \n   start QUOTE
 
 start   "      string
 string  !..~   string
 string  \\"    string
-string  \s     string QUOTED
-string  " \n   start QUOTED
+string  \s     string QUOTE
+string  " \n   start QUOTE
 
 // One-line comment. Mark /* or */ as warning.
 
@@ -141,8 +141,8 @@ hash      \!..~ \n                          start
 include   <                                 filename
 include   \!..~ \s \n                       start
 filename  !..~                              filename
-filename  \s                                filename QUOTED
-filename  > \n                              start QUOTED
+filename  \s                                filename QUOTE
+filename  > \n                              start QUOTE
 
 // Illegal characters (\s \n should never occur).
 start     $ @ ` \s \n                       start UNKNOWN

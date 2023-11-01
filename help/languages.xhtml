@@ -32,11 +32,11 @@ of a scanner in a compiler. On the one hand the scanner:</p>
 </ul>
 
 <p>One common reason for a scanner to be approximate is when the language has
-unlimited nesting of multi-line comments. A scanner based on regular
-expressions or a state machine can only support nesting to a small fixed
-depth. Another common reason is if the lexical rules for a language depend on
-syntactic context. A multi-language editor doesn't normally support full
-parsing of languages. On the other hand, the scanner:</p>
+unlimited nesting of multi-line comments. A scanner based on regular expressions
+or a state machine can only support nesting to a small fixed depth. Another
+common reason is if the lexical rules for a language depend on syntactic
+context. A multi-language editor doesn't normally support full parsing of
+languages. On the other hand, the scanner:</p>
 
 <ul>
 <li>must partition the whole text into tokens</li>
@@ -55,12 +55,11 @@ less compact. For example, the C language is described by the
 generic scanner uses the state machine table in the file to scan source text
 in the C language.</p>
 
-<p>To support incremental rescanning and help with word-based operations,
-spaces and newlines are never included in normal tokens, but form separator
-tokens on their own. Long sequences such as comments and string literals are
-broken up into mini-tokens. A line of source text can be re-scanned in
-isolation, given only a suitable starting state at the beginning of the
-line.</p>
+<p>To support incremental rescanning and help with word-based operations, long
+sequences such as comments and string literals are broken up into mini-tokens
+at spaces and newlines, which are always treated as separators.  A line of
+source text can be re-scanned in isolation, given only a suitable starting
+state at the beginning of the line.</p>
 
 <h2>Rules</h2>
 
@@ -68,11 +67,11 @@ line.</p>
 non-international)">basic latin</u> text, excluding control characters other
 than newlines. The rules in the file specify how basic latin source text
 characters, excluding control characters, are divided into tokens. An
-interpreter which uses the description may treat every Unicode character
-beyond basic latin in the same way as a letter such as <code>z</code>. That is
-sufficient to handle the common uses of Unicode in identifiers, string
-literals and comments. It may also handle control characters by translating
-them or marking them as illegal tokens.</p>
+interpreter which uses the description may treat every Unicode character beyond
+basic Latin in the same way as a letters. That is sufficient to handle the
+common uses of Unicode in identifiers, string literals and comments. The scanner
+may also handle control characters by treating them the same as something else,
+or translating them, or marking them as illegal tokens.</p>
 
 <p>In a language description file, a line which is blank or begins with a
 non-letter such as <code>#</code> or <code>/</code> is a comment line which is
@@ -95,7 +94,8 @@ the target state. For example:</p>
 double quote character appears next in the input, the scanner moves past the
 character and goes into the <code>string</code> state.</p>
 
-<p>If a rule has a tag, the current token is ended, with the tag as its type. The tag should normally be one of those expected by Snipe, e.g. for syntax highlighting. For example:</p>
+<p>If a rule has a tag, the current token is ended, with the tag as its type.
+The tag should normally be one of those expected by Snipe. For example:</p>
 
 <pre>start == != start OP
 </pre>
@@ -140,10 +140,11 @@ character, if a digit appears next in the source text, the scanner goes to the
 characters, and <code>\n</code> matches a gap which includes at least one
 newline. Neither a space nor a newline can be recognized other than as a
 lookahead. Other single-letter lookahead patterns are reserved for future
-development. A literal single letter such as <code>x</code> can be recognized
-as a lookahead using a range such as <code>\x..x</code>.  The scanner skips
-the gap, marking it as one or more separator tokens, then scanning continues
-in the target state.</p>
+development. A literal single letter such as <code>x</code> can be recognized as
+a lookahead using a range such as <code>\x..x</code>. If the rule has a tag, the
+current token is terminated and given the tag as a type, the gap is skipped and
+marked as one or more separators, and scanning continues in the target state. If
+the rule has no tag, the scanner jumps straight to the target state.</p>
 
 <p>A pattern <code>\</code> consisting of just a backslash is an error. A
 pattern beginning with two backslashes such as <code>\\u</code> is a
@@ -199,28 +200,24 @@ id \!..~ \s \n    start ID
 </pre>
 
 <p>If a letter or digit appears next, the first rule applies. If any other
-character appears, the second rule applies. Any other ambiguity between two
-patterns in the rules for a state, where one is not obviously more specific
-than the other, is an error.</p>
+character appears, the second rule applies.</p>
+
+<p>Any other ambiguity between two patterns in the rules for a state is an
+error.</p>
 
 <p>When a language description is processed, various checks are made to ensure
-that the scanner never fails, creates non-empty tokens, partitions the input by
-including every character in a token, treats spaces and newlines as separator
-tokens, handles all possible inputs, and terminates without getting stuck in a
-loop.</p>
+that the scanner never fails, creates non-empty tokens, partitions the whole
+input into tokens and separators, handles all possible inputs, and terminates
+without getting stuck in a loop.</p>
 
 <p>There is a check that every state has at least one rule, does not contain
-duplicate patterns, and handles all possible inputs, by including all single
-characters as patterns in some way, e.g. by including <code>!..~ \s \n</code>
-as patterns.  A rule with a <code>\s</code> or <code>\n</code> lookahead
-pattern must have a tag to terminate the current token. Where a lookahead
-pattern other than <code>\s</code> or <code>\n</code> causes a jump between
-states without consuming input, there is a check that the target state consumes
-at least one of the lookahead characters.</p>
-
-<p>There is a check that no empty tokens can be created. Every state must
-either never occur at the beginning of a token, or else must not be able to
-terminate a token without consuming any characters.</p>
+duplicate patterns, and handles all the single characters <code>!..~</code> in
+some way. If a state can occur after the start of a token, it must also handle
+<code>\s</code> and <code>\n</code> (which can't occur at the start of a token
+because of automatic skipping). There is a check that no state can cause an
+empty token to be created. Where a lookahead pattern in a rule with no tag
+causes a jump between states without consuming input, there is a check that no
+infinite loop of jumps can occur.</p>
 
 <h2>Examples</h2>
 
