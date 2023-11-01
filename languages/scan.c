@@ -275,8 +275,8 @@ bool overlap(char *s, char *t) {
 
 // Get an array of one-character strings.
 char **getSingles() {
-    char *bytes = malloc(256);
-    char **singles = malloc(128 * sizeof(char *));
+    char **singles = malloc(128 * sizeof(char *) + 256);
+    char *bytes = (char *)(singles + 128);
     for (int ch = 0; ch < 128; ch++) {
         bytes[2*ch] = ch;
         bytes[2*ch+1] = '\0';
@@ -478,6 +478,7 @@ void checkStates(state *states) {
         if (states[i].ender) printf(" ender");
         printf("\n");
     }
+    release(jumps);
 }
 
 // ---------- Sorting ----------------------------------------------------------
@@ -517,6 +518,7 @@ void sort(pattern *patterns) {
 pattern ***makeChart(state *states) {
     int n = getLength(states);
     pattern ***chart = allocate(n, sizeof(pattern **));
+    chart = push(chart, n);
     for (int i = 0; i < n; i++) {
         chart[i] = allocate(128, sizeof(pattern *));
         for (int j = 0; j < 128; j++) {
@@ -554,49 +556,120 @@ pattern ***makeChart(state *states) {
 // offset relative to the start of the table to a list of patterns starting with
 // that character, with their actions.
 
-// Fill in an action for a given pattern. An action consists of two bytes. The
-// first is the tag, compressed into 6 bits, similarly to base64, i.e. an index
-// into A..Za..z0..9+ with two top bits. The first is 1 to mean the last action
-// in a list, the second is 1 to mean lookahead. The second byte gives the
-// target state.
-void fillAction(unsigned char *action, char tag, bool lookahead, bool last) {
-    int code;
+typedef unsigned char byte;
+
+// Fill in an action for a given pattern, as two bytes. The first is the tag,
+// compressed into 6 bits, similarly to base64 (i.e. an index into
+// "A..Za..z0..9+") plus two top bits. The first is 1 to mean the last action
+//  in a list, the second is 1 to mean lookahead. The second byte gives the
+//  target state.
+void fillAction(byte *action, pattern *p, bool last) {
+    int code, tag = p->tag;
     if ('A' <= tag && tag <= 'Z') code = tag - 'A';
     else if ('a' <= tag && tag <= 'z') code = 26 + (tag - 'a');
     else if ('0' <= tag && tag <= '9') code = 52 + (tag - '0');
     else code = 62;
-    if (lookahead) code += 64;
+    if (p->lookahead) code += 64;
     if (last) code += 128;
     action[0] = code;
     action[1] = p->target; 
 }
 
 // When there is more than one pattern starting with the same character, enter
-// the given offset
-void fillLink()
+// the given offset into the table entry (in bigendian order).
+void fillLink(byte *action, int offset) {
+    action[0] = (offset >> 8) & 0xFF;
+    action[1] = offset & 0xFF;
+}
 
-char *compile(pattern ***chart) {
-    unsigned char *table = allocate(5000, 1);
+// Fill in a list of patterns as actions at the end of the table. Each action
+// consists of two bytes as in fillAction, followed by a byte containing the
+// number of characters in the pattern, followed by the characters.
+void fillList(pattern *ps, byte *table) {
+    int np = getLength(ps);
+    for (int i = 0; i < np; i++) {
+        pattern *p = &ps[i];
+        int len = strlen(p->s);
+        byte *action = &table[getLength(table)];
+        bool last = (i == np - 1);
+        table = push(table, 2 + 1 + len);
+        fillAction(action, p, last);
+        action[2] = len;
+        strncpy((char *)&action[4], p->s, len);
+    }
+}
+
+byte *compile(pattern ***chart) {
+    byte *table = allocate(5000, 1);
     table = push(table, 256 * getLength(chart));
+    printf("table1: %d\n", getLength(table));
     for (int i = 0; i < getLength(chart); i++) {
         for (int j = 0; j < 128; j++) {
-            unsigned char *action = &table[256 * i + j];
+            byte *action = &table[256 * i + j];
             pattern *ps = chart[i][j];
             int n = getLength(ps);
-            if (n == 0) fillAction(action, 'U', false, true);
-            else if (n == 1) fillAction(action, );
+            if (n == 0) {
+                pattern p = { .tag='U', .target=0, .lookahead=false };
+                fillAction(action, &p, true);
+            }
+            else if (n == 1) fillAction(action, &ps[0], true);
+            else {
+                int offset = getLength(table);
+                fillLink(action, offset);
+                fillList(ps, table);
+            }
+        }
+    }
+    return table;
+}
+
+// ---------- Scanning ---------------------------------------------------------
+// A line of text is scanned using the binary state transition table, and an
+// output line of text is produced.
+
+// Compressed tag values representing '+' (add to token), 'G' and 'N'.
+enum { ADD = 62, GAP = 6, NEWLINE = 13 };
+
+// Skip spaces and newlines. Mark spaces with G and each newline with N.
+int skip(char *in, char *out, int n) {
+    int gap = n;
+    while (in[n] == ' ' || in[n] == '\n') {
+        printf("n: %d\n", n);
+        if (in[n] == '\n') {
+            out[n] = NEWLINE;
+            if (n > gap) out[gap] = GAP;
+            gap = n + 1;
+        }
+        else out[n] = ADD;
+        n++;
+    }
+    if (n > gap) out[gap] = GAP;
+    return n;
+}
+
+void scan(byte *table, char *in, char *out) {
+    int state = 0, at = 0, token = 0;
+    while (in[at] != '\n') {
+        int ch = in[at];
+        byte *action = &table[256*state + ch];
+        bool immediate = (action[0] & 0x80) != 0;
+        if (immediate) {
+            bool lookahead = action[0] & 0x40;
+            int tag = action[0] & 0x3F;
+            if (! lookahead) {
+                at++;
+                if (ch == ' ') ;
+            }
+            state = action[1];
         }
     }
 }
 
-// TODO: make binary table: #states x 256, 2-byte actions.
-// Action:  [b0 b1 tag, target]
-// b0 = 0 to mean one-element list.
-// b1 = lookahead
-// tag = "base64" tag character (A..Z,a..z,0..9).
-// OR: Action = [b0 hi, lo].
-// b0 = 1 to mean longer list
-// hi*256+low = offset of list (from start of table?)
+// ---------- Testing ----------------------------------------------------------
+// A line in the language description starting with "> " is a test. A line below
+// it starting with "< " shows expected results. The result has a one-character
+// type under the first character of a token, with 'G' for a gap of spaces
+// and 'N' for a newline.
 
 // TODO:  testing.
 
@@ -625,8 +698,29 @@ int main() {
     char **singles = getSingles();
     derangeAll(states, singles);
     checkStates(states);
-    makeChart(states);
+    pattern ***chart = makeChart(states);
+    byte *table = compile(chart);
+    printf("table %d %d\n", 256*getLength(states), getLength(table));
 
+    char in[100] = "   \n   b";
+    char out[100];
+//    scan(in, out, 0);
+    out[7] = '\0';
+ //   printf("out: %s\n", out);
+
+    free(text);
+    release(lines);
+    for (int i = 0; i < getLength(rows); i++) release(rows[i]);
+    release(rows);
+    for (int i = 0; i < getLength(states); i++) release(states[i].patterns);
+    release(states);
+    for (int i = 0; i < getLength(chart); i++) {
+        for (int j = 0; j < 128; j++) release(chart[i][j]);
+        release(chart[i]);
+    }
+    release(chart);
+    free(singles);
+    release(table);
 //    printf("%s:\n", states[1].name);
     /*
     for (int i=0; i<getLength(rows); i++) {

@@ -136,15 +136,18 @@ identifier type. A lookahead pattern can also be a range:</p>
 character, if a digit appears next in the source text, the scanner goes to the
 <code>float</code> state without moving past the digit.</p>
 
-<p>A lookahead pattern <code>\s</code> matches a gap consisting of space
-characters, and <code>\n</code> matches a gap which includes at least one
-newline. Neither a space nor a newline can be recognized other than as a
-lookahead. Other single-letter lookahead patterns are reserved for future
-development. A literal single letter such as <code>x</code> can be recognized as
-a lookahead using a range such as <code>\x..x</code>. If the rule has a tag, the
-current token is terminated and given the tag as a type, the gap is skipped and
-marked as one or more separators, and scanning continues in the target state. If
-the rule has no tag, the scanner jumps straight to the target state.</p>
+<p>A lookahead pattern c matches a space and <code>\n</code> matches a newline.
+(Either lines being scanned have no trailing spaces, or the scanner treats
+spaces followed by a newline as matching <code>\n</code> rather than
+<code>\n</code>.) If the current rule has no tag, the scanner jumps straight to
+the target state as with other lookahead patterns. If the rule has a tag, the
+current token is terminated and given the tag as a type, as usual, but then all
+spaces and newlines are skipped and suitably marked as separators until the
+next visible character is reached. Neither a space nor a newline can be
+recognized other than as a lookahead. Other single-letter lookahead patterns
+are reserved for future development. A literal single letter such as
+<code>x</code> can be recognized as a lookahead using a range such as
+<code>\x..x</code>.</p>
 
 <p>A pattern <code>\</code> consisting of just a backslash is an error. A
 pattern beginning with two backslashes such as <code>\\u</code> is a
