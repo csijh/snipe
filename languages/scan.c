@@ -556,17 +556,37 @@ pattern ***makeChart(state *states) {
 
 // Fill in an action for a given pattern. An action consists of two bytes. The
 // first is the tag, compressed into 6 bits, similarly to base64, i.e. an index
-// into A..Za..z0..9+ with two top bits. The first is 1 to mean the list is to
-// be continued, the second is 1 to mean lookahead. The second byte gives the
+// into A..Za..z0..9+ with two top bits. The first is 1 to mean the last action
+// in a list, the second is 1 to mean lookahead. The second byte gives the
 // target state.
-void fillAction(char *action, pattern *p, bool last) {
-    int ch = p->tag;
-    if ()
+void fillAction(unsigned char *action, char tag, bool lookahead, bool last) {
+    int code;
+    if ('A' <= tag && tag <= 'Z') code = tag - 'A';
+    else if ('a' <= tag && tag <= 'z') code = 26 + (tag - 'a');
+    else if ('0' <= tag && tag <= '9') code = 52 + (tag - '0');
+    else code = 62;
+    if (lookahead) code += 64;
+    if (last) code += 128;
+    action[0] = code;
+    action[1] = p->target; 
 }
 
+// When there is more than one pattern starting with the same character, enter
+// the given offset
+void fillLink()
+
 char *compile(pattern ***chart) {
-    char *table = allocate(5000, 1);
+    unsigned char *table = allocate(5000, 1);
     table = push(table, 256 * getLength(chart));
+    for (int i = 0; i < getLength(chart); i++) {
+        for (int j = 0; j < 128; j++) {
+            unsigned char *action = &table[256 * i + j];
+            pattern *ps = chart[i][j];
+            int n = getLength(ps);
+            if (n == 0) fillAction(action, 'U', false, true);
+            else if (n == 1) fillAction(action, );
+        }
+    }
 }
 
 // TODO: make binary table: #states x 256, 2-byte actions.
