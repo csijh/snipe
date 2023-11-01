@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en-GB" xml:lang="en-GB">
+<head>
+<meta charset="UTF-8"/>
+<style>
+    body { font-size: 120%; }
+    pre, .indent { margin-left: 40px; }
+    img { display: block; margin: 0 auto; }
+    mark {
+      font-family: cursive;
+      font-size: 95%;
+      color: #080;
+      background-color: white;
+    }
+</style>
+<title>Snipe Customisation</title>
+</head>
+<body>
+
+<h1>Languages</h1>
+
+<p><mark>Snipe</mark> has a scanner, which is implemented as a string-matching
+state machine, to divide the text of a file being edited into tokens, and to
+give each token a type. A scanner for an editor has different goals from those
+of a scanner in a compiler. On the one hand the scanner:</p>
+
+<ul>
+<li>may omit some details needed only for full compiling</li>
+<li>may accept some tokens that a compiler would reject</li>
+<li>may split or classify tokens differently</li>
+<li>may be approximate</li>
+</ul>
+
+<p>One common reason for a scanner to be approximate is when the language has
+unlimited nesting of multi-line comments. A scanner based on regular expressions
+or a state machine can only support nesting to a small fixed depth. Another
+common reason is if the lexical rules for a language depend on syntactic
+context. A multi-language editor doesn't normally support full parsing of
+languages. On the other hand, the scanner:</p>
+
+<ul>
+<li>must partition the whole text into tokens</li>
+<li>must be able to handle any text, whether valid or not</li>
+<li>may support dynamic loading of language definitions</li>
+<li>may support incremental rescanning</li>
+<li>may help with 'word'-based reflow or cursor movement</li>
+<li>may help with bracket matching, indenting or semicolon insertion</li>
+</ul>
+
+<p>Languages for programming editors are often expressed using regular
+expressions. Languages for Snipe are instead expressed as string-matching
+state machine tables. These are easier to read and maintain, and only a little
+less compact. For example, the C language is described by the
+<code>c.txt</code> file in the directory <code>snipe/languages</code>. A
+generic scanner uses the state machine table in the file to scan source text
+in the C language.</p>
+
+<p>To support incremental rescanning and help with word-based operations, long
+sequences such as comments and string literals are broken up into mini-tokens
+at spaces and newlines, which are always treated as separators.  A line of
+source text can be re-scanned in isolation, given only a suitable starting
+state at the beginning of the line.</p>
+
+<h2>Rules</h2>
+
+<p>A language description contains <u title="aka ASCII (obsolete and
+non-international)">basic latin</u> text, excluding control characters other
+than newlines. The rules in the file specify how basic latin source text
+characters, excluding control characters, are divided into tokens. An
+interpreter which uses the description may treat every Unicode character beyond
+basic Latin in the same way as a letters. That is sufficient to handle the
+common uses of Unicode in identifiers, string literals and comments. The scanner
+may also handle control characters by treating them the same as something else,
+or translating them, or marking them as illegal tokens.</p>
+
+<p>In a language description file, a line which is blank or begins with a
+non-letter such as <code>#</code> or <code>/</code> is a comment line which is
+ignored, or a line used for testing. Otherwise, a line represents a
+string-matching rule.</p>
+
+<p>A rule has a base state name, a list of patterns to match, and a target
+state name, optionally followed by a tag, all separated by spaces. A state
+name is a lower case word, possibly including digits. A pattern is any
+sequence of non-space characters. A tag is an upper case word, possibly
+including digits. When the scanner is in the base state of a rule and one of
+the patterns appears next in the input, the scanner moves past the matched
+characters to include them in the token currently being scanned, and goes into
+the target state. For example:</p>
+
+<pre>start " string
+</pre>
+
+<p>With this rule, if the scanner is in the <code>start</code> state and a
+double quote character appears next in the input, the scanner moves past the
+character and goes into the <code>string</code> state.</p>
+
+<p>If a rule has a tag, the current token is ended, with the tag as its type.
+The tag should normally be one of those expected by Snipe. For example:</p>
+
+<pre>start == != start OP
+</pre>
+
+<p>With this rule, in the <code>start</code> state, if either of the equality
+operators <code>==</code> or <code>!=</code> appears next in the input, then
+the scanner moves past the operator, marks it as a token with type
+<code>OP</code>, and goes to the <code>start</code> state.</p>
+
+<p>A pattern can consist of two dots with a character on either side. It
+represents a range of one-character patterns, e.g. <code>0..9</code> stands
+for <code>0 1 2 3 4 5 6 7 8 9</code>. For example:</p>
+
+<pre>start 0..9 number
+</pre>
+
+<p>This rule says that if the scanner is in the <code>start</code> state, and
+a digit appears next in the input, the scanner matches the digit and goes into
+the <code>number</code> state. The pattern <code>!..~</code> can be used to
+match any single visible character.</p>
+
+<p>A limited form of lookahead is provided. A pattern which starts with a
+single backslash <code>\</code> is a lookahead pattern. It indicates a string
+to be matched without being included in the current token. For example:</p>
+
+<pre>id \( start FUNCTION
+</pre>
+
+<p>In the <code>id</code> state, which presumably recognizes identifier
+tokens, if the next character in the source text is an open bracket, the
+current token is marked as a <code>FUNCTION</code> instead of the usual
+identifier type. A lookahead pattern can also be a range:</p>
+
+<pre>dot \0..9 float
+</pre>
+
+<p>In the <code>dot</code> state, presumably just after recognizing a dot
+character, if a digit appears next in the source text, the scanner goes to the
+<code>float</code> state without moving past the digit.</p>
+
+<p>A lookahead pattern <code>\s</code> matches a gap consisting of space
+characters, and <code>\n</code> matches a gap which includes at least one
+newline. Neither a space nor a newline can be recognized other than as a
+lookahead. Other single-letter lookahead patterns are reserved for future
+development. A literal single letter such as <code>x</code> can be recognized as
+a lookahead using a range such as <code>\x..x</code>. If the rule has a tag, the
+current token is terminated and given the tag as a type, the gap is skipped and
+marked as one or more separators, and scanning continues in the target state. If
+the rule has no tag, the scanner jumps straight to the target state.</p>
+
+<p>A pattern <code>\</code> consisting of just a backslash is an error. A
+pattern beginning with two backslashes such as <code>\\u</code> is a
+non-lookahead pattern matching a string such as <code>\u</code> starting with a
+single backslash. A pattern beginning with three backslashes such as
+<code>\\\u</code> is a lookahead for a string such as <code>\u</code> starting
+with a single backslash. A backslash anywhere else in a pattern stands for
+itself.</p>
+
+<h2>States</h2>
+
+<p>A state is defined by the rules which have that state as their base state.
+The rules defining a state can be in any order and need not necessarily be
+contiguous.</p>
+
+<p>If the input matches a pattern mentioned in any one of the rules for a
+state, that rule is applied. For example:</p>
+
+<pre>start == != start OP
+start a..z A..Z id
+</pre>
+
+<p>In the <code>start</code> state, if an equality operator appears next in
+the input, it is marked with type <code>OP</code> and the scanner remains in
+the <code>start</code> state, whereas if a letter appears, the scanner goes
+into the <code>id</code> state.</p>
+
+<p>If two different patterns, whether normal or lookahead, match at one
+position in the input, the longer pattern takes precedence:</p>
+
+<pre>start = start SIGN
+start == != start OP
+</pre>
+
+<p>In this example, if there are two equal signs next in the input, the second
+rule applies, not the first. If there is only a single equal sign, the first
+rule applies.</p>
+
+<p>If a single character is matched directly by one pattern and as part of a
+range in another pattern, the direct pattern takes precedence:</p>
+
+<pre>string !..~ string
+string " start STRING
+</pre>
+
+<p>Here, if a double quote <code>"</code> is next in the input, the second rule
+is applied, even though <code>"</code> is included in the range in the first
+rule. If a single character is matched by two ranges, and one is a subrange of
+the other, the subrange takes precedence. For example:</p>
+
+<pre>id a..z A..Z 0..9 id
+id \!..~ \s \n    start ID
+</pre>
+
+<p>If a letter or digit appears next, the first rule applies. If any other
+character appears, the second rule applies.</p>
+
+<p>Any other ambiguity between two patterns in the rules for a state is an
+error.</p>
+
+<p>When a language description is processed, various checks are made to ensure
+that the scanner never fails, creates non-empty tokens, partitions the whole
+input into tokens and separators, handles all possible inputs, and terminates
+without getting stuck in a loop.</p>
+
+<p>There is a check that every state has at least one rule, does not contain
+duplicate patterns, and handles all the single characters <code>!..~</code> in
+some way. If a state can occur after the start of a token, it must also handle
+<code>\s</code> and <code>\n</code> (which can't occur at the start of a token
+because of automatic skipping). There is a check that no state can cause an
+empty token to be created. Where a lookahead pattern in a rule with no tag
+causes a jump between states without consuming input, there is a check that no
+infinite loop of jumps can occur.</p>
+
+<h2>Examples</h2>
+
+<p>In many programming languages, an identifier is allowed
+to start with a keyword. In that case, identifiers can be handled by rules
+like these:</p>
+
+<pre>start if else for while key
+start a..z A..Z id
+
+key a..z A..Z 0..9 id
+key \ start KEY
+
+id a..z A..Z 0..9 id
+id \ start ID
+</pre>
+
+<p>Suppose the keyword <code>for</code> appears next in the input. The
+scanner goes to the <code>key</code> state which gives the token the type
+<code>KEY</code>.</p>
+
+<p>Suppose instead that the identifier <code>form</code> appears next in the
+input. The prefix <code>for</code> is matched and the scanner goes into the
+<code>key</code> state. Then the <code>m</code> is matched, the scanner goes
+into the <code>id</code> state, and the token ends up being given the type
+<code>ID</code>.</p>
+
+<p>One-line comments, say starting with <code>//</code> and continuing to the
+end of the line, can be handled with rules of the form:</p>
+
+<pre>start // note
+
+note !..~ note
+note \s note NOTE
+note \n start NOTE
+</pre>
+
+<p>A comment line then consists of a sequence of tokens of type
+<code>NOTE</code>, separated by spaces.</p>
+
+<p>Multi-line comments, say starting with <code>/*</code> and ending with
+<code>*/</code> and not nesting, can be handled by:</p>
+
+<pre>start /* comment
+
+comment !..~ comment
+comment \s \n comment COMMENT
+comment */ start COMMENT
+</pre>
+
+<p>Multi-line comments which nest can be implemented to a small fixed level of
+nesting. In fact, one level of nesting is all that is needed to be able to use
+them for commenting out, handled like this:</p>
+
+<pre>start /* comment1
+
+comment1 /* comment2
+comment1 !..~ comment1
+comment1 \s \n comment1 COMMENT
+comment1 */ start COMMENT
+
+comment2 !..~ comment2
+comment2 \s \n comment2 COMMENT
+comment2 */ comment1 COMMENT
+</pre>
+
+<p>Suppose a language description contained the following rules:</p>
+
+<pre>even \a..z odd
+odd \a..z even
+</pre>
+
+<p>An error would be reported, because this could result in an infinite loop
+when scanning. A more subtle example of an error might be:</p>
+
+<pre>start . dot
+
+dot 0..9 number
+dot \a..z \A..Z prop SIGN
+dot \ start SIGN
+
+prop a..z A..Z 0..9 prop
+prop \ start PROPERTY
+</pre>
+
+<p>The idea behind these rules is that if a dot is followed by an identifier,
+the identifier should be highlighted differently, as a <code>PROPERTY</code>.
+However, the <code>prop</code> state is classified as a starting state,
+because it follows the completion of a <code>SIGN</code> token in the second
+<code>dot</code> rule. On the other hand, it has to be a continuing state,
+both because it is the target of its own first rule, and because it completes
+a <code>PROPERTY</code> token in its second rule. This can be corrected by
+writing:</p>
+
+<pre>dot 0..9 number
+dot \ prop0 SIGN
+
+prop0 a..z A..Z prop1
+prop0 \ start
+
+prop1 a..z A..Z 0..9 prop1
+prop1 .. start PROPERTY +
+</pre>
+
+<p>Now, <code>prop0</code> is a starting state which matches only the first
+letter, and <code>prop1</code> is a continuing state which recognizes the rest
+of the token.</p>
+
+<hr/>
+
+<h2>Tests</h2>
+
+<p>A language description can contain tests, which then also act as examples
+illustrating the operation of the rules. A line starting with <code>></code>
+and a space represents a line of source text. A line starting with
+<code>&lt;</code> and a space represents the output from the scanner, as a
+state followed by a sequence of tokens, each followed by its type. The state
+is the start state or the state at the end of the previous line of source
+text.</p>
+
+<h2>Conventions</h2>
+
+<p>==========</p>
+
+<p>The Snipe scanner does not just give each token a type for syntax
+highlighting purposes. It also supports further editor features, and some
+conventions are needed for this to work. Not all these conventions can be
+tested, but if a violation is detected, a warning is issued rather than an
+error.</p>
+
+<p>To handle automatic bracket matching, a bracket should be given one of the
+types <code>OPEN0, CLOSE0, OPEN1, CLOSE1, OPEN2, CLOSE2, OPEN3, CLOSE3</code>
+which represent increasing priority. For a curly bracket language, brackets
+might be handled like this:</p>
+
+<pre>start ( start OPEN0
+start ) start CLOSE0
+start [ start OPEN1
+start ] start CLOSE1
+start { start OPEN2
+start } start CLOSE2
+</pre>
+
+<p>In a language where keywords <code>begin</code> and <code>end</code> are used
+for blocks instead of curly brackets, the last two rules might be replaced
+by:</p>
+
+<pre>start begin start OPEN2
+start end start CLOSE2
+</pre>
+
+<p>If a bracket is not active because it is inside a comment or string
+literal, it should have, or be part of a token with, type
+<code>COMMENTED</code> or <code>QUOTED</code>.</p>
+
+<p>To ease the writing of tests, each token type can be abbreviated to a
+single character. The full set of token types is currently:</p>
+
+<p class="indent"><code>OPEN0 CLOSE0 OPEN1 CLOSE1 OPEN2 CLOSE2 OPEN3 CLOSE3
+COMMENTED ERROR FUNCTION ID KEY OP PROPERTY QUOTED RESERVED SIGN
+TYPE VALUE</code></p>
+
+<p>These can all be abbreviated to their first characters, except for the
+brackets, which are abbreviated to <code>( ) [ ] { } &lt; ></code>.</p>
+
+<p>A typical test might appear something like this:</p>
+
+<pre>struct *point = { x, (y+1) }; int ns = [(n+2),3];
+K+++++ SI++++ S { IS (IOV) }S K++ I+ S [(IOV)SV]S
+</pre>
+
+<p>The first line represents some input text, and the line below represents the
+result of scanning. The first character of each token is marked below by the
+one-character abbreviation of its token type, and the remaining characters of a
+token are marked by dashes.</p>
+
+<p></p>
+
+<h2>Compiling...</h2>
+
+
+
+
+
+
+
+<p>A language description in <code>tokens.txt</code> can be compiled into a
+table using <code>compile.c</code> in <code>snipe/languages</code> and then
+executed for testing using <code>interpret.c</code>. The interpreter carries out
+tests in a file <code>tests.txt</code>. Each test consists of optional comment
+lines starting with <code>#</code>, followed by a line of text, followed by a
+line of tags generated by the scanner. For example:</p>
+
+<p>Thus the type of a token may be affected by the next token, but no more than
+that. To scan incrementally in the editor, when a token is altered, the editor
+needs to go back at least as far as the beginning of the previous token before
+the changed one, and find what state the scanner was in at that point, to start
+re-scanning.</p>
+
+<h3>Scanner operation</h3>
+
+<p>The current state of the scanner can be recorded now and then, e.g. at the
+start of each line of the text. Then, when some text changes while editing,
+re-scanning of the changed text need begin no earlier than at the start of the
+affected line. Re-scanning would then continue until synchronisation, i.e. until
+the current state of the scanner at the start of a line matches the previous
+state recorded at that point. It is desirable that this synchronisation should
+happen after only a line or two, to avoid visual instability for the user as
+well as inefficiency in the editor. Scanning is then effectively
+incremental.</p>
+
+<p>The first state to be defined in a language description is the default one
+for the scanner to start in. It is normal for most tokens to be scanned starting
+from that first state, with other states being defined to handle progression
+through each token. In that case, re-scanning is sure to be brief. However,
+alternative start states for tokens can be used to handle unusual
+situations.</p>
+
+
+<h3>Bracket Matching</h3>
+
+<p>TODO: explain forward algorithm. Assume only brackets. As well as text, there
+are two stacks: unmatched and matched. (Picture with ... for cursor position.)
+The unmatched stack contains indexes of currently unmatched open brackets (as
+standard). The matched stack contains matched (open,close) pairs of indexes. The
+indexes of the close brackets are in text order. Changes as you add or remove a
+bracket at the cursor are very small and incremental and efficient.  Two
+mismatched brackets are treated as matched, except that they are both
+highlighted as invalid. Incremental.</p>
+
+<p>TODO: explain backward algorithm. Entirely symmetrical. Note that the indexes
+are measured leftwards from the end of the text, so that they remain stable as
+insertions and deletions happen at the cursor.</p>
+
+<p>TODO: explain inwards algorithm. The two stacks are compared inwards.
+Mismatching pairs are highlighted red. Remaining surplus brackets are
+highlighted red. Give examples showing 'just typed' effects.</p>
+
+<p>After scanning into tokens, a matching algorithm is used to pair up brackets
+and delimiters. Some aims of the Snipe approach are to:</p>
+
+<ul>
+<li>highlight unmatched brackets and delimiters</li>
+<li>have small edits produce small changes</li>
+<li>make the algorithm incremental</li>
+</ul>
+
+<p>If brackets don't match, there is an ambiguity about which brackets to mark
+as unmatched. For example, the sequence <code>(()</code> can be treated in
+either of these two ways:</p>
+
+<pre class="match">(<b>(</b>)
+<b>(</b>()
+</pre>
+
+<p>In the first case, the outer brackets are matched and the inner one is
+highlighted as unmatched. In the second case, the rightmost brackets are
+matched, and the leftmost one is marked as unmatched.</p>
+
+<p>If the user has just typed one of the two open brackets, that is the one that
+is most intuitively highlighted as unmatched. That suggests a matching algorithm
+based on the user's history. However, that would make it awkward to save and
+reopen files, and it could easily become counter-intuitive.</p>
+
+<p>Instead, Snipe uses a matching strategy which is based purely on the text
+together with the user's current cursor position. Brackets are matched forwards
+from the start of the text up to the cursor, and backwards from the end of the
+text to the cursor. Surplus brackets on either side of the cursor are then
+matched up from outermost to innermost. Using three dots to mark the cursor
+position, the three brackets above are handled like this:</p>
+
+<style>
+pre.match { color: black; }
+pre.match i { color:black; font-style: normal; background-color: lightgrey; }
+pre.match b { color: red; }
+pre.match u { color: green; text-decoration: none; }
+</style>
+
+<pre class="match">(<b>(</b><u>...</u>)
+<b>(</b><u>...</u>()
+</pre>
+
+<p>In the first case, there are two surplus brackets before the cursor and one
+after, and the outermost two are matched. In the second case, there are no
+surplus brackets after the cursor, so the leftmost bracket is mismatched.</p>
+
+<p>The situation is complicated by multiline comments. Let's suppose that they
+are delimited by <code>/*</code> and <code>*/</code> and that these don't nest,
+as in many C-like languages. These comments cause two main problems. One is that
+commenting out goes wrong when there is an inner comment. The other is that
+inserting or deleting a comment delimiter can cause a large amount of text to be
+re-scanned, which is sometimes inefficient enough to cause a noticeable and
+irritating delay. In any case, it causes a large amount of changed highlighting
+on screen, which can be annoying.</p>
+
+<p>The approach in Snipe, to avoid these problems, is to treat <code>/*</code>
+as illegal inside comments (as <code>*/</code> already is) and, as with
+brackets, use both forward and backward matching. In addition, the effect of an
+unmatched comment delimiter only extends as far as the cursor. For example:</p>
+
+<pre class="match"><i>/*...<b>/*</b>...*/</i>...<b>*/</b>
+<b>/*</b>...<i>/*...<b>*/</b>...*/</i>
+</pre>
+
+<p>In the first case, the cursor is beyond the text fragment. The first and
+third delimiters are matched, and the text between is highlighted as a comment.
+The second and fourth delimiters are highlighted as unmatched. This is as
+expected, except for the highlighting of the second delimiter.</p>
+
+<p>In the second case, the cursor is before the text fragment. Working
+backwards, the fourth and second delimiters are matched, with the text between
+them highlighted as a comment, leaving the third and first delimiters unmatched.
+Although this highlighting doesn't agree with the language conventions, it is a
+reasonable approach once internal delimiters are regarded as invalid, and the
+need for correction is clearly indicated.</p>
+
+<p>To see the full effect on highlighting, here is a sequence of user actions in
+which an attempt is made to comment out some text which already contains a
+comment:</p>
+
+<pre class="match"><u>:</u>...<i>/*...*/</i>...
+<i><b>/*</b></i><u>:</u>...<i>/*...*/</i>...
+<i><b>/*</b>...</i><u>:</u><i>/*...*/</i>...
+<i>/*...<b>/*</b></i><u>:</u><i>...*/</i>...
+<i>/*...<b>/*</b>...</i><u>:</u><i>*/</i>...
+<i>/*...<b>/*</b>...</i><i>*/</i><u>:</u>...
+<i>/*...<b>/*</b>...</i><i>*/</i>...<u>:</u>
+<i>/*...<b>/*</b>...</i><i>*/</i>...<b>*/</b><u>:</u>
+</pre>
+
+<p>At the first step, an opening delimiter is typed. At the second, the cursor
+is moved past some text, which becomes highlighted as comment. Then the cursor
+is moved past the second opening delimiter, which becomes highlighted as
+unmatched. The first and third delimiters match, as surplus delimiters either
+side of the cursor. Then the cursor is moved past some text which is unchanged,
+and a final delimiter is typed, which is immediately highlighted as
+unmatched.</p>
+
+<p>During the sequence, the only changes on the screen are immediately adjacent
+to the cursor, with possibly one change of highlighting to a delimiter further
+away. And the changes are, arguably, very intuitive.</p>
+
+</body>
+</html>

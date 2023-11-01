@@ -10,6 +10,8 @@
 // Bad+Key with name "BadKey" to represent an incomplete or malformed token.
 // Any changes here must be matched by changes in the array of names in style.c
 enum style {
+    More,         // Continuation of current token
+    Text,         // Characaters not part of any normal token
     Point,        // Text caret
     Select,       // Toggle selection; specifies background colour
     Gap,          // Spaces; specifies overall background colour of display

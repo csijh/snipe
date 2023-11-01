@@ -1,0 +1,151 @@
+// C language definition, based on the C11 standard
+// See http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1548.pdf
+// The source text is assumed to be normalised, with no control characters
+// other than \n and no digraphs or trigraphs.
+
+// Keywords which are types or related to types. A few ids such as bool,
+// false, true from <stdbool.h> are treated as keywords. The type state checks
+// for additional characters which mean the token is an id.
+
+start   _Atomic _Bool _Complex _Generic _Imaginary      type
+start   bool char double float int long                 type
+start   short signed unsigned void                      type
+type    a..z A..Z 0..9 _ \\U \\u                        id
+type    \!..~ \s \n                                     start TYPE
+
+// Other keywords. The key states check for additional characters.
+// The enum and struct keywords cause bracket checking.
+
+start   _Alignas _Noreturn _Static_assert _Thread_Local         key
+start   alignof auto break case const continue default do else  key
+start   extern false for goto if inline register restrict       key
+start   return sizeof static switch true typedef union          key
+start   volatile while                                          key
+start   enum struct                                             key2
+key     a..z A..Z 0..9 _ \\U \\u                                id
+key     \!..~ \s \n                                             start KEY
+key2    a..z A..Z 0..9 _ \\U \\u                                id
+key2    \!..~ \s \n                                             check0 KEY
+
+// Operators and signs.
+
+start   != ! % && &= & *= * ++ += + -- -= - /= / ?  start OP
+start   <<= << <= < == >= >>= >> > ^= ^ |= || | ~   start OP
+start   ## %= , ... ; : ->                          start SIGN
+start   =                                           check3 SIGN
+
+// Identifiers
+
+start   a..z A..Z _ \\U \\u        id
+id      a..z A..Z 0..9 _ \\U \\u   id
+id      \!..~ \s \n                start ID
+
+// Brackets. By default { and } are block brackets, level 1. To help with
+// semicolon insertion, the opener { is marked as a structure bracket BEGIN2
+// instead, by the rules below. The closer } is changed from BEGIN1 to BEGIN2
+// to match by Snipe during bracket matching.
+
+start  {   start BEGIN1
+start  }   start END1
+start  [   start BEGIN3
+start  ]   start END3
+start  (   start BEGIN4
+start  )   start END4
+
+// Check for { as a structure bracket in these contexts:
+// enum {       OR    struct {
+// enum ID {    OR    struct ID {
+// = {
+// = ( ID ) {
+// = ( struct ID ) {
+
+check0    {                          start BEGIN2
+check0    a..z A..Z _ \\U \\u        check1
+check0    \!..~ \s \n                start
+check1    a..z A..Z 0..9 _ \\U \\u   check1
+check1    \!..~ \s \n                check2 ID
+check2    {                          start BEGIN2
+check2    \!..~ \s \n                start
+check3    {                          start BEGIN2
+check3    (                          check4 BEGIN4
+check3    \!..~ \s \n                start
+check4    struct                     check4 KEY
+check4    a..z A..Z _ \\U \\u        check5
+check4    \!..~ \s \n                start
+check5    a..z A..Z 0..9 _ \\U \\u   check5
+check5    \!..~ \s \n                check6 ID
+check6    )                          check7 END4
+check6    \!..~ \s \n                start
+check7    {                          start BEGIN2
+check7    \!..~ \s \n                start
+
+// A dot starts a number, or is a sign.
+
+start   .             dot
+dot     \0..9         decimal
+dot     \!..~ \s \n   start SIGN
+
+// Character and string literals.
+
+start   '      char
+char    !..~   char
+char    \\'    char
+char    \s     char QUOTE
+char    ' \n   start QUOTE
+
+start   "      string
+string  !..~   string
+string  \\"    string
+string  \s     string QUOTE
+string  " \n   start QUOTE
+
+// One-line comment. Mark /* or */ as warning.
+
+start    //     note
+note     !..~   note
+note     \s     note COMMENT
+note     \n     start COMMENT
+
+// Multi-line comment.
+
+start     /*     comment
+comment   !..~   comment
+comment   \s \n  comment COMMENT
+comment   */     start COMMENT
+
+// Numbers.
+start    0..9           decimal
+start    0x 0X          hex
+decimal  0..9 .         decimal
+decimal  e+ e- E+ E-    decimal
+decimal  u U l L ll LL  decimal
+decimal  \!..~ \s \n    start VALUE
+hex      0..9 .         hex
+hex      a..f A..F      hex
+hex      p+ p- P+ P-    hex
+hex      u U l L ll LL  hex
+hex      \!..~ \s \n    start VALUE
+
+// Backslash newline is only supported between tokens.
+
+start \\ start JOIN
+
+// Reserved words, and include files.
+
+start     #                                 hash RESERVED
+hash      \s                                hash
+hash      include                           include RESERVED
+hash      define elif else endif error if   start RESERVED
+hash      ifdef ifndef line pragma undef    start RESERVED
+hash      \!..~ \n                          start
+include   <                                 filename
+include   \!..~ \s \n                       start
+filename  !..~                              filename
+filename  \s                                filename QUOTE
+filename  > \n                              start QUOTE
+
+// Illegal characters (\s \n should never occur).
+start     $ @ ` \s \n                       start UNKNOWN
+
+// TODO: check tags are COMMENT, FUNCTION, ID, JOIN, KEY, OP, PROPERTY, QUOTE,
+// RESERVED, SIGN, TYPE, UNKNOWN, VALUE, BEGINi, ENDi, (GAP, NEWLINE)

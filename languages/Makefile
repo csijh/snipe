@@ -1,8 +1,5 @@
 # Definitive list of compiler modules in dependency order.
-lang = lang.c
-langC = langC.c $(lang)
-
-try = try.c
+scan = scan.c
 
 # C compiler and options for debugging or optimisation. On macOS, 'gcc'
 # refers to 'clang'.
