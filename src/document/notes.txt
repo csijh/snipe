@@ -1,0 +1,52 @@
+Document consists of:
+    bytes, tokens, brackets, (lines), undo, cursor(s)
+    mostly gap buffers, maybe with sentinels
+    ask for "pointer, length, max" (lock until return, or part of state?)
+    maybe each remembers the line-range that needs 'repair'
+Maybe lines merged with each of the others.
+Otherwise, a line is:
+    a position in the text (or dealt with in text buffer)
+    a position in the tokens (or ...)
+    a position in the brackets (or ...)
+    an indent (or implicit from brackets)
+    a semicolon flag (or implicit from line end/start)
+    a scan state (state token?)
+        join indicated in tokens by gap rather than indent?
+        long comment indicated by flag that doesn't prevent synch (or impl)
+        maybe two long comment flags: left right
+        maybe Newline token (length contains state bits) at end
+
+State token:
+    2 bits for comment, quote, join flags which are language independent
+    are note and long-comment flags different?
+    6 bits for custom state, to do with context sensitivity (fwd only)
+    what about leftward flags? at end?
+    Newline is final state: fwd before cursor, backward after
+
+What is a bracket?
+    reference to pair
+    row and column (=> position in text, position in tokens, position on screen)
+    mismatch flag so can detect change for redisplay
+
+Sequence of events after an edit:
+    edit column is relative to auto-indent for undo purposes, so repairs OK.
+    remove semicolons?
+    rescan the tokens for the line
+        insert MisQ at eol for quotes, StopC at eol for note
+        how make sure quoted or noted /* */ remain errors?
+            maybe don't mark yet, let bracket matching do it.
+    reinsert cursor token? (or insert as copy out tokens for display)
+    redo brackets for the line (closers and openers?)
+    move cursor to merge brackets with surrounding context
+        merge long comment processing?
+        override bit(s) for long commenting?
+        override bit for mismatch?
+    repair indent and preceding semicolon
+        cursor movement
+
+Text:
+-----
+resize gap
+read file into buffer (uvalid?, clean?, lines?)
+get pointer to row r (argument 0 for read only, > 0 for min gap to follow)
+maybe find row by search (maybe cache one row-start, or display-worth)

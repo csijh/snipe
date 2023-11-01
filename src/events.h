@@ -1,7 +1,7 @@
 // Snipe event handling. Free and open source. See licence.txt.
 // TODO: detect shift-click for select, ctrl-click for add cursor
 // TODO: touch scroll
-#include "settings.h"
+//#include "settings.h"
 
 // Event code constants represent keyboard, mouse, window and timer events.
 // These constants are intended to be independent of the graphics library, and

@@ -1,68 +1,66 @@
-// Snipe unicode support. Free and open source, see licence.txt.
+// Snipe Unicode support. Free and open source, see licence.txt.
 #include "unicode.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <assert.h>
 
-// The success and failure states of the UTF-8 byte state machine, and the
-// unicode replacement code point for all invalid UTF-8 sequences.
-enum { UTF8_ACCEPT = 0, UTF8_REJECT = 12, UBAD = 0xFFFD };
+// The Unicode value for invalid UTF-8 sequences.
+enum { UBAD = 0xFFFD };
 
-// The state machine tables are adapted from
-// http://bjoern.hoehrmann.de/utf-8/decoder/dfa/, copyright (c) 2008-2010 Bjoern
-// Hoehrmann <bjoern@hoehrmann.de>.
-typedef unsigned char byte;
-
-// Table to look up a byte and get its type. Public to allow function inlining.
-const byte utf8ByteTable[] = {
-     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-     1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,  9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,
-     7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,  7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
-     8,8,2,2,2,2,2,2,2,2,2,2,2,2,2,2,  2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-    10,3,3,3,3,3,3,3,3,3,3,3,3,4,3,3, 11,6,6,6,5,8,8,8,8,8,8,8,8,8,8,8,
-};
-
-// State machine to look up a state and byte-type and get the next state.
-// Public to allow function inlining.
-const byte utf8StateTable[] = {
-     0,12,24,36,60,96,84,12,12,12,48,72, 12,12,12,12,12,12,12,12,12,12,12,12,
-    12, 0,12,12,12,12,12, 0,12, 0,12,12, 12,24,12,12,12,12,12,24,12,24,12,12,
-    12,12,12,12,12,12,12,24,12,12,12,12, 12,24,12,12,12,12,12,12,12,24,12,12,
-    12,12,12,12,12,12,12,36,12,36,12,12, 12,36,12,12,12,12,12,36,12,36,12,12,
-    12,36,12,12,12,12,12,12,12,12,12,12,
-};
-
-// Process one UTF-8 byte, using the state machine tables.
-extern inline int decodeByte(int state, byte b, int *codep) {
-    int type = utf8ByteTable[b];
-    *codep = (state != UTF8_ACCEPT) ?
-        (b & 0x3fu) | (*codep << 6) :
-        (0xff >> type) & b;
-    state = utf8StateTable[state + type];
-    return state;
-}
-
-// Check if a UTF-8 string is well formed.
-bool uvalid(int n, char s[n]) {
-    int state = UTF8_ACCEPT, code = 0;
-    for (int i = 0; i < n; i++) state = decodeByte(state, s[i], &code);
-    return state == UTF8_ACCEPT;
-}
-
-extern inline character getCode(const char *s) {
-    character ch;
-    ch.length = 0;
-    int state = UTF8_ACCEPT;
-    state = decodeByte(state, s[ch.length++], &ch.code);
-    while (state != UTF8_ACCEPT && state != UTF8_REJECT) {
-        state = decodeByte(state, s[ch.length++], &ch.code);
+// Get a Unicode character from UTF8 text, with a full check for validity,
+// returning UBAD for failure (and taking into account that char may be signed
+// or unsigned).
+character getUTF8(const char *s) {
+    unsigned int code, length;
+    if ((s[0] & 0x80) == 0) { code = s[0]; length = 1; }
+    else if ((s[0] & 0xE0) == 0xC0) {
+        if ((s[1] & 0xC0) != 0x80) { code=UBAD; length=2; }
+        else {
+            length = 2;
+            code = ((s[0] & 0x1F) << 6);
+            code += (s[1] & 0x3F);
+            if (code <= 0x7F) code = UBAD;
+        }
     }
-    if (state == UTF8_REJECT) ch.code = UBAD;
-    return ch;
+    else if ((s[0] & 0xF0) == 0xE0) {
+        length = 3;
+        if ((s[1] & 0xC0) != 0x80) code=UBAD;
+        else if ((s[2] & 0xC0) != 0x80) code=UBAD;
+        else {
+            code = ((s[0] & 0x1F) << 12);
+            code += ((s[1] & 0x3F) << 6);
+            code += ((s[2] & 0x3F));
+            if (code <= 0x7FF) code = UBAD;
+            if (0xD800 <= code && code <= 0xDFFF) code = UBAD;
+        }
+    }
+    else if ((s[0] & 0xF8) == 0xF0) {
+        length = 4;
+        if ((s[1] & 0xC0) != 0x80) code=UBAD;
+        else if ((s[2] & 0xC0) != 0x80) code=UBAD;
+        else if ((s[3] & 0xC0) != 0x80) code=UBAD;
+        else {
+            code = ((s[0] & 0x0F) << 18);
+            code += ((s[1] & 0x3F) << 12);
+            code += ((s[2] & 0x3F) << 6);
+            code += ((s[3] & 0x3F));
+            if (code <= 0xFFFF) code = UBAD;
+            if (code > 0x10FFFF) code = UBAD;
+        }
+    }
+    else { code = UBAD; length = 1; }
+    return (character) { .code = code, .length = length };
+}
+
+bool uvalid(int n, char s[n]) {
+    int i;
+    for (i = 0; i < n; ) {
+        character ch = getUTF8(&s[i]);
+        if (ch.code == UBAD) return false;
+        i += ch.length;
+    }
+    return (i == n);
 }
 
 void putUTF8(unsigned int code, char *s) {
@@ -110,12 +108,12 @@ void try(bool ok, char const *fmt, ...) {
 	exit(EXIT_FAILURE);
 }
 
-#ifdef TESTunicode
 // ----------------------------------------------------------------------------
+#ifdef TESTunicode
 
 // Test a UTF-8 byte sequence.
 bool ok(char const *s, int length, int code) {
-    character ch = getCode(s);
+    character ch = getUTF8(s);
     return (ch.length == length && ch.code == code);
 }
 
@@ -123,8 +121,10 @@ bool ok(char const *s, int length, int code) {
 void codeTest() {
     assert(ok("\0", 1, 0));
     assert(ok("\x7F", 1, 0x7F));
-    assert(ok("\xC0\xBF", 1, UBAD));             // overlong
-    assert(ok("\xC1\xBF", 1, UBAD));             // overlong
+    assert(ok("\xBF", 1, UBAD));                 // bad first byte
+    assert(ok("\x80", 1, UBAD));                 // bad first byte
+    assert(ok("\xC0\xBF", 2, UBAD));             // overlong
+    assert(ok("\xC1\xBF", 2, UBAD));             // overlong
     assert(ok("\xC2\x7F", 2, UBAD));             // bad 2nd byte
     assert(ok("\xC2\x80", 2, 0x80));             // start of 8-bit data
     assert(ok("\xC2\xBF", 2, 0xBF));             // full second byte
@@ -132,17 +132,32 @@ void codeTest() {
     assert(ok("\xC3\xBF", 2, 0xFF));             // end of 8-bit data
     assert(ok("\xDF\x80", 2, 0x7C0));            // start of 11-bit data
     assert(ok("\xDF\xBF", 2, 0x7FF));            // end of 11-bit data
-    assert(ok("\xE0\x9F\xBF", 2, UBAD));         // overlong
+    assert(ok("\xDF\xC0", 2, UBAD));             // bad 2nd byte
+    assert(ok("\xE0\x7F\x7F", 3, UBAD));         // bad 2nd byte of 3
+    assert(ok("\xE0\x9F\x7F", 3, UBAD));         // bad 3nd byte
+    assert(ok("\xE0\x9F\xBF", 3, UBAD));         // overlong
     assert(ok("\xE0\xA0\x80", 3, 0x800));        // start of 12-bit data
+    assert(ok("\xE0\xA0\x7F", 3, UBAD));         // bad 3nd byte
     assert(ok("\xE0\xBF\xBF", 3, 0xFFF));        // end of 12-bit data
     assert(ok("\xE8\x80\x80", 3, 0x8000));       // start of 13-bit data
-    assert(ok("\xED\xA0\x80", 2, UBAD));         // UTF-16 surrogates
-    assert(ok("\xED\xBF\xBF", 2, UBAD));         // UTF-16 surrogates
+    assert(ok("\xE8\xC0\x80", 3, UBAD));         // bad 2nd byte
+    assert(ok("\xE8\xA0\x7F", 3, UBAD));         // bad 3rd byte
+    assert(ok("\xED\xA0\x80", 3, UBAD));         // UTF-16 surrogates
+    assert(ok("\xED\xBF\xBF", 3, UBAD));         // UTF-16 surrogates
     assert(ok("\xEF\xBF\xBF", 3, 0xFFFF));       // end of 16-bit data
-    assert(ok("\xF0\x8F\xBF\xBF", 2, UBAD));     // overlong
+    assert(ok("\xEF\xBF\xC0", 3, UBAD));         // bad 3rd byte
+    assert(ok("\xF0\x7F\xBF\xBF", 4, UBAD));     // bad 2nd byte
+    assert(ok("\xF0\x8F\xBF\xBF", 4, UBAD));     // overlong
+    assert(ok("\xF0\x90\x7F\x80", 4, UBAD));     // bad 3rd byte
+    assert(ok("\xF0\x90\x80\x7F", 4, UBAD));     // bad 4th byte
     assert(ok("\xF0\x90\x80\x80", 4, 0x10000));  // start of 17-bit data
     assert(ok("\xF4\x8F\xBF\xBF", 4, 0x10FFFF)); // limit 1114111
-    assert(ok("\xF4\x90\x80\x80", 2, UBAD));     // > limit
+    assert(ok("\xF4\x8F\xBF\xC0", 4, UBAD));     // bad 4th byte
+    assert(ok("\xF4\x8F\xC0\xBF", 4, UBAD));     // bad 3rd byte
+    assert(ok("\xF4\xC0\xBF\xBF", 4, UBAD));     // bad 2nd byte
+    assert(ok("\xF4\x90\x80\x80", 4, UBAD));     // > limit
+    assert(ok("\xF8", 1, UBAD));                 // bad first byte
+    assert(ok("\xFF", 1, UBAD));                 // bad first byte
 }
 
 int main() {

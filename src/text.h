@@ -1,30 +1,19 @@
-// Snipe text handling. Free and open source, see licence.txt.
-// TODO: get() with +- arg, shared with tag bytes.
+// Snipe editor. Free and open source, see licence.txt.
 #include <stdbool.h>
+#include <stdio.h>
 
-// A text object holds the UTF-8 content of a file. The text is kept clean so
-// that it can be saved at any moment by autosave. That means the text never
-// contains invalid UTF-8 sequences, or carriage returns. In addition, edits are
-// adjusted to avoid trailing spaces at the ends of lines, trailing blank lines,
-// or a missing final newline. The bytes are held in a gap buffer. For n bytes,
-// there are n+1 positions in the text, running from 0 (at the start) to n
-// (after the final newline).
+// A text object holds the content of a file. The text is kept clean so that it
+// can be saved at any moment by autosave. That means the text is UTF8-valid,
+// has no control characters other than newlines, has no trailing spaces at the
+// ends of lines, has no blank lines at the end, and has a final newline.
 struct text;
 typedef struct text text;
 
-// Provide edit opcodes for insertion, deletion and copying of text.
-enum { INSERT = 0, DELETE = 1, COPY = -1 };
-
-// Store an edit (insertion, deletion, copying or other operation such as a
-// cursor change). The op is one of the above, or another opcode defined
-// elsewhere. The at and to fields are the start and end positions in the text
-// (0 <= at <= to <= length of text), and s holds n bytes (n <= max).
-struct edit { int op, at, to, n, max; char s[]; };
-typedef struct edit edit;
-
-// Get an edit structure big enough to hold n characters and a null. Pass in an
-// old edit structure to be reused, or NULL to get a fresh edit structure.
-edit *newEdit(int n, edit *old);
+// A point in the text is a row, i.e. a zero-based line number, and a col, i.e.
+// a zero-based byte index within a line. A line is a sequence of bytes ending
+// with a newline '\n'.
+struct point { int row, col; };
+typedef struct point point;
 
 // Create an empty text object.
 text *newText();
@@ -32,22 +21,36 @@ text *newText();
 // Free a text object and its data.
 void freeText(text *t);
 
-// Return the number of bytes. The maximum length is INT_MAX, so that int can be
-// used for positions, and for positive or negative relative positions.
-int lengthText(text *t);
+// Find the number of rows (i.e. number of newlines) in the text.
+int rows(text *t);
 
-// Fill a text object from a newly loaded file, discarding any previous content.
-// Return false if the buffer contains invalid UTF-8 sequences, and otherwise
-// clean the buffer and return true.
-bool loadText(text *t, int n, char *buffer);
+// TODO: length of line (inc?)
 
-// Copy the text out into a buffer.
-char *saveText(text *t, char *buffer);
+// Get a read-only and volatile pointer to a given line of text, terminated by
+// newline. If row >= rows(t), a blank line is returned.
+char const *line(text *t, int row);
 
-// Do an insertion or deletion or copy, adjust the edit to keep the text clean,
-// reallocate the edit structure if necessary, and return it. For an insertion,
-// to=at is the insertion position. If at<to after adjustment, that indicates a
-// range of spaces to be deleted and replaced by the insertion. For a deletion,
-// at<to represents the range to be deleted. On return, the text that was
-// deleted is filled in. A copy is like a deletion, but with no actual change.
-edit *editText(text *t, edit *e);
+// Insert n bytes at a given row/col point, returning false if the bytes are
+// not UTF8-valid. The col can be beyond the end of a line, and the row can be
+// beyond the end of the file, with spaces or newlines being added accordingly.
+// After the operation, the text is cleaned up again.
+bool insert(text *t, point p, int n, char s[n]);
+
+// Delete bytes from point p to point q. Either column can be beyond the end of
+// a line, and either row can be beyond the end of the file, in which case
+// notional spaces or newlines are deleted. The actual deleted bytes are copied
+// into the given character array, if it is not null, followed by a null
+// character. If the size n of the array is insufficient, false is returned, and
+// the deletion is not performed. The caller tries again with n increased. After
+// the operation, the text is cleaned up again.
+bool delete(text *t, point p, point q, int n, char s[n]);
+
+// Fill a text object from an open file, discarding any previous content. The
+// file should have been opened in binary mode, so that the file length is the
+// same as the number of bytes read in. Return false if the buffer contains
+// invalid UTF-8 sequences, and otherwise clean the text and return true.
+bool loadText(text *t, int n, FILE *f);
+
+// Copy the text out into an open file. The file should have been opened in
+// binary mode, so that line endings are preserved.
+char *saveText(text *t, FILE *f);

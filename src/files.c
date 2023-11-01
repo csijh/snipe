@@ -501,7 +501,6 @@ static void testFindInstall(files *fs) {
 
 static void testJoin() {
     char *s = join(2, "/a/b/", "c.txt");
-    printf("bp %s\n", s);
     assert(strcmp(s, "/a/b/c.txt") == 0);
     free(s);
     s = join(3, "/a/", "b/", "c.txt");

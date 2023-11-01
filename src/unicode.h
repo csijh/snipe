@@ -9,7 +9,7 @@ typedef struct character character;
 bool uvalid(int n, char s[n]);
 
 // Get the next character from the given text.
-character getCode(const char *s);
+character getUTF8(const char *s);
 
 // Write a Unicode code point to the given character array.
 void putUTF8(unsigned int code, char *s);

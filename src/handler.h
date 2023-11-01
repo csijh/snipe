@@ -2,6 +2,7 @@
 // TODO: detect shift-click for select, ctrl-click for add cursor
 // TODO: touch scroll
 #include "events.h"
+#include "unicode.h"
 #include <stdbool.h>
 
 // Provide event handling, on behalf of the display module.

@@ -2,8 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include "display.h"
-#include "events.h"
-#include "files.h"
 
 // Crash the program if there is any failure.
 static void fail(char *s) {
@@ -13,7 +11,6 @@ static void fail(char *s) {
 
 int main(int n, char *args[]){
     display *d = newDisplay();
-    events *es = newEvents(getHandle(d));
     files *fs;
 
     char *text;
@@ -29,23 +26,22 @@ int main(int n, char *args[]){
     drawPage(d, text, tags);
     bool running = true;
     while (running) {
-        event e = nextEvent(es);
+        event e = nextEvent(d);
         if (e == QUIT) running = false;
         else if (e == FRAME) drawPage(d, text, tags);
-        else if (e == TEXT) printf("TEXT %s\n", eventText(es));
-        else if (e == SCROLL) printf("SCROLL %d\n", eventY(es));
+        else if (e == TEXT) printf("TEXT %s\n", eventText(d));
+        else if (e == SCROLL) printf("SCROLL %d\n", eventY(d));
         else if (e == CLICK) {
-            printf("CLICK %d %d\n", eventX(es), eventY(es));
-            rowCol rc = findPosition(d, eventX(es), eventY(es));
+            printf("CLICK %d %d\n", eventX(d), eventY(d));
+            rowCol rc = findPosition(d, eventX(d), eventY(d));
             printf("R=%d, C=%d\n", rc.r, rc.c);
             drawCaret(d, rc.r, rc.c);
         }
-        else if (e == DRAG) printf("DRAG %d %d\n", eventX(es), eventY(es));
+        else if (e == DRAG) printf("DRAG %d %d\n", eventX(d), eventY(d));
         else if (e == IGNORE) continue;
         else printf("%s\n", findEventName(e));
     }
 
-    freeEvents(es);
     freeDisplay(d);
     return 0;
 }

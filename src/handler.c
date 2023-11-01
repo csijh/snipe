@@ -11,7 +11,7 @@ struct handler {
     ALLEGRO_EVENT_QUEUE *queue;
     ALLEGRO_TIMER *timer;
     char text[8]; int x, y;
-    bool mouseButtonDown;
+    bool mouseButtonDown, shiftDown, ctrlDown;
 };
 
 handler *newHandler(void *window) {
@@ -30,7 +30,7 @@ handler *newHandler(void *window) {
     al_register_event_source(es->queue, al_get_timer_event_source(es->timer));
 //    al_set_mouse_emulation_mode(ALLEGRO_MOUSE_EMULATION_TRANSPARENT);
     al_start_timer(es->timer);
-    es->mouseButtonDown = false;
+    es->mouseButtonDown = es->shiftDown = es->ctrlDown = false;
     return es;
 }
 
@@ -55,7 +55,7 @@ static event nonText(handler *es, bool shift, bool ctrl, int code) {
         return C_A + (code - ALLEGRO_KEY_A) * 4 + offset;
     }
     if (code >= ALLEGRO_KEY_0 && code <= ALLEGRO_KEY_9) {
-        return C_0 + (code - ALLEGRO_KEY_0) * 4;
+        return C_0 + (code - ALLEGRO_KEY_0);
     }
     if (code >= ALLEGRO_KEY_PAD_0 && code <= ALLEGRO_KEY_PAD_9) {
         if (ctrl) return C_0 + (code - ALLEGRO_KEY_PAD_0);
@@ -122,7 +122,7 @@ static event keyboard(handler *es, ALLEGRO_EVENT *ae) {
         if (ctrl) {
             if (ch >= 'A' && ch <= 'Z') return C_A + ch - 'A';
             if (ch >= 'a' && ch <= 'z') return C_A + ch - 'a';
-            if (ch >= '0' && ch <= '9') return C_A + ch - '0';
+            if (ch >= '0' && ch <= '9') return C_0 + ch - '0';
             if (ch == '+' || ch == '=') return C_PLUS;
             if (ch == '-' || ch == '_') return C_MINUS;
             if (ch == ' ') return C_SPACE;
@@ -150,8 +150,41 @@ static event mouseMove(handler *es, ALLEGRO_EVENT *ae) {
 static event mouseButton(handler *es, ALLEGRO_EVENT *ae, bool down) {
     if (ae->mouse.button != 1) return IGNORE;
     es->mouseButtonDown = down;
+    printf("shift down %d\n", es->shiftDown);
+    if (down && es->shiftDown && es->ctrlDown) return SC_CLICK;
+    if (down && es->shiftDown) return S_CLICK;
+    if (down && es->ctrlDown) return SC_CLICK;
     if (down) return CLICK;
+    if (es->shiftDown && es->ctrlDown) return SC_DRAG;
+    if (es->shiftDown) return S_DRAG;
+    if (es->ctrlDown) return C_DRAG;
     return DRAG;
+}
+
+// Track shift and ctrl keys being pressed.
+static event trackModifiersDown(handler *es, ALLEGRO_EVENT *ae) {
+    if (ae->keyboard.keycode == ALLEGRO_KEY_LSHIFT ||
+        ae->keyboard.keycode == ALLEGRO_KEY_RSHIFT) {
+        es->shiftDown = true;
+    }
+    if (ae->keyboard.keycode == ALLEGRO_KEY_LCTRL ||
+        ae->keyboard.keycode == ALLEGRO_KEY_RCTRL) {
+        es->ctrlDown = true;
+    }
+    return IGNORE;
+}
+
+// Track shift and ctrl keys being released.
+static event trackModifiersUp(handler *es, ALLEGRO_EVENT *ae) {
+    if (ae->keyboard.keycode == ALLEGRO_KEY_LSHIFT ||
+        ae->keyboard.keycode == ALLEGRO_KEY_RSHIFT) {
+        es->shiftDown = false;
+    }
+    if (ae->keyboard.keycode == ALLEGRO_KEY_LCTRL ||
+        ae->keyboard.keycode == ALLEGRO_KEY_RCTRL) {
+        es->ctrlDown = false;
+    }
+    return IGNORE;
 }
 
 event getNextEvent(handler *es) {
@@ -168,6 +201,10 @@ event getNextEvent(handler *es) {
             return IGNORE;
         case ALLEGRO_EVENT_KEY_CHAR:
             return keyboard(es, &ae);
+        case ALLEGRO_EVENT_KEY_DOWN:
+            return trackModifiersDown(es, &ae);
+        case ALLEGRO_EVENT_KEY_UP:
+            return trackModifiersUp(es, &ae);
         case ALLEGRO_EVENT_MOUSE_AXES:
             return mouseMove(es, &ae);
         case ALLEGRO_EVENT_MOUSE_BUTTON_DOWN:

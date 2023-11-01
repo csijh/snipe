@@ -7,7 +7,12 @@
 
 // Event names, with S_ C_ SC_ combinations added later for the first group.
 static char *eventNames[IGNORE+1] = {
-    [CLICK]="CLICK", [DRAG]="DRAG", [SCROLL]="SCROLL", [ESCAPE]="ESCAPE",
+    [CLICK]="CLICK", [S_CLICK]="S_CLICK", [C_CLICK]="C_CLICK",
+    [SC_CLICK]="SC_CLICK", [DRAG]="DRAG", [S_DRAG]="S_DRAG", [C_DRAG]="C_DRAG",
+    [SC_DRAG]="SC_DRAG", [SCROLL]="SCROLL", [S_SCROLL]="S_SCROLL",
+    [C_SCROLL]="C_SCROLL", [SC_SCROLL]="SC_SCROLL", [ESCAPE]="ESCAPE",
+    [S_ESCAPE]="S_ESCAPE", [C_ESCAPE]="C_ESCAPE", [SC_ESCAPE]="SC_ESCAPE",
+
     [ENTER]="ENTER", [TAB]="TAB", [BACKSPACE]="BACKSPACE", [INSERT]="INSERT",
     [DELETE]="DELETE", [RIGHT]="RIGHT", [LEFT]="LEFT", [DOWN]="DOWN", [UP]="UP",
     [PAGE_UP]="PAGE_UP", [PAGE_DOWN]="PAGE_DOWN", [HOME]="HOME", [END]="END",
@@ -34,7 +39,7 @@ static char spare[IGNORE+1][MAX];
 
 // Fill in the names for valid text keys and prefix combinations.
 static void fillTable() {
-    for (int i = CLICK; i <= MENU; i = i + 4) {
+    for (int i = ENTER; i <= MENU; i = i + 4) {
         assert(strlen(eventNames[i]) < MAX - 3);
         strcpy(spare[i+1], "S_");
         strcat(spare[i+1], eventNames[i]);
@@ -49,13 +54,13 @@ static void fillTable() {
 }
 
 const char *findEventName(event e) {
-    if (eventNames[CLICK+1] == NULL) fillTable();
+    if (eventNames[ENTER+1] == NULL) fillTable();
     if (e > IGNORE) printf("F1 -> %d\n", e);
     return eventNames[e];
 }
 
 event findEvent(char *name) {
-    if (eventNames[CLICK+1] == NULL) fillTable();
+    if (eventNames[ENTER+1] == NULL) fillTable();
     for (event e = 0; e < IGNORE; e++) {
         if (strcmp(eventNames[e], name) == 0) return e;
     }

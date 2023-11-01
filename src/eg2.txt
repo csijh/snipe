@@ -1,0 +1,24 @@
+Unicode characters:         æ í ð ö þ ƶ ə β ᴈ ῷ ⁑ €
+Diaeresis as one char:      Raphaël
+\adsfdafc
+dasdf\dasdf\sdfv
+\dsafv
+dsvf\s
+d\sdfv\asdv
+\asdvbv
+sdfb
+sfb
+sdfbsfb
+sfb
+sf
+sdfbsfbbs
+fb
+sdfbfsb
+sf
+bsf
+b
+sdfbsfbbssf
+
+sdfbfsb
+a\s
+sb

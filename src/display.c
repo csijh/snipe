@@ -7,10 +7,12 @@
 #include <allegro5/allegro.h>
 #include <allegro5/allegro_font.h>
 #include <allegro5/allegro_ttf.h>
-#include <allegro5/allegro_primitives.h>
+// #include <allegro5/allegro_primitives.h>
 
-// A cell records, for a character position in a line, the byte position of the
-// character in the line, and its horizontal pixel position.
+// A cell records, for a particular row-column position, the byte position in
+// the line, and the horizontal pixel position. There is one column position per
+// grapheme. A grapheme is taken to be a Unicode character, plus the next
+// character if the advance width between the characters is zero.
 struct cell { unsigned short bytes, pixels; };
 typedef struct cell cell;
 
@@ -47,17 +49,17 @@ const unsigned int
 // Solarized-light theme. See // https://ethanschoonover.com/solarized/. Base3
 // is the normal background, base2 highlighted background, base1 comments,
 // base00 normal text, base01 emphasized text.
-shade soll[] = {
+shade solLight[16] = {
     base3, base2, base1, base0, base00, base01, base02, base03, yellow, orange,
-    cyan, blue, red, magenta, violet, green,
+    cyan, blue, red, magenta, violet, green
 };
 
 // Solarized-dark theme. See // https://ethanschoonover.com/solarized/. Base03
 // is the normal background, base02 highlighted background, base01 comments,
 // base0 normal text, base1 emphasized text.
-shade sold[] = {
+shade solDark[16] = {
     base03, base02, base01, base00, base0, base1, base2, base3, yellow, orange,
-    cyan, blue, red, magenta, violet, green,
+    cyan, blue, red, magenta, violet, green
 };
 /*
 // Check result of a function which must succeed.
@@ -89,7 +91,7 @@ static cell **newGrid(display *d) {
     return grid;
 }
 
-// Create a new display, with font and ttf addons.
+// Create a new display, with allegro and its font and ttf addons.
 display *newDisplay() {
     display *d = malloc(sizeof(display));
     try(al_init(), "Failed to initialize Allegro.");
@@ -110,10 +112,11 @@ display *newDisplay() {
     d->width = d->pad + d->cols * d->charWidth + d->pad;
     d->height = d->rows * d->lineHeight;
     d->grid = newGrid(d);
+    al_set_new_display_option(ALLEGRO_VSYNC, 1, ALLEGRO_SUGGEST);
     al_set_new_display_flags(ALLEGRO_WINDOWED | ALLEGRO_RESIZABLE);
     d->display = al_create_display(d->width, d->height);
     try(d->display != NULL, "Failed to create display.");
-    setTheme(d, soll);
+    setTheme(d, solLight);
     d->h = newHandler(d->display);
     return d;
 }
@@ -147,8 +150,7 @@ static void drawRectangle(display *d, int c, int x, int y, int w, int h) {
 
 void drawCaret(display *d, int row, int col) {
     int y = row * d->lineHeight;
-    int x = d->grid[row][col].pixels;
-//    int x = d->pad + col * d->charWidth;
+    int x = d->grid[row][col].pixels - 1;
     drawRectangle(d,12,x,y,1,d->lineHeight);
 //    frame(d);
 }
@@ -156,7 +158,7 @@ void drawCaret(display *d, int row, int col) {
 // When drawing a line, x is the pixel position across the screen, col is the
 // cell position in the grid. and i is the byte position in the text.
 void drawLine(display *d, int row, char *bytes, unsigned char *tags) {
-    character cp = getCode(&bytes[0]);
+    character cp = getUTF8(&bytes[0]);
     int x = d->pad, y = row * d->lineHeight, col = 0, oldFg, i;
     for (i = 0; bytes[i] != '\n'; ) {
         if (col >= d->cols) {
@@ -166,8 +168,44 @@ void drawLine(display *d, int row, char *bytes, unsigned char *tags) {
             y = row * d->lineHeight;
             col = 0;
         }
-        character next = getCode(&bytes[i+cp.length]);
+        character next = getUTF8(&bytes[i+cp.length]);
         int width = al_get_glyph_advance(d->font, cp.code, next.code);
+        if (width < 3) printf("w %d %d to %d\n", width, cp.code, next.code);
+        d->grid[row][col] = (cell) { .bytes = i, .pixels = x };
+        int bg = (tags[i] >> 4) & 0x0F;
+        int fg = tags[i] & 0x0F;
+        if (bg != 0) {
+            drawRectangle(d,bg,x,y,width,d->lineHeight);
+        }
+        al_draw_glyph(d->font, d->theme[fg], x, y, cp.code);
+        oldFg = fg;
+        col++;
+        x = x + width;
+        i = i + cp.length;
+        cp = next;
+    }
+    d->grid[row][col] = (cell) { .bytes = i, .pixels = x };
+    for (col++; col <= d->cols; col++) {
+        d->grid[row][col] = d->grid[row][col-1];
+    }
+}
+
+// When drawing a line, x is the pixel position across the screen, col is the
+// cell position in the grid. and i is the byte position in the text.
+void drawLine2(display *d, int row, char *bytes, unsigned char *tags) {
+    character cp = getUTF8(&bytes[0]);
+    int x = d->pad, y = row * d->lineHeight, col = 0, oldFgi;
+    for (i = 0; bytes[i] != '\n'; ) {
+        if (col >= d->cols) {
+            // TODO: continuation markers.
+            row++;
+            x = d->pad;
+            y = row * d->lineHeight;
+            col = 0;
+        }
+        character next = getUTF8(&bytes[i+cp.length]);
+        int width = al_get_glyph_advance(d->font, cp.code, next.code);
+        if (width < 3) printf("w %d %d to %d\n", width, cp.code, next.code);
         d->grid[row][col] = (cell) { .bytes = i, .pixels = x };
         int bg = (tags[i] >> 4) & 0x0F;
         int fg = tags[i] & 0x0F;
@@ -222,9 +260,12 @@ int eventY(display *d) { return getEventY(d->h); }
 enum { b = 0x2c, h = 0x14, c = 0xFF };
 
 // Different fg and bg colours.
-static char *line1 = "id(12,CON) = 'xyz' 12. high // note\n";
+static char *line1 = "id(12,COM) = 'xyz' 12. high // note\n";
 static unsigned char styles1[] =
     { 4,4,4,8,8,4,7,7,7,4,4,4,4,9,9,9,9,9,4,b,b,b,4,h,h,h,h,4,1,1,1,1,1,1,1,4 };
+static word words[] = {
+    {I,2},{S,1},{V,2},{S,1},{C,3},{S,1},{G,1},{S,1},
+    {G,1},{Q,5},{G,1},{B,3},{G,1},{M,0},{I,4},{D,0},{G,1},{C,7},{N,1}};
 
 // Eight 2-byte and four 3-byte characters
 static char *line2 = "æ í ð ö þ ƶ ə β ᴈ ῷ ⁑ €\n";
@@ -252,7 +293,7 @@ int main() {
     frame(d);
 //    drawPage(d, text, styles);
     al_rest(20);
-    setTheme(d, sold);
+    setTheme(d, solDark);
     clear(d);
     drawLine(d,0,line1,styles1);
     drawLine(d,1,line2,styles2);
