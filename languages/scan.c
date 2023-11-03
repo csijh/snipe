@@ -11,46 +11,52 @@
 #include <assert.h>
 
 // ---------- Lists ------------------------------------------------------------
-// A list is an array with built-in length and capacity.
+// Lists are flexible arrays with built-in length and capacity.
 
-// Prefix in front of allocated memory.
-struct header { int length, max, size, fill; };
+// Prefix in front of a list. Use a 'magic' number as a dynamic type check.
+struct header { int size, max, unit, magic; };
 typedef struct header header;
-header* pre(void *a) { return ((header *)a) - 1; }
+enum { MAGIC = 0x12345678 };
 
-// Like calloc, allocate a list of given capacity and item-size.
-void *allocate(int max, int size) {
-    int total = sizeof(header) + max * size;
+// Find a list's header, and check that we have a list.
+header* head(void *a) {
+    header *p = ((header *)a) - 1;
+    if (p->magic == MAGIC) return p;
+    fprintf(stderr, "Error: list operation on a non-list\n");
+    exit(1);
+}
+
+// Allocate an empty list with a given item-size.
+void *allocate(int unit) {
+    int max = (unit < 8) ? (8 / unit) : 1;
+    int total = sizeof(header) + max * unit;
     header *p = malloc(total);
-    *p = (header) {.length=0, .max=max, .size=size};
+    *p = (header) {.size=0, .max=max, .unit=unit, .magic=MAGIC };
     return p + 1;
 }
 
-// Like realloc, reallocate a list to a new capacity. 
-void *reallocate(void *a, int max) {
-    header *p = pre(a);
-    int total = sizeof(header) + max * p->size;
-    p = realloc(p, total);
-    p->max = max;
+int size(void *a) { return head(a)->size; }
+
+// Change the size of a list, returning the possibly reallocated list.
+void *resize(void *a, int n) {
+    header *p = head(a);
+    if (n > p->max) {
+        while (n > p->max) p->max = 2 * p->max;
+        int total = sizeof(header) + p->max * p->unit;
+        p = realloc(p, total);
+    }
+    p->size = n;
     return p + 1;
 }
 
-// Like free, release memory for a list.
-void release(void *a) { free(pre(a)); }
+// Increase list size by delta. TODO rename or add new (for negative arg).
+void *extend(void *a, int delta) { return resize(a, size(a) + delta); }
 
-// Get and set the length, get the capacity.
-int getLength(void *a) { return pre(a)->length; }
-void setLength(void *a, int n) { header *p = pre(a); p->length = n; }
-int getMax(void *a) { return (pre(a))->max; }
+// Make sure there is room for d more items.
+void *ensure(void *a, int d) { a = extend(a,d); extend(a, -d); return a; }
 
-// Increase the length by d, doubling the capacity if necessary. Always use in
-// the form a = push(a,d) followed by entering the new item.
-void *push(void *a, int d) {
-    int n = getLength(a) + d, max = getMax(a);
-    if (n > max) a = reallocate(a, 2 * max);
-    setLength(a, n);
-    return a;
-}
+// Release memory for a list.
+void release(void *a) { free(head(a)); }
 
 // ---------- Rows -------------------------------------------------------------
 // A row is a line of text, split into a list of tokens. Read in a language
@@ -108,8 +114,8 @@ char **splitLines(char *s) {
     int n = 0;
     for (int i = 0; s[i] != '\0'; i++) if (s[i] == '\n') n++;
     n++;
-    char **lines = allocate(n, sizeof(char *));
-    setLength(lines, n);
+    char **lines = allocate(sizeof(char *));
+    lines = resize(lines, n);
     n = 0;
     lines[n] = &s[0];
     for (int i = 0; s[i] != '\0'; i++) {
@@ -134,35 +140,35 @@ bool isTagName(char *s) { return isupper(s[0]); }
 // "+" if the rule has no tag.
 char **splitTokens(char *s) {
     int n = 0;
+    char **tokens = allocate(sizeof(char *));
     if (! islower(s[0])) {
-        char **tokens = allocate(1, sizeof(char *));
+        tokens = extend(tokens, 1);
         tokens[0] = s;
-        setLength(tokens, 1);
         return tokens;
     }
-    for (int i = 0; s[i] != '\0'; i++) if (s[i] == ' ') n++;
-    char **tokens = allocate(n+2, sizeof(char *));
     n = 0;
-    tokens[n] = &s[0];
+    int start = 0;
     for (int i = 0; s[i] != '\0'; i++) {
         if (s[i] != ' ') continue;
         s[i] = '\0';
-        n++;
-        tokens[n] = &s[i+1];
+        tokens = extend(tokens, 1);
+        tokens[n++] = &s[start];
+        start = i + 1;
     }
-    if (isStateName(tokens[0]) && ! isTagName(tokens[n])) {
-        tokens[n+1] = "+";
-        setLength(tokens, n+2);
+    tokens = extend(tokens, 1);
+    tokens[n++] = &s[start];
+    if (isStateName(tokens[0]) && ! isTagName(tokens[n-1])) {
+        tokens = extend(tokens, 1);
+        tokens[n++] = "+";
     }
-    else setLength(tokens, n+1);
     return tokens;
 }
 
-// Convert a list of lines into a list of rows, with negative indexes.
+// Convert a list of lines into a list of rows.
 char ***makeRows(char **lines) {
-    int n = getLength(lines);
-    char ***rows = allocate(n, sizeof(char **));
-    setLength(rows, n);
+    int n = size(lines);
+    char ***rows = allocate(sizeof(char **));
+    rows = resize(rows, n);
     for (int i = 0; i < n; i++) {
         rows[i] = splitTokens(lines[i]);
     }
@@ -170,31 +176,50 @@ char ***makeRows(char **lines) {
 }
 
 // ---------- States and patterns ----------------------------------------------
-// Convert the rules in the language description into a list of states, each of
-// which has a list of patterns.
+// Convert the rules in the language description into a list of states.
 
-// A pattern is a string to be matched and the action it leads to.
+// A pattern is a string to be matched, and the action to take on matching it.
 struct pattern { char *s; bool lookahead; char tag; int target; };
 typedef struct pattern pattern;
 
-// A state is a name, a list of patterns, and flags to say whether the state can
-// be at the start, in the middle, or at the end of a token. 
-struct state { char *name; pattern *patterns; bool starter, adder, ender; };
+// A state is a name, an array of lists of patterns indexed by first character,
+// a temporary list of range patterns, and flags to say whether the state can
+// be at the start, after the start, or at the end of a token. 
+struct state {
+    char *name; pattern **patterns; pattern *ranges;
+    bool starter, adder, ender;
+};
 typedef struct state state;
 
-// Find a state in, or add it to, the list of states, returning its index.
-int find(state *states, char *name) {
-    int n = getLength(states);
+// Check a string to see if it is a range of the form x..y 
+bool isRange(char *s) {
+    if (strlen(s) != 4) return false;
+    if (s[1] != '.' || s[2] != '.') return false;
+    return true;    
+}
+
+// Find an existing state by name, returning its index or -1.
+int findState(state *states, char *name) {
+    int n = size(states);
     for (int i = 0; i < n; i++) {
         if (strcmp(states[i].name, name) == 0) return i;
     }
-    pattern *patterns = allocate(256, sizeof(pattern));
+    return -1;    
+}
+
+// Add a new blank state with the given name, returning the updated list.  
+state *addState(state *states, char *name) {
+    int n = size(states);
+    pattern **patterns = allocate(sizeof(pattern *));
+    patterns = resize(patterns, 128);
+    for (int i = 0; i < 128; i++) patterns[i] = allocate(sizeof(pattern));
+    pattern *ranges = allocate(sizeof(pattern));
+    states = extend(states, 1);
     states[n] = (state) {
-        .name=name, .patterns=patterns,
+        .name=name, .patterns=patterns, .ranges=ranges,
         .starter=false, .adder=false, .ender=false
     };
-    setLength(states, n+1);
-    return n;
+    return states;
 }
 
 // Convert a string, target and tag to a pattern. Take off a backslash
@@ -220,25 +245,37 @@ void convert(char *s, int target, char *tag, pattern *p) {
     p->s = s;
 }
 
-// Transfer the patterns from the rules to the states.
-void transfer(char ***rows, state *states) {
-   for (int i = 0; i < getLength(rows); i++) {
+// Create empty base states from the rules.
+state *makeStates(char ***rows) {
+    state *states = allocate(sizeof(state));
+    for (int i = 0; i < size(rows); i++) {
         char **tokens = rows[i];
         if (isTagName(tokens[0])) error("unexpected tag on line %d", i+1);
         if (! isStateName(tokens[0])) continue;
-        int n = getLength(tokens);
+        int n = size(tokens);
         if (n < 4) error("incomplete rule on line %d", i+1);
         if (! isStateName(tokens[n-2])) {
             error("expecting target state on line %d", i+1);
         }
-        char *tag = tokens[n-1];
-        int baseIndex = find(states, tokens[0]);
-        int target = find(states, tokens[n-2]);
+        if (findState(states, tokens[0]) < 0) {
+            states = addState(states, tokens[0]);
+        }
+    }
+    return states;
+}
+
+// Gather the information from the rules into the states.
+void fillStates(char ***rows, state *states) {
+    for (int i = 0; i < size(rows); i++) {
+        char **tokens = rows[i];
+        if (! isStateName(tokens[0])) continue;
+        int n = size(tokens);
+        int baseIndex = findState(states, tokens[0]);
         state *base = &states[baseIndex];
-        int pl = getLength(base->patterns);
+        int target = findState(states, tokens[n-2]);
+        if (target < 0) error("state %s has no rules", tokens[n-2]);
+        char *tag = tokens[n-1];
         for (int j = 1; j < n-2; j++) {
-            pattern *p = &base->patterns[pl++];
-            setLength(base->patterns, pl);
             char *s = tokens[j];
             if (strcmp(s, "\\") == 0) error("empty lookahead on line %d", i+1);
             if (s[0] == '\\' && 'a' <= s[1] && s[1] <= 'z' && s[2] == '\0') {
@@ -246,22 +283,26 @@ void transfer(char ***rows, state *states) {
                     error("bad lookahead on line %d", i+1);
                 }
             }
-            convert(s, target, tag, p);
+            pattern pat;
+            convert(s, target, tag, &pat);
+            if (isRange(pat.s)) {
+                base->ranges = extend(base->ranges, 1);
+                base->ranges[size(base->ranges) - 1] = pat;
+            }
+            else {
+                int ch = pat.s[0];
+                base->patterns[ch] = extend(base->patterns[ch], 1);
+                base->patterns[ch][size(base->patterns[ch]) - 1] = pat;
+            }
         }
-   }    
+    }
 }
 
 // ---------- Ranges -----------------------------------------------------------
 // A range such as 0..9 is equivalent to several one-character patterns, except
-// that more specific patterns take precedence. Ranges are expanded by
+// that more specific patterns take precedence. Ranges are extended by
 // repeatedly finding a range with no subrange, and replacing it by
 // one-character patterns for those characters not already handled.
-
-bool isRange(char *s) {
-    if (strlen(s) != 4) return false;
-    if (s[1] != '.' || s[2] != '.') return false;
-    return true;    
-}
 
 bool subRange(char *s, char *t) {
     return s[0] >= t[0] && s[3] <= t[3];
@@ -285,134 +326,214 @@ char **getSingles() {
     return singles;
 }
 
-void print(pattern *patterns) {
-    int n = getLength(patterns);
-    printf("n=%d\n", n);
-    for (int i=0; i<n; i++) {
-        printf("i: %d s: %s\n", i, patterns[i].s);
+// Compare two ranges. Use reverse order of the left hand end character and
+// forward order of the right hand end character, which ensures that a narrower
+// subrange comes before a wider range. Return 0 for ranges which are the same,
+// or which overlap.
+int compareRanges(char *r, char *s) {
+    char a = r[0], b = r[3], c = s[0], d = s[3];
+    if (a > c) {
+        if (b <= d) return -1;
+        else if (b > c) return -1;
+        else return 0;
+    }
+    else if (a == c) {
+        if (b < d) return -1;
+        else if (b == d) return 0;
+        else return 1;
+    }
+    else {
+        if (b >= d) return 1;
+        else if (b < c) return -1;
+        else return 0;
     }
 }
 
-// Expand the range at the given offset in the list of patterns for one state.
-void derange(pattern *patterns, int r, char **singles) {
-    int n = getLength(patterns);
-    pattern p = patterns[r];
-    n--;
-    patterns[r] = patterns[n];
-    setLength(patterns, n);
-    for (char ch = p.s[0]; ch <= p.s[3]; ch++) {
+// Sort a state's list of ranges. Report any ambiguous overlaps. 
+void sortRanges(state *base) {
+    pattern *list = base->ranges;
+    int n = size(list);
+    for (int i = 1; i < n; i++) {
+        pattern r = list[i];
+        int j = i - 1;
+        while (j >= 0 && compareRanges(list[j].s, r.s) > 0) {
+            list[j + 1] = list[j];
+            j--;
+        }
+        list[j + 1] = r;
+        if (j > 0 && compareRanges(list[j-1].s, r.s) == 0) {
+            error("state %s has overlapping ranges", base->name);
+        }
+    }
+}
+
+// Expand a range into one-character patterns.
+void derange(state *base, pattern *range, char **singles) {
+    for (int ch = range->s[0]; ch <= range->s[3]; ch++) {
+        pattern *list = base->patterns[ch];
         bool found = false;
-        for (int i = 0; i < n; i++) {
-            char *s = patterns[i].s;
+        for (int i = 0; i < size(list); i++) {
+            char *s = list[i].s;
             if (s[0] == ch && s[1] == '\0') { found = true; break; }
         }
         if (found) continue;
-        patterns[n] = p;
-        patterns[n].s = singles[(int)ch];
-        n++;
-        setLength(patterns, n);
+        int n = size(list);
+        list = extend(list, 1);
+        list[n] = *range;
+        list[n].s = singles[ch];
+        base->patterns[ch] = list;
     }
 }
 
-// Expand all ranges in a state.
-void derangeState(state *st, char **singles) {
-    pattern *ps = st->patterns;
-    bool done = false;
-    while (! done) {
-        int r = -1;
-        for (int i = 0; i < getLength(ps); i++) {
-            if (! isRange(ps[i].s)) continue;
-            if (r >= 0) {
-                if (overlap(ps[r].s, ps[i].s)) {
-                    error("state %s has overlapping ranges %s %s",
-                        st->name, ps[r].s, ps[i].s);
-                }
-                if (subRange(ps[i].s, ps[r].s)) {
-                    printf("sub %s %s\n", ps[i].s, ps[r].s);
-                    r = i;
-                }
-            }
-            else r = i;
-        }
-        if (r < 0) done = true;
-        else derange(ps, r, singles);
-    }
-}
-
-// Expand all ranges.
+// Expand all ranges in all states.
 void derangeAll(state *states, char **singles) {
-    for (int i = 0; i < getLength(states); i++) {
-        derangeState(&states[i], singles);
+    for (int i = 0; i < size(states); i++) {
+        state *base = &states[i];
+        sortRanges(base);
+        for (int j = 0; j < size(base->ranges); j++) {
+            derange(base, &base->ranges[j], singles);
+        }
+    }
+}
+
+// Sort the patterns in a list by decreasing length, so that when they are tried
+// one after another in the scanner, the longest match is found first.
+void sort(pattern *list) {
+    int n = size(list);
+    for (int i = 1; i < n; i++) {
+        pattern p = list[i];
+        int j = i - 1;
+        while (j >= 0 && strlen(list[j].s) < strlen(p.s)) {
+            list[j + 1] = list[j];
+            j--;
+        }
+        list[j + 1] = p;
+    }
+}
+
+// For each state, sort all the lists of patterns. 
+void sortAll(state *states) {
+    for (int i = 0; i < size(states); i++) {
+        state *base = &states[i];
+        for (int j = 0; j < 128; j++) {
+            pattern *list = base->patterns[j];
+            sort(list);
+        }
     }
 }
 
 // ---------- Checks -----------------------------------------------------------
-// Check that a scanner never fails or gets stuck in an infinite loop, handles
-// every input and generates only non-empty tokens,
+// Check that a scanner handles every input, generates only non-empty tokens,
+// and never fails or gets stuck in an infinite loop.
 
-// Check that a state is defined, i.e. has at least one pattern.
-void isDefined(state *st) {
-    if (getLength(st->patterns) > 0) return;
-    error("state %s has no rules", st->name); 
-}
-
-// Check that a state doesn't have duplicate patterns.
-void noDuplicate(state *st) {
-    int n = getLength(st->patterns);
-    for (int i = 0; i < n; i++) {
-        char *si = st->patterns[i].s;
-        for (int j = i+1; j < n; j++) {
-            char *sj = st->patterns[j].s;
-            if (strcmp(si,sj) != 0) continue;
-            error("state %s has pattern %s twice", st->name, si);
+// Check that no state has duplicate patterns.
+void noDuplicates(state *states) {
+    for (int i = 0; i < size(states); i++) {
+        state *st = &states[i];
+        for (int j = 0; j < 128; j++) {
+            pattern *list = st->patterns[j];
+            for (int k = 0; k < size(list); k++) {
+                char *s = list[k].s;
+                for (int m = k+1; m < size(list); m++) {
+                    char *t = list[m].s;
+                    if (strcmp(s,t) != 0) continue;
+                    error("state %s has pattern %s twice", st->name, s);
+                }
+            }
         }
     }
 }
 
-// A jump is a pair of states where there is a lookahead pattern (not \s or \n)
-// with no tag passing control from one to the other with no progress.
+// Scan the patterns to set the flags according to direct deductions. Set the
+// starter flag for a state which can occur at the start of a token, the adder
+// flag for a state which can occur after the start (including at the end) and
+// the ender flag for a state which can potentially occur at the end of an
+// empty token (taking into account the fact that \s or \n cannot occur when at
+// the start of a token). Further deductions are made later.
+void scanPatterns(state *states) {
+    states[0].starter = true;
+    for (int s = 0; s < size(states); s++) {
+        state *base = &states[s];
+        for (int i = 0; i < 128; i++) {
+            pattern *list = base->patterns[i];
+            for (int j = 0; j < size(list); j++) {
+                pattern *p = &list[j];
+                int t = p->target;
+                state *target = &states[t];
+                if (p->tag != '+') {
+                    target->starter = true;
+                    if (p->lookahead && p->s[0] != ' ' && p->s[0] != '\n') {
+                        base->ender = true;
+                    }
+                }
+                else if (! p->lookahead) target->adder = true;
+            }
+        }
+    }
+}
+
+// Deduce further starter and adder flags by following jumps. A jump is a
+// lookahead pattern with no tag (so it passes control to another state with no
+// progress). To allow for jump sequences, redo until there are no changes.
+// A \s or \n jump can't occur at the start of a token, so don't transfer the
+// starter flag in this case.
+
+
+int main() {
+    char *text = readFile("c.txt");
+    printf("Chars: %lu\n", strlen(text));
+    char **lines = splitLines(text);
+    printf("Lines: %d\n", size(lines));
+    char ***rows = makeRows(lines);
+    printf("Rows: %d\n", size(rows));
+    state *states = makeStates(rows);
+    fillStates(rows, states);
+    printf("States: %d\n", size(states));
+    char **singles = getSingles();
+    derangeAll(states, singles);
+    sortAll(states);
+    noDuplicates(states);
+    scanPatterns(states);
+    // checkStates(states);
+    // pattern ***chart = makeChart(states);
+    // byte *table = compile(chart);
+    // printf("table %d %d\n", 256*size(states), size(table));
+
+    // char in[100] = "   \n   b";
+    // char out[100];
+    // skip(in, out, 0);
+    // out[7] = '\0';
+    // decode(out);
+    // printf("out: %s\n", out);
+
+    free(text);
+    release(lines);
+    for (int i = 0; i < size(rows); i++) release(rows[i]);
+    release(rows);
+    for (int i = 0; i < size(states); i++) {
+        for (int j = 0; j < 128; j++) release(states[i].patterns[j]);
+        release(states[i].ranges);
+        release(states[i].patterns);
+    }
+    release(states);
+    free(singles);
+}
+
+// ---------- Sorting ----------------------------------------------------------
+
+// =============================================================================
+
+/*
+// A jump is a pair of states where there 
 struct jump { state *base; char *text; state *target; };
 typedef struct jump jump;
 
-// Scan the patterns to apply direct deductions and collect the jumps. Set the
-// starter flag for a state which can occur at the start of a token, the adder
-// flag for a state which can occur after the start (including at the end) and
-// the ender flag for a state which can potentially occur at the end of an empty
-// token (taking into account the fact that \s or \n cannot occur when at the
-// start of a token). Further deductions are made later from the collected
-// jumps.
-void scanPatterns(state *states, jump *jumps) {
-    states[0].starter = true;
-    for (int s = 0; s < getLength(states); s++) {
-        state *base = &states[s];
-        for (int i = 0; i < getLength(base->patterns); i++) {
-            pattern *p = &base->patterns[i];
-            int t = p->target;
-            state *target = &states[t];
-            if (p->tag != '+') {
-                target->starter = true;
-                if (p->lookahead && p->s[0] != ' ' && p->s[0] != '\n') {
-                    base->ender = true;
-                }
-            }
-            else if (! p->lookahead) target->adder = true;
-            else {
-                int n = getLength(jumps);
-                jumps[n] = (jump) { base, p->s, target };
-                setLength(jumps, n+1);
-            }
-        }
-    }
-}
 
-// Deduce further starter and adder flags by following jumps. To allow for jump
-// sequences, redo until there are no changes. A \s or \n jump can't occur at
-// the start of a token, so don't transfer the starter flag in this case.
 void deduce(jump *jumps) {
     bool changed = true;
     while (changed) {
         changed = false;
-        for (int i = 0; i < getLength(jumps); i++) {
+        for (int i = 0; i < size(jumps); i++) {
             jump *p = &jumps[i];
             if (p->base->starter && ! p->target->starter) {
                 p->target->starter = true;
@@ -430,7 +551,7 @@ void deduce(jump *jumps) {
 // Report a state which could create an empty token because both the starter and
 // ender tags are true.
 void reportEmpty(state *states) {
-    for (int i = 0; i < getLength(states); i++) {
+    for (int i = 0; i < size(states); i++) {
         state *base = &states[i];
         if (! base->starter || ! base->ender) continue;
         error("state %s can create an empty token", base->name);
@@ -441,7 +562,7 @@ void reportEmpty(state *states) {
 void handles(state *st, char ch) {
     char s[] = { ch, '\0'};
     bool found = false;
-    for (int i = 0; i < getLength(st->patterns); i++) {
+    for (int i = 0; i < size(st->patterns); i++) {
         if (strcmp(st->patterns[i].s, s) == 0) found = true;
     }
     if (found) return;
@@ -460,8 +581,8 @@ void complete(state *st) {
 
 // Check every state, then deal with jumps.
 void checkStates(state *states) {
-    jump *jumps = allocate(10000, sizeof(jump));
-    for (int i = 0; i < getLength(states); i++) {
+    jump *jumps = allocate(sizeof(jump));
+    for (int i = 0; i < size(states); i++) {
         state *st = &states[i];
         isDefined(st);
         noDuplicate(st);
@@ -469,9 +590,9 @@ void checkStates(state *states) {
     }
     scanPatterns(states, jumps);
     deduce(jumps);
-    printf("jumps %d\n", getLength(jumps));
+    printf("jumps %d\n", size(jumps));
     reportEmpty(states);
-    for (int i=0; i<getLength(states); i++) {
+    for (int i=0; i<size(states); i++) {
         printf("%s", states[i].name);
         if (states[i].starter) printf(" starter");
         if (states[i].adder) printf(" adder");
@@ -481,62 +602,6 @@ void checkStates(state *states) {
     release(jumps);
 }
 
-// ---------- Sorting ----------------------------------------------------------
-// Convert the states into a chart format. Each state in the chart has an array
-// of 128 lists, one per character, each list containing the patterns starting
-// with that character. The patterns in each list are sorted, but with the
-// longer one first where one is a prefix of another.
-
-// Check if string s is a prefix of string t.
-bool prefix(char const *s, char const *t) {
-    return strncmp(s, t, strlen(s)) == 0;
-}
-
-// Compare two strings in lexicographic order, except prefer a longer strings to
-// a prefix.
-int compare(char *s, char *t) {
-    int c = strcmp(s, t);
-    if (c < 0 && prefix(s, t)) return 1;
-    if (c > 0 && prefix(t, s)) return -1;
-    return c;
-}
-
-// Sort a list of patterns in place.
-void sort(pattern *patterns) {
-    int n = getLength(patterns);
-    for (int i = 1; i < n; i++) {
-        pattern p = patterns[i];
-        int j = i - 1;
-        while (j >= 0 && compare(patterns[j].s, p.s) > 0) {
-            patterns[j + 1] = patterns[j];
-            j--;
-        }
-        patterns[j + 1] = p;
-    }
-}
-
-pattern ***makeChart(state *states) {
-    int n = getLength(states);
-    pattern ***chart = allocate(n, sizeof(pattern **));
-    chart = push(chart, n);
-    for (int i = 0; i < n; i++) {
-        chart[i] = allocate(128, sizeof(pattern *));
-        for (int j = 0; j < 128; j++) {
-            chart[i][j] = allocate(1, sizeof(pattern));
-        }
-        pattern *ps = states[i].patterns;
-        for (int j = 0; j < getLength(ps); j++) {
-            int ch = ps[j].s[0];
-            chart[i][ch] = push(chart[i][ch], 1);
-            int n = getLength(chart[i][ch]);
-            chart[i][ch][n-1] = ps[j];
-        }
-        for (int j = 0; j < 128; j++) {
-            sort(chart[i][j]);
-        }
-    }
-    return chart;
-}
 
 // TODO: check for infinite loops.
 // Check that there can be no infinite loop of jumps on any particular input.
@@ -558,11 +623,11 @@ pattern ***makeChart(state *states) {
 
 typedef unsigned char byte;
 
-// Fill in an action for a given pattern, as two bytes. The first is the tag,
-// compressed into 6 bits, similarly to base64 (i.e. an index into
-// "A..Za..z0..9+") plus two top bits. The first is 1 to mean the last action
-//  in a list, the second is 1 to mean lookahead. The second byte gives the
-//  target state.
+// Fill in an action for a given pattern, as two bytes, one for the tag and one
+// for the target state. The tag is compressed into 6 bits, similarly to
+// base64 (i.e. an index into "A..Za..z0..9+"). That leaves room for a bit 0x40
+// to indicate a lookahead action. For an action in the main table, the top
+// bit 0x80 means the action is immediate.
 void fillAction(byte *action, pattern *p, bool last) {
     int code, tag = p->tag;
     if ('A' <= tag && tag <= 'Z') code = tag - 'A';
@@ -575,6 +640,14 @@ void fillAction(byte *action, pattern *p, bool last) {
     action[1] = p->target; 
 }
 
+char decode(char *s) {
+    for (int i = 0; i < strlen(s); i++) {
+        int n = s[i];
+        s[i] =
+"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+"[n];
+    }
+}
+
 // When there is more than one pattern starting with the same character, enter
 // the given offset into the table entry (in bigendian order).
 void fillLink(byte *action, int offset) {
@@ -584,15 +657,17 @@ void fillLink(byte *action, int offset) {
 
 // Fill in a list of patterns as actions at the end of the table. Each action
 // consists of two bytes as in fillAction, followed by a byte containing the
-// number of characters in the pattern, followed by the characters.
+// number of characters in the pattern after the first, followed by those
+// characters. (The list needs no termination because the last entry always
+// matches.)
 void fillList(pattern *ps, byte *table) {
-    int np = getLength(ps);
+    int np = size(ps);
     for (int i = 0; i < np; i++) {
         pattern *p = &ps[i];
         int len = strlen(p->s);
-        byte *action = &table[getLength(table)];
+        byte *action = &table[size(table)];
         bool last = (i == np - 1);
-        table = push(table, 2 + 1 + len);
+        table = extend(table, 2 + 1 + len);
         fillAction(action, p, last);
         action[2] = len;
         strncpy((char *)&action[4], p->s, len);
@@ -600,21 +675,21 @@ void fillList(pattern *ps, byte *table) {
 }
 
 byte *compile(pattern ***chart) {
-    byte *table = allocate(5000, 1);
-    table = push(table, 256 * getLength(chart));
-    printf("table1: %d\n", getLength(table));
-    for (int i = 0; i < getLength(chart); i++) {
+    byte *table = allocate(sizeof(byte));
+    table = extend(table, 256 * size(chart));
+    printf("table1: %d\n", size(table));
+    for (int i = 0; i < size(chart); i++) {
         for (int j = 0; j < 128; j++) {
             byte *action = &table[256 * i + j];
             pattern *ps = chart[i][j];
-            int n = getLength(ps);
+            int n = size(ps);
             if (n == 0) {
                 pattern p = { .tag='U', .target=0, .lookahead=false };
                 fillAction(action, &p, true);
             }
             else if (n == 1) fillAction(action, &ps[0], true);
             else {
-                int offset = getLength(table);
+                int offset = size(table);
                 fillLink(action, offset);
                 fillList(ps, table);
             }
@@ -632,6 +707,7 @@ enum { ADD = 62, GAP = 6, NEWLINE = 13 };
 
 // Skip spaces and newlines. Mark spaces with G and each newline with N.
 int skip(char *in, char *out, int n) {
+        printf("skip\n");
     int gap = n;
     while (in[n] == ' ' || in[n] == '\n') {
         printf("n: %d\n", n);
@@ -674,64 +750,11 @@ void scan(byte *table, char *in, char *out) {
 // TODO:  testing.
 
 
-// The number of rows is an upper bound for the number of states, and the
-// number of tags. The number of rows times 10 + 128 is a reasonable upper
-// bound for the number of patterns. The patterns are going to have to be
-// sorted! A jump should not be followed by another jump.
-// MAYBE a pattern contains an array with an action per state. Makes
-// it easier to sort patterns.
 // STATE PROPERTIES.
 // Ender: rule has tag and lookahead including \s \n
 // Can start a token: start + adder tag + after jump from starter.
 // Jumps. Has lookahead not \s\n. No double jump (for same pattern).
-
-int main() {
-    char *text = readFile("c.txt");
-    printf("Chars: %lu\n", strlen(text));
-    char **lines = splitLines(text);
-    printf("Lines: %d\n", getLength(lines));
-    char ***rows = makeRows(lines);
-    printf("Rows: %d\n", getLength(rows));
-    state *states = allocate(256, sizeof(state));
-    transfer(rows, states);
-    printf("States: %d\n", getLength(states));
-    char **singles = getSingles();
-    derangeAll(states, singles);
-    checkStates(states);
-    pattern ***chart = makeChart(states);
-    byte *table = compile(chart);
-    printf("table %d %d\n", 256*getLength(states), getLength(table));
-
-    char in[100] = "   \n   b";
-    char out[100];
-//    scan(in, out, 0);
-    out[7] = '\0';
- //   printf("out: %s\n", out);
-
-    free(text);
-    release(lines);
-    for (int i = 0; i < getLength(rows); i++) release(rows[i]);
-    release(rows);
-    for (int i = 0; i < getLength(states); i++) release(states[i].patterns);
-    release(states);
-    for (int i = 0; i < getLength(chart); i++) {
-        for (int j = 0; j < 128; j++) release(chart[i][j]);
-        release(chart[i]);
-    }
-    release(chart);
-    free(singles);
-    release(table);
-//    printf("%s:\n", states[1].name);
-    /*
-    for (int i=0; i<getLength(rows); i++) {
-        printf("%d", i+1);
-        for (int j=0; j < getLength(rows[i].tokens); j++) {
-            printf("_%s", rows[i].tokens[j]);
-        }
-        printf("\n");
-    }
-    */
-}
+*/
 
 /*
 
@@ -848,8 +871,8 @@ void makeSingles() {
     }
 }
 
-// Expand each range x..y into an explicit series of one-character tokens.
-void expandRanges(char **tokens) {
+// extend each range x..y into an explicit series of one-character tokens.
+void extendRanges(char **tokens) {
     makeSingles();
     char **work = newList();
     for (int i = 0; i < length(tokens); i++) {
@@ -866,9 +889,9 @@ void expandRanges(char **tokens) {
     freeList(work);
 }
 
-// Expand s:X at the start to s X and Y:t at the end to Y t, with More as the
+// extend s:X at the start to s X and Y:t at the end to Y t, with More as the
 // defaults for X and Y.
-void expandStyles(char **tokens) {
+void extendStyles(char **tokens) {
     char **work = newList();
     add(work, tokens[0]);
     char *p = strchr(tokens[0], ':');
@@ -901,8 +924,8 @@ char ***readRules(char *text) {
         char **tokens = readTokens(lines[i]);
         if (length(tokens) == 0) continue;
         normalize(tokens);
-        expandRanges(tokens);
-        expandStyles(tokens);
+        extendRanges(tokens);
+        extendStyles(tokens);
         add(rules, tokens);
     }
     freeList(lines);
@@ -950,7 +973,7 @@ static char **findPatterns(char ***rules) {
 }
 
 // -----------------------------------------------------------------------------
-// Sort the patterns, with longer strings coming before their prefixes. Expand
+// Sort the patterns, with longer strings coming before their prefixes. extend
 // the list of patterns so that there is an empty string after each run of
 // strings with the same first character. Find the indexes into the patterns of
 // the runs starting with each ASCII character. Compress the patterns into a
@@ -994,7 +1017,7 @@ void insertEmpty(char **patterns, int p) {
 }
 
 // Add an empty string when the first character of the patterns changes.
-void expand(char **patterns) {
+void extend(char **patterns) {
     int i = 0;
     while (i < length(patterns)) {
         char start = patterns[i][0];
@@ -1131,7 +1154,7 @@ scanner *newScanner(char const *path) {
     sc->patterns = findPatterns(rules);
     sc->styles = makeStyles();
     sort(sc->patterns);
-    expand(sc->patterns);
+    extend(sc->patterns);
     sc->nStates = length(sc->states);
     sc->nPatterns = length(sc->patterns);
     sc->indexes = findIndexes(sc->patterns);
@@ -1279,31 +1302,31 @@ void testNormalize() {
     freeList(tokens);
 }
 
-// Test that ranges are expanded to one-character strings.
-void testExpandRanges() {
+// Test that ranges are extended to one-character strings.
+void testextendRanges() {
     char line[] = "s a..c t";
     char **tokens = readTokens(line);
-    expandRanges(tokens);
+    extendRanges(tokens);
     assert(check(tokens, "s a b c t"));
     freeList(tokens);
 }
 
 // Test that the before and after styles for a rule are extracted, with More as
 // the default.
-void testExpandStyles() {
+void testextendStyles() {
     char line[] = "s p t";
     char **tokens = readTokens(line);
-    expandStyles(tokens);
+    extendStyles(tokens);
     assert(check(tokens, "s More p More t"));
     freeList(tokens);
     char line2[] = "s:X p t";
     tokens = readTokens(line2);
-    expandStyles(tokens);
+    extendStyles(tokens);
     assert(check(tokens, "s X p More t"));
     freeList(tokens);
     char line3[] = "s p X:t";
     tokens = readTokens(line3);
-    expandStyles(tokens);
+    extendStyles(tokens);
     assert(check(tokens, "s More p X t"));
     freeList(tokens);
 }
@@ -1322,7 +1345,7 @@ void testSort() {
 void testIndexes() {
     char line[] = "b bc d de";
     char **patterns = readTokens(line);
-    expand(patterns);
+    extend(patterns);
     assert(check(patterns, "? b bc ? d de ?"));
     ushort *indexes = findIndexes(patterns);
     assert(indexes[0] == 0);
@@ -1341,7 +1364,7 @@ void testIndexes() {
 void testCompress() {
     char line[] = "b bc d de";
     char **patterns = readTokens(line);
-    expand(patterns);
+    extend(patterns);
     assert(check(patterns, "? b bc ? d de ?"));
     char *symbols = compress(patterns);
     assert(memcmp(symbols, "\0\0\1b\0\2bc\0\0\0\1d\0\2de\0\0\0", 20) == 0);
@@ -1360,7 +1383,7 @@ void testCompress() {
 void testOffsets() {
     char line[] = "b bc d de";
     char **patterns = readTokens(line);
-    expand(patterns);
+    extend(patterns);
     char *symbols = compress(patterns);
     assert(memcmp(symbols, "\0\0\1b\0\2bc\0\0\0\1d\0\2de\0\0\0", 20) == 0);
     ushort *indexes = findIndexes(patterns);
@@ -1383,8 +1406,8 @@ int main() {
     testReadTokens();
     testReadLines();
     testNormalize();
-    testExpandRanges();
-    testExpandStyles();
+    testextendRanges();
+    testextendStyles();
     testSort();
     testIndexes();
     testCompress();

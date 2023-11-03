@@ -139,7 +139,7 @@ character, if a digit appears next in the source text, the scanner goes to the
 <p>A lookahead pattern c matches a space and <code>\n</code> matches a newline.
 (Either lines being scanned have no trailing spaces, or the scanner treats
 spaces followed by a newline as matching <code>\n</code> rather than
-<code>\n</code>.) If the current rule has no tag, the scanner jumps straight to
+<code>\s</code>.) If the current rule has no tag, the scanner jumps straight to
 the target state as with other lookahead patterns. If the rule has a tag, the
 current token is terminated and given the tag as a type, as usual, but then all
 spaces and newlines are skipped and suitably marked as separators until the
