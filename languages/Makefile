@@ -1,5 +1,6 @@
 # Definitive list of compiler modules in dependency order.
 scan = scan.c
+scan2 = scan2.c
 
 # C compiler and options for debugging or optimisation. On macOS, 'gcc'
 # refers to 'clang'.

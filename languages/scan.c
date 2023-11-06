@@ -1,5 +1,5 @@
 // Free and open source, see licence.txt.
-// Provide a standalone scanner to test and compile language definitions.
+// Provide a standalone scanner to test language definitions.
 #include "style.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,6 +9,17 @@
 #include <string.h>
 #include <ctype.h>
 #include <assert.h>
+
+// TODO notes on tags.
+// Flag to indicate cursor position?
+// Flag to indicate change of background colour?
+// Flag to indicate mismatch?
+// Sign, PreSign, InSign, PostSign
+// Op, PreOp, InOp, PostOp  (++ OP)
+// Fixity of brackets? (Begin0/End0 are infix? JSP? Flexible? InBegin/InEnd?)
+// Transfer of { type to } type (reversibly)?
+// Rescan a line, repair bracket matching, repair indent, repair semicolon.
+// Active newline versus commented newline? Or implied by scan state?
 
 // ---------- Lists ------------------------------------------------------------
 // Lists are flexible arrays with built-in length and capacity.
@@ -49,11 +60,11 @@ void *resize(void *a, int n) {
     return p + 1;
 }
 
-// Increase list size by delta. TODO rename or add new (for negative arg).
-void *extend(void *a, int delta) { return resize(a, size(a) + delta); }
+// Increase or decrease list size by d. Return the possibly reallocated list.
+void *resizeBy(void *a, int d) { return resize(a, size(a) + d); }
 
 // Make sure there is room for d more items.
-void *ensure(void *a, int d) { a = extend(a,d); extend(a, -d); return a; }
+void *ensure(void *a, int d) { a = resizeBy(a,d); resizeBy(a,-d); return a; }
 
 // Release memory for a list.
 void release(void *a) { free(head(a)); }
@@ -142,7 +153,7 @@ char **splitTokens(char *s) {
     int n = 0;
     char **tokens = allocate(sizeof(char *));
     if (! islower(s[0])) {
-        tokens = extend(tokens, 1);
+        tokens = resizeBy(tokens, 1);
         tokens[0] = s;
         return tokens;
     }
@@ -151,14 +162,14 @@ char **splitTokens(char *s) {
     for (int i = 0; s[i] != '\0'; i++) {
         if (s[i] != ' ') continue;
         s[i] = '\0';
-        tokens = extend(tokens, 1);
+        tokens = resizeBy(tokens, 1);
         tokens[n++] = &s[start];
         start = i + 1;
     }
-    tokens = extend(tokens, 1);
+    tokens = resizeBy(tokens, 1);
     tokens[n++] = &s[start];
     if (isStateName(tokens[0]) && ! isTagName(tokens[n-1])) {
-        tokens = extend(tokens, 1);
+        tokens = resizeBy(tokens, 1);
         tokens[n++] = "+";
     }
     return tokens;
@@ -182,12 +193,13 @@ char ***makeRows(char **lines) {
 struct pattern { char *s; bool lookahead; char tag; int target; };
 typedef struct pattern pattern;
 
-// A state is a name, an array of lists of patterns indexed by first character,
+// A state has a name, an array of lists of patterns indexed by first character,
 // a temporary list of range patterns, and flags to say whether the state can
-// be at the start, after the start, or at the end of a token. 
+// occur at the start, or can occur after the start, of a token. There is also
+// a visited flag to help check for cycles of states.
 struct state {
     char *name; pattern **patterns; pattern *ranges;
-    bool starter, adder, ender;
+    bool starter, adder, visited;
 };
 typedef struct state state;
 
@@ -214,7 +226,7 @@ state *addState(state *states, char *name) {
     patterns = resize(patterns, 128);
     for (int i = 0; i < 128; i++) patterns[i] = allocate(sizeof(pattern));
     pattern *ranges = allocate(sizeof(pattern));
-    states = extend(states, 1);
+    states = resizeBy(states, 1);
     states[n] = (state) {
         .name=name, .patterns=patterns, .ranges=ranges,
         .starter=false, .adder=false, .ender=false
@@ -286,12 +298,12 @@ void fillStates(char ***rows, state *states) {
             pattern pat;
             convert(s, target, tag, &pat);
             if (isRange(pat.s)) {
-                base->ranges = extend(base->ranges, 1);
+                base->ranges = resizeBy(base->ranges, 1);
                 base->ranges[size(base->ranges) - 1] = pat;
             }
             else {
                 int ch = pat.s[0];
-                base->patterns[ch] = extend(base->patterns[ch], 1);
+                base->patterns[ch] = resizeBy(base->patterns[ch], 1);
                 base->patterns[ch][size(base->patterns[ch]) - 1] = pat;
             }
         }
@@ -300,7 +312,7 @@ void fillStates(char ***rows, state *states) {
 
 // ---------- Ranges -----------------------------------------------------------
 // A range such as 0..9 is equivalent to several one-character patterns, except
-// that more specific patterns take precedence. Ranges are extended by
+// that more specific patterns take precedence. Ranges are expanded by
 // repeatedly finding a range with no subrange, and replacing it by
 // one-character patterns for those characters not already handled.
 
@@ -378,7 +390,7 @@ void derange(state *base, pattern *range, char **singles) {
         }
         if (found) continue;
         int n = size(list);
-        list = extend(list, 1);
+        list = resizeBy(list, 1);
         list[n] = *range;
         list[n].s = singles[ch];
         base->patterns[ch] = list;
@@ -395,6 +407,8 @@ void derangeAll(state *states, char **singles) {
         }
     }
 }
+
+// ---------- Sorting ----------------------------------------------------------
 
 // Sort the patterns in a list by decreasing length, so that when they are tried
 // one after another in the scanner, the longest match is found first.
@@ -426,6 +440,38 @@ void sortAll(state *states) {
 // Check that a scanner handles every input, generates only non-empty tokens,
 // and never fails or gets stuck in an infinite loop.
 
+// Scan the states to set their flags. Set the starter flag for a state which
+// can occur at the start of a token, and the adder flag for a state which can
+// occur after the start.
+void scanPatterns(state *states) {
+    states[0].starter = true;
+    for (int s = 0; s < size(states); s++) {
+        state *base = &states[s];
+        for (int i = 0; i < 128; i++) {
+            pattern *list = base->patterns[i];
+            for (int j = 0; j < size(list); j++) {
+                pattern *p = &list[j];
+                int t = p->target;
+                state *target = &states[t];
+                if (p->tag != '+') target->starter = true;
+                else if (! p->lookahead) target->adder = true;
+            }
+        }
+    }
+}
+
+// For a state and a string appearing next in the input, follow lookahead
+// patterns to determine whether an infinite loop is possible. (Ditto empty
+// token.) TODO patterns in proper order.
+void noLoop(state *states, int s, char *p) {
+    // If visited, report loop. Mark visited.
+    // Get list for first char and loop through it.
+    // If it is a jump:
+    //     adjust string to max of two
+    //     noLoop(target, string)
+    // Unmark visited.
+}
+
 // Check that no state has duplicate patterns.
 void noDuplicates(state *states) {
     for (int i = 0; i < size(states); i++) {
@@ -439,34 +485,6 @@ void noDuplicates(state *states) {
                     if (strcmp(s,t) != 0) continue;
                     error("state %s has pattern %s twice", st->name, s);
                 }
-            }
-        }
-    }
-}
-
-// Scan the patterns to set the flags according to direct deductions. Set the
-// starter flag for a state which can occur at the start of a token, the adder
-// flag for a state which can occur after the start (including at the end) and
-// the ender flag for a state which can potentially occur at the end of an
-// empty token (taking into account the fact that \s or \n cannot occur when at
-// the start of a token). Further deductions are made later.
-void scanPatterns(state *states) {
-    states[0].starter = true;
-    for (int s = 0; s < size(states); s++) {
-        state *base = &states[s];
-        for (int i = 0; i < 128; i++) {
-            pattern *list = base->patterns[i];
-            for (int j = 0; j < size(list); j++) {
-                pattern *p = &list[j];
-                int t = p->target;
-                state *target = &states[t];
-                if (p->tag != '+') {
-                    target->starter = true;
-                    if (p->lookahead && p->s[0] != ' ' && p->s[0] != '\n') {
-                        base->ender = true;
-                    }
-                }
-                else if (! p->lookahead) target->adder = true;
             }
         }
     }
@@ -492,8 +510,16 @@ int main() {
     char **singles = getSingles();
     derangeAll(states, singles);
     sortAll(states);
-    noDuplicates(states);
     scanPatterns(states);
+    noDuplicates(states);
+    /*
+    for (int i = 0; i < 127; i++) {
+        if (i < 32 && i != '\n') continue;
+        for (int j = 0; j < size(states[0].patterns[i]); j++) {
+            printf("%d %s\n", j, states[0].patterns[i][j].s);
+        }
+    }
+    */
     // checkStates(states);
     // pattern ***chart = makeChart(states);
     // byte *table = compile(chart);
@@ -519,7 +545,6 @@ int main() {
     free(singles);
 }
 
-// ---------- Sorting ----------------------------------------------------------
 
 // =============================================================================
 
@@ -667,7 +692,7 @@ void fillList(pattern *ps, byte *table) {
         int len = strlen(p->s);
         byte *action = &table[size(table)];
         bool last = (i == np - 1);
-        table = extend(table, 2 + 1 + len);
+        table = resizeBy(table, 2 + 1 + len);
         fillAction(action, p, last);
         action[2] = len;
         strncpy((char *)&action[4], p->s, len);
@@ -676,7 +701,7 @@ void fillList(pattern *ps, byte *table) {
 
 byte *compile(pattern ***chart) {
     byte *table = allocate(sizeof(byte));
-    table = extend(table, 256 * size(chart));
+    table = resizeBy(table, 256 * size(chart));
     printf("table1: %d\n", size(table));
     for (int i = 0; i < size(chart); i++) {
         for (int j = 0; j < 128; j++) {
@@ -826,265 +851,7 @@ void add(void *xs, void *x) {
 }
 
 // ----------------------------------------------------------------------------
-// Read in, tokenize, and normalize a language file into rules.
 
-// Split a line into tokens at the spaces.
-char **readTokens(char *line) {
-    char **tokens = newList();
-    while (line[0] == ' ') line++;
-    int n = strlen(line) + 1;
-    int cn = 0;
-    for (int i = 0; i < n; i++) {
-        if (line[i] != ' ' && line[i] != '\0') continue;
-        line[i] = '\0';
-        if (line[cn] != '\0') add(tokens, &line[cn]);
-        while (i < n-1 && line[i+1] == ' ') i++;
-        cn = i + 1;
-    }
-    return tokens;
-}
-
-// Recognize "s _ t" as matching a space and "s t" as matching the empty string.
-void normalize(char **tokens) {
-    int n = length(tokens);
-    if (n == 3 && strcmp(tokens[1], "_") == 0) {
-        tokens[1] = " ";
-    }
-    else if (n == 2) {
-        setLength(tokens, 3);
-        tokens[2] = tokens[1];
-        tokens[1] =  "";
-    }
-}
-
-// Check if a token is a range.
-bool isRange(char *token) {
-    return (strlen(token) == 4 && token[1] == '.' && token[2] == '.');
-}
-
-// Create 128 one-character strings, of two bytes each.
-char singles[256];
-void makeSingles() {
-    for (int i = 0; i < 128; i++) {
-        singles[2*i] = (char) i;
-        singles[2*i+1] = '\0';
-    }
-}
-
-// extend each range x..y into an explicit series of one-character tokens.
-void extendRanges(char **tokens) {
-    makeSingles();
-    char **work = newList();
-    for (int i = 0; i < length(tokens); i++) {
-        char *token = tokens[i];
-        if (! isRange(token)) add(work, token);
-        else {
-            for (int ch = token[0]; ch <= token[3]; ch++) {
-                add(work, &singles[2*ch]);
-            }
-        }
-    }
-    setLength(tokens, 0);
-    for (int i = 0; i < length(work); i++) add(tokens, work[i]);
-    freeList(work);
-}
-
-// extend s:X at the start to s X and Y:t at the end to Y t, with More as the
-// defaults for X and Y.
-void extendStyles(char **tokens) {
-    char **work = newList();
-    add(work, tokens[0]);
-    char *p = strchr(tokens[0], ':');
-    if (p == NULL) add(work, "More");
-    else {
-        *p = '\0';
-        add(work, p + 1);
-    }
-    int n = length(tokens);
-    for (int i = 1; i < n - 1; i++) add(work, tokens[i]);
-    p = strchr(tokens[n-1], ':');
-    if (p == NULL) {
-        add(work, "More");
-        add(work, tokens[n-1]);
-    }
-    else {
-        *p = '\0';
-        add(work, tokens[n-1]);
-        add(work, p + 1);
-    }
-    setLength(tokens, 0);
-    for (int i = 0; i < length(work); i++) add(tokens, work[i]);
-    freeList(work);
-}
-
-char ***readRules(char *text) {
-    char **lines = readLines(text);
-    char ***rules = newList();
-    for (int i=0; i<length(lines); i++) {
-        char **tokens = readTokens(lines[i]);
-        if (length(tokens) == 0) continue;
-        normalize(tokens);
-        extendRanges(tokens);
-        extendStyles(tokens);
-        add(rules, tokens);
-    }
-    freeList(lines);
-    return rules;
-}
-
-// ----------------------------------------------------------------------------
-// Collect up all the distinct state names, and distinct pattern strings.
-
-// Search for a string in a list.
-int search(char **xs, char *x) {
-    for (int i = 0; i < length(xs); i++) {
-        if (strcmp(xs[i], x) == 0) return i;
-    }
-    return -1;
-}
-
-// Find a string in a list, adding it if necessary.
-void find(char **xs, char *x) {
-    int i = search(xs, x);
-    if (i < 0) add(xs, x);
-}
-
-// Find all the state names in the rules.
-static char **findStates(char ***rules) {
-    char **states = newList();
-    for (int i = 0; i < length(rules); i++) {
-        char **tokens = rules[i];
-        int n = length(tokens);
-        find(states, tokens[0]);
-        find(states, tokens[n-1]);
-    }
-    return states;
-}
-
-// Find all the patterns in the rules.
-static char **findPatterns(char ***rules) {
-    char **patterns = newList();
-    for (int i = 0; i < length(rules); i++) {
-        char **tokens = rules[i];
-        int n = length(tokens);
-        for (int j = 2; j < n-2; j++) find(patterns, tokens[j]);
-    }
-    return patterns;
-}
-
-// -----------------------------------------------------------------------------
-// Sort the patterns, with longer strings coming before their prefixes. extend
-// the list of patterns so that there is an empty string after each run of
-// strings with the same first character. Find the indexes into the patterns of
-// the runs starting with each ASCII character. Compress the patterns into a
-// single character array, with a leading lemgth byte rather than a null
-// terminator for each pattern. Find the offsets in the symbols array for the
-// run starting with each character.
-
-// Check if string s is a prefix of string t.
-static inline bool prefix(char const *s, char const *t) {
-    return strncmp(s, t, strlen(s)) == 0;
-}
-
-// Compare two strings in ascii order, except prefer longer strings to prefixes.
-int compare(char *s, char *t) {
-    int c = strcmp(s, t);
-    if (c < 0 && prefix(s, t)) return 1;
-    if (c > 0 && prefix(t, s)) return -1;
-    return c;
-}
-
-// Sort the list of patterns, with the prefix rule.
-void sort(char **patterns) {
-    int n = length(patterns);
-    for (int i = 1; i < n; i++) {
-        char *s = patterns[i];
-        int j = i - 1;
-        while (j >= 0 && compare(patterns[j], s) > 0) {
-            patterns[j + 1] = patterns[j];
-            j--;
-        }
-        patterns[j + 1] = s;
-    }
-}
-
-// Insert an empty pattern string at a given position.
-void insertEmpty(char **patterns, int p) {
-    int n = length(patterns);
-    setLength(patterns, n+1);
-    for (int i = n; i >= p; i--) patterns[i+1] = patterns[i];
-    patterns[p] = "";
-}
-
-// Add an empty string when the first character of the patterns changes.
-void extend(char **patterns) {
-    int i = 0;
-    while (i < length(patterns)) {
-        char start = patterns[i][0];
-        insertEmpty(patterns, i);
-        i++;
-        while (i < length(patterns) && patterns[i][0] == start) i++;
-    }
-    add(patterns, "");
-}
-
-// Find the index in the patterns of the run starting with each ASCII character.
-ushort *findIndexes(char **patterns) {
-    ushort *indexes = malloc(128 * sizeof(ushort));
-    int here = 0;
-    int nextCh = patterns[here + 1][0];
-    for (int ch = 0; ch < 128; ch++) {
-        if (ch < nextCh) indexes[ch] = here;
-        else {
-            here++;
-            indexes[ch] = here;
-            while (patterns[here][0] != '\0') here++;
-            if (here >= length(patterns) - 1) nextCh = 128;
-            else nextCh = patterns[here + 1][0];
-        }
-    }
-    return indexes;
-}
-
-// Pack the pattern strings into a symbols array, in which each string is
-// preceded by a one-byte length. Update the patterns to point into the array.
-char *compress(char **patterns) {
-    int n = 0;
-    for (int i = 0; i < length(patterns); i++) {
-        assert(strlen(patterns[i]) <= 127);
-        n = n + strlen(patterns[i]) + 2;
-    }
-    assert(n <= 65535);
-    char *symbols = malloc(n);
-    n = 0;
-    for (int i = 0; i < length(patterns); i++) {
-        symbols[n++] = strlen(patterns[i]);
-        strcpy(&symbols[n], patterns[i]);
-        patterns[i] = &symbols[n];
-        n = n + strlen(patterns[i]) + 1;
-    }
-    return symbols;
-}
-
-// Find the offset in the compressed patterns array for the n'th pattern, by
-// using the lengths to skip forwards.
-ushort findOffset(char *patterns, ushort n) {
-    int offset = 0;
-    for (int i = 0; i < n; i++) {
-        offset = offset + patterns[offset] + 2;
-    }
-    return offset;
-}
-
-// Find the offsets in the compressed patterns array corresponding to each
-// of the given 128 indexes.
-ushort *findOffsets(char *patterns, ushort *indexes) {
-    ushort *offsets = malloc(128 * sizeof(ushort));
-    for (int ch = 0; ch < 128; ch++) {
-        offsets[ch] = findOffset(patterns, indexes[ch]);
-    }
-    return offsets;
-}
 
 // ----------------------------------------------------------------------------
 // Build a scanner from the data gathered so far. Build an array of style names,
