@@ -817,43 +817,6 @@ struct scanner {
 typedef struct scanner scanner;
 
 // ----------------------------------------------------------------------------
-// Implement lists of pointers as arrays, preceded by the length.
-
-// The maximum length of any list. Increase as necessary.
-enum { MAX = 1000 };
-
-void *newList() {
-    void **xs = malloc((MAX+1) * sizeof(void *));
-    xs[0] = (void *) 0;
-    return xs + 1;
-}
-
-void freeList(void *xs) {
-    void **ys = (void **) xs;
-    free(ys - 1);
-}
-
-int length(void *xs) {
-    void **ys = (void **) xs;
-    return (intptr_t) ys[-1];
-}
-
-void setLength(void *xs, int n) {
-    assert(n <= MAX);
-    void **ys = (void **) xs;
-    ys[-1] = (void *) (intptr_t) n;
-}
-
-void add(void *xs, void *x) {
-    void **ys = (void **) xs;
-    ys[length(ys)] = x;
-    setLength(ys, length(ys) + 1);
-}
-
-// ----------------------------------------------------------------------------
-
-
-// ----------------------------------------------------------------------------
 // Build a scanner from the data gathered so far. Build an array of style names,
 // create a blank action table, and fill each row from a rule.
 

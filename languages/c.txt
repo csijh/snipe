@@ -1,4 +1,3 @@
-TODO: rename c-h.txt?
 // C language definition, based on the C11 standard
 // See http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1548.pdf
 // The source text is assumed to be normalised, with no control characters
@@ -30,10 +29,13 @@ key2    \!..~ \s \n                                             check0 KEY
 
 // Operators and signs.
 
-start   != ! % && &= & *= * ++ += + -- -= - /= / ?  start OP
-start   <<= << <= < == >= >>= >> > ^= ^ |= || | ~   start OP
-start   ## %= , ... ; : ->                          start SIGN
-start   =                                           check3 SIGN
+start   ++ --                                       start OP0
+start   ! ~                                         start OP1
+start   != %= % && &= & *= * += + -= - /= / ?       start OP3
+start   <<= << <= < == >= >>= >> > ^= ^ |= || |     start OP3
+start   ...                                         start SIGN0
+start   ## , ; : ->                                 start SIGN3
+start   =                                           check3 SIGN3
 
 // Identifiers
 
@@ -46,12 +48,12 @@ id      \!..~ \s \n                start ID
 // instead, by the rules below. The closer } is changed from BEGIN1 to BEGIN2
 // to match by Snipe during bracket matching.
 
-start  {   start BEGIN1
-start  }   start END1
-start  [   start BEGIN3
-start  ]   start END3
-start  (   start BEGIN4
-start  )   start END4
+start  {   start BEGIN0
+start  }   start END0
+start  [   start BEGIN2
+start  ]   start END2
+start  (   start BEGIN3
+start  )   start END3
 
 // Check for { as a structure bracket in these contexts:
 // enum {       OR    struct {
@@ -60,31 +62,31 @@ start  )   start END4
 // = ( ID ) {
 // = ( struct ID ) {
 
-check0    {                          start BEGIN2
+check0    {                          start BEGIN1
 check0    a..z A..Z _ \\U \\u        check1
 check0    \!..~ \s \n                start
 check1    a..z A..Z 0..9 _ \\U \\u   check1
 check1    \!..~ \s \n                check2 ID
-check2    {                          start BEGIN2
+check2    {                          start BEGIN1
 check2    \!..~ \s \n                start
-check3    {                          start BEGIN2
-check3    (                          check4 BEGIN4
+check3    {                          start BEGIN1
+check3    (                          check4 BEGIN3
 check3    \!..~ \s \n                start
 check4    struct                     check4 KEY
 check4    a..z A..Z _ \\U \\u        check5
 check4    \!..~ \s \n                start
 check5    a..z A..Z 0..9 _ \\U \\u   check5
 check5    \!..~ \s \n                check6 ID
-check6    )                          check7 END4
+check6    )                          check7 END3
 check6    \!..~ \s \n                start
-check7    {                          start BEGIN2
+check7    {                          start BEGIN1
 check7    \!..~ \s \n                start
 
 // A dot starts a number, or is a sign.
 
 start   .             dot
 dot     \0..9         decimal
-dot     \!..~ \s \n   start SIGN
+dot     \!..~ \s \n   start SIGN3
 
 // Character and string literals.
 

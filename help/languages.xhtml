@@ -406,11 +406,12 @@ line begins with a postfix or infix token.</p>
 <p>Most of the tags correspond to nonfix tokens. However, operators and signs
 can be given prefix, postfix or infix tags, as appropriate. An operator such as
 <code>+</code> which can be prefix or infix is best declared as infix
-(<code>OP3</code>) so that a line starting with <code>+</code> is always
-treated as a continuation line. An operator such as <code>++</code> which can
-be either prefix or postfix is best tagged as nonfix (<code>OP0</code>) on the
-assumption that the operator will never be separated by a newline from its
-operand.</p>
+(<code>OP3</code>) on the assumption that when it is a prefix, it won't be
+separated by a newline from its operand, so a line starting with <code>+</code>
+is always treated as a continuation line. An operator such as <code>++</code>
+which can be either prefix or postfix is best tagged as nonfix
+(<code>OP0</code>) on the assumption that the operator will never be separated
+by a newline from its operand.</p>
 
 <p>A begin block bracket should normally be tagged as infix
 (<code>BEGIN0</code>) rather than prefix (<code>BEGIN1</code>), because a block
