@@ -138,23 +138,25 @@ identifier type. A lookahead pattern can also be a range:</p>
 character, if a digit appears next in the source text, the scanner goes to the
 <code>float</code> state without moving past the digit.</p>
 
-<p>A lookahead pattern c matches a space and <code>\n</code> matches a newline.
-If the current rule has no tag, the scanner jumps straight to the target state
-as with other lookahead patterns. If the rule has a tag, the current token is
-terminated and given the tag as a type, as usual, but then all spaces and
-newlines are skipped and suitably marked as separators until the next visible
-character is reached. Neither a space nor a newline can be recognized other
-than as a lookahead. Other single-letter lookahead patterns are reserved for
-future development. A literal single letter such as <code>x</code> can be
-recognized as a lookahead using a range such as <code>\x..x</code>.</p>
+<p>A lookahead pattern <code>\s</code> matches a space and <code>\n</code>
+matches a newline. If the current rule has no tag, the scanner jumps straight
+to the target state as with other lookahead patterns. If the rule has a tag,
+the current token is terminated and given the tag as a type, as usual, but then
+all spaces and newlines are skipped and suitably marked as separators until the
+next visible character is reached. Neither a space nor a newline can be
+recognized other than as a lookahead. Other single-letter lookahead patterns
+are reserved for future development. A literal single letter such as
+<code>x</code> can be recognized as a lookahead using a range such as
+<code>\x..x</code>.</p>
 
-<p>A pattern <code>\</code> consisting of just a backslash is an error. A
-pattern beginning with two backslashes such as <code>\\u</code> is a
+<p>A pattern beginning with two backslashes such as <code>\\u</code> is a
 non-lookahead pattern matching a string such as <code>\u</code> starting with a
 single backslash. A pattern beginning with three backslashes such as
 <code>\\\u</code> is a lookahead for a string such as <code>\u</code> starting
 with a single backslash. A backslash anywhere else in a pattern stands for
-itself.</p>
+itself. A pattern <code>\</code> consisting of just a backslash acts as a
+default equivalent to <code>\!..~ \s \n</code> matching any character not
+otherwise handled.</p>
 
 <h2>States</h2>
 
@@ -198,14 +200,15 @@ rule. If a single character is matched by two ranges, and one is a subrange of
 the other, the subrange takes precedence. For example:</p>
 
 <pre>id a..z A..Z 0..9 id
-id \!..~ \s \n    start ID
+id \ start ID
 </pre>
 
-<p>If a letter or digit appears next, the first rule applies. If any other
-character appears, the second rule applies.</p>
+<p>If a letter or digit appears next, the first rule applies, even though
+letters and digits are included in the implicit range <code>!..~</code> in the
+second rule. If any other character appears, the second rule applies.</p>
 
-<p>Any other ambiguity between two patterns in the rules for a state is an
-error.</p>
+<p>Any ambiguity not covered above between two patterns in the rules for a state
+is an error.</p>
 
 <p>When a language description is processed, various checks are made to ensure
 that the scanner never fails, creates non-empty tokens, partitions the whole
@@ -336,16 +339,16 @@ of the token.</p>
 
 <p>These are the available tags:</p>
 
-<pre>ARTICLE,  (multi-line quotation)
-BEGIN0,   (block bracket, infix)
-BEGIN1,   (initialiser bracket, prefix)
-BEGIN2,   (list bracket, prefix)
-BEGIN3,   (parenthesis, prefix)
+<pre>ARTICLE   (multi-line quotation)
+BEGIN0    (block bracket, infix)
+BEGIN1    (initialiser bracket, prefix)
+BEGIN2    (list bracket, prefix)
+BEGIN3    (parenthesis, prefix)
 COMMENT   (multi-line)
-END0,     (block bracket, infix)
-END1,     (inilialiser bracket, postfix)
-END2,     (list bracket, postfix)
-END3,     (parenthesis, postfix)
+END0      (block bracket, infix)
+END1      (inilialiser bracket, postfix)
+END2      (list bracket, postfix)
+END3      (parenthesis, postfix)
 FUNCTION  (alternative id - a function or method name)
 GAP       (spaces - not used explicitly in language definitions)
 ID        (any kind of id)
@@ -357,16 +360,16 @@ OP1       (operator, prefix)
 OP2       (operator, postfix)
 OP3       (operator, infix)
 NOTE      (one-line)
-PROPERTY, (alternative id, e.g. field name)
-QUOTE,    (one-line string or character literal)
-RESERVED, (alternative type of keyword)
-SIGN0,    (symbol or punctuation, nonfix)
-SIGN1,    (ditto, prefix)
-SIGN2,    (ditto, postfix)
-SIGN3,    (ditto, infix)
-TYPE,     (type-related keyword or id)
-UNKNOWN,  (ill-formed token)
-VALUE,    (number or other constant)
+PROPERTY  (alternative id, e.g. field name)
+QUOTE     (one-line string or character literal)
+RESERVED  (alternative type of keyword)
+SIGN0     (symbol or punctuation, nonfix)
+SIGN1     (ditto, prefix)
+SIGN2     (ditto, postfix)
+SIGN3     (ditto, infix)
+TYPE      (type-related keyword or id)
+UNKNOWN   (ill-formed token)
+VALUE     (number or other constant)
 </pre>
 
 <p>The scanning conventions and the tags are designed to help with reformatting,
@@ -380,7 +383,7 @@ spaces and newlines are always treated as separators, with comments being
 divided into word-like tokens. Lines in multi-line comments which begin with a
 space, and one-line comments with two or more spaces after the initial symbol,
 are not reformatted. The small tokens also help with word-based cursor
-movement.<p>
+movement.</p>
 
 <p><b>Syntax highlighting:</b> Each token type can be displayed in a different
 style. For this purpose, numerical suffixes are ignored (which means that the
@@ -400,18 +403,20 @@ literals are not automatically indented, but one-line comments are.</p>
 
 <p><b>Semicolon insertion:</b> Snipe inserts semicolons at the ends of lines
 where appropriate, using a simple and uniform rule. A line should have a final
-semicolon added unless it ends with a prefix or infix token, or the following
-line begins with a postfix or infix token.</p>
+semicolon added unless it ends with a prefix, or the following line begins with
+a postfix token. A token is regarded as prefix if it expects a token to follow
+immediately, and as postfix if it expects an immediately preceding token. A
+token can be nonfix, i.e. neither prefix and postfix, or infix, i.e. both.</p>
 
 <p>Most of the tags correspond to nonfix tokens. However, operators and signs
 can be given prefix, postfix or infix tags, as appropriate. An operator such as
-<code>+</code> which can be prefix or infix is best declared as infix
-(<code>OP3</code>) on the assumption that when it is a prefix, it won't be
-separated by a newline from its operand, so a line starting with <code>+</code>
-is always treated as a continuation line. An operator such as <code>++</code>
-which can be either prefix or postfix is best tagged as nonfix
-(<code>OP0</code>) on the assumption that the operator will never be separated
-by a newline from its operand.</p>
+<code>+</code> which can be a prefix or infix operator is best declared as
+infix (<code>OP3</code>) on the assumption that when it is a prefix operator,
+it won't be separated by a newline from its operand, so a line starting with
+<code>+</code> is always treated as a continuation line. An operator such as
+<code>++</code> which can be either a prefix or postfix operator is best tagged
+as nonfix(<code>OP0</code>) on the assumption that the operator will never be
+separated by a newline from its operand.</p>
 
 <p>A begin block bracket should normally be tagged as infix
 (<code>BEGIN0</code>) rather than prefix (<code>BEGIN1</code>), because a block
@@ -445,18 +450,6 @@ the <code>END1</code> tag is changed to <code>END0</code>, and similarly for
 <code>BEGIN1</code> matching with <code>END0</code>. This carries the
 information across from the begin bracket to the end bracket.</p>
 
-<hr/>
-
-<h2>Tests</h2>
-
-<p>A language description can contain tests, which then also act as examples
-illustrating the operation of the rules. A line starting with <code>></code>
-and a space represents a line of source text. A line starting with
-<code>&lt;</code> and a space represents the output from the scanner, as a
-state followed by a sequence of tokens, each followed by its type. The state
-is the start state or the state at the end of the previous line of source
-text.</p>
-
 <p><b>Incremental rescanning:</b> A line of source text can be rescanned in isolation, using only a recorded
 start state for the line.</p>
 
@@ -468,8 +461,8 @@ following the newline. The scanner can then rescan the line in isolation by
 marking any leading spaces as separators and then continuing to scan in that
 state. A scanning state can, in general, depend on characters beyond the
 current scanning position, because of lookahead patterns. However, language
-rules cannot look ahead past a newline, so the start state for a line only
-depends on the previous lines.</p>
+rules cannot look ahead past a newline, so the start state for a line depends
+only on the previous lines.</p>
 
 <p>If the target state after rescanning a changed line is not the same as the
 recorded start state of the next line, the next line may have to be rescanned
@@ -480,63 +473,21 @@ comment, or the reverse. However, the fact that lines can be rescanned in
 isolation makes it easy to interleave rescanning with user actions, so there
 are no long pauses.</p>
 
-<h2>Conventions</h2>
+<h2>Tests</h2>
 
-<p>==========</p>
+<p>A language description can contain tests, which also act as examples
+illustrating the operation of the rules. A line starting with <code>></code>
+represents a line of source text. A line starting with <code>&lt;</code>
+represents the output from the scanner, as a sequence of tokens, each preceded
+by an abbreviation for its type. The scanner state after scanning the input
+line is used as the start state for the next test, which allows for extended
+examples. For example:</p>
 
-<p>The Snipe scanner does not just give each token a type for syntax
-highlighting purposes. It also supports further editor features, and some
-conventions are needed for this to work. Not all these conventions can be
-tested, but if a violation is detected, a warning is issued rather than an
-error.</p>
-
-<p>To handle automatic bracket matching, a bracket should be given one of the
-types <code>OPEN0, CLOSE0, OPEN1, CLOSE1, OPEN2, CLOSE2, OPEN3, CLOSE3</code>
-which represent increasing priority. For a curly bracket language, brackets
-might be handled like this:</p>
-
-<pre>start ( start OPEN0
-start ) start CLOSE0
-start [ start OPEN1
-start ] start CLOSE1
-start { start OPEN2
-start } start CLOSE2
+<pre>&gt; (count+1)
+&lt; B3 ( I count O3 + E3 )
 </pre>
 
-<p>In a language where keywords <code>begin</code> and <code>end</code> are used
-for blocks instead of curly brackets, the last two rules might be replaced
-by:</p>
-
-<pre>start begin start OPEN2
-start end start CLOSE2
-</pre>
-
-<p>If a bracket is not active because it is inside a comment or string
-literal, it should have, or be part of a token with, type
-<code>COMMENTED</code> or <code>QUOTED</code>.</p>
-
-<p>To ease the writing of tests, each token type can be abbreviated to a
-single character. The full set of token types is currently:</p>
-
-<p class="indent"><code>OPEN0 CLOSE0 OPEN1 CLOSE1 OPEN2 CLOSE2 OPEN3 CLOSE3
-COMMENTED ERROR FUNCTION ID KEY OP PROPERTY QUOTED RESERVED SIGN
-TYPE VALUE</code></p>
-
-<p>These can all be abbreviated to their first characters, except for the
-brackets, which are abbreviated to <code>( ) [ ] { } &lt; ></code>.</p>
-
-<p>A typical test might appear something like this:</p>
-
-<pre>struct *point = { x, (y+1) }; int ns = [(n+2),3];
-K+++++ SI++++ S { IS (IOV) }S K++ I+ S [(IOV)SV]S
-</pre>
-
-<p>The first line represents some input text, and the line below represents the
-result of scanning. The first character of each token is marked below by the
-one-character abbreviation of its token type, and the remaining characters of a
-token are marked by dashes.</p>
-
-<p></p>
+<hr/>
 
 <h2>Compiling...</h2>
 

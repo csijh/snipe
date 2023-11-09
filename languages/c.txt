@@ -11,7 +11,7 @@ start   _Atomic _Bool _Complex _Generic _Imaginary      type
 start   bool char double float int long                 type
 start   short signed unsigned void                      type
 type    a..z A..Z 0..9 _ \\U \\u                        id
-type    \!..~ \s \n                                     start TYPE
+type    \                                               start TYPE
 
 // Other keywords. The key states check for additional characters.
 // The enum and struct keywords cause bracket checking.
@@ -23,9 +23,9 @@ start   return sizeof static switch true typedef union          key
 start   volatile while                                          key
 start   enum struct                                             key2
 key     a..z A..Z 0..9 _ \\U \\u                                id
-key     \!..~ \s \n                                             start KEY
+key     \                                                       start KEY
 key2    a..z A..Z 0..9 _ \\U \\u                                id
-key2    \!..~ \s \n                                             check0 KEY
+key2    \                                                       check0 KEY
 
 // Operators and signs.
 
@@ -41,7 +41,7 @@ start   =                                           check3 SIGN3
 
 start   a..z A..Z _ \\U \\u        id
 id      a..z A..Z 0..9 _ \\U \\u   id
-id      \!..~ \s \n                start ID
+id      \                          start ID
 
 // Brackets. By default { and } are block brackets, level 1. To help with
 // semicolon insertion, the opener { is marked as a structure bracket BEGIN2
@@ -64,29 +64,29 @@ start  )   start END3
 
 check0    {                          start BEGIN1
 check0    a..z A..Z _ \\U \\u        check1
-check0    \!..~ \s \n                start
+check0    \                          start
 check1    a..z A..Z 0..9 _ \\U \\u   check1
-check1    \!..~ \s \n                check2 ID
+check1    \                          check2 ID
 check2    {                          start BEGIN1
-check2    \!..~ \s \n                start
+check2    \                          start
 check3    {                          start BEGIN1
 check3    (                          check4 BEGIN3
-check3    \!..~ \s \n                start
+check3    \                          start
 check4    struct                     check4 KEY
 check4    a..z A..Z _ \\U \\u        check5
-check4    \!..~ \s \n                start
+check4    \                          start
 check5    a..z A..Z 0..9 _ \\U \\u   check5
-check5    \!..~ \s \n                check6 ID
+check5    \                          check6 ID
 check6    )                          check7 END3
-check6    \!..~ \s \n                start
+check6    \                          start
 check7    {                          start BEGIN1
-check7    \!..~ \s \n                start
+check7    \                          start
 
 // A dot starts a number, or is a sign.
 
-start   .             dot
-dot     \0..9         decimal
-dot     \!..~ \s \n   start SIGN3
+start   .      dot
+dot     \0..9  decimal
+dot     \      start SIGN3
 
 // Character and string literals.
 
@@ -122,12 +122,12 @@ start    0x 0X          hex
 decimal  0..9 .         decimal
 decimal  e+ e- E+ E-    decimal
 decimal  u U l L ll LL  decimal
-decimal  \!..~ \s \n    start VALUE
+decimal  \              start VALUE
 hex      0..9 .         hex
 hex      a..f A..F      hex
 hex      p+ p- P+ P-    hex
 hex      u U l L ll LL  hex
-hex      \!..~ \s \n    start VALUE
+hex      \              start VALUE
 
 // Backslash newline is only supported between tokens.
 
@@ -140,9 +140,9 @@ hash      \s                                hash
 hash      include                           include RESERVED
 hash      define elif else endif error if   start RESERVED
 hash      ifdef ifndef line pragma undef    start RESERVED
-hash      \!..~ \n                          start
+hash      \                                 start
 include   <                                 filename
-include   \!..~ \s \n                       start
+include   \                                 start
 filename  !..~                              filename
 filename  \s                                filename QUOTE
 filename  > \n                              start QUOTE

@@ -12,4 +12,4 @@ OPT = -O2 -flto
 %: %.c
 	@ $(GCC) $(DEBUG) -DTEST -DTEST$@ $($@) -o test
 	@ ./test
-	@ rm ./test
+#	@ rm ./test
