@@ -1,37 +1,85 @@
 // JavaScript language definition, based on the JS11=ES2020 standard
-// See https://262.ecma-international.org/11.0/
+// See https://262.ecma-international.org/11.0/ sections 11 and A.1
 
 // Recognising / as the start of a regex such as /abc/ instead of a division
 // operator is a problem. In the standard, grammar-dependent contexts are used.
 // Here, regexes are recognised after open brackets, signs and operators.
-// The approach fails on regex strings containing spaces, and in rare situations
-// such as if(a)/re/ or ++/re/.
+// The approach only fails in rare cases such as regex strings containing
+// spaces, or  if(a)/re/  or  ++/re/.
 
-// Keywords
-start  await break case catch class const continue debugger default   key
-start  delete do else enum export extends false finally for function  key
-start  if import in instanceof new null return super switch this      key
-start  throw true try typeof var void while with yield                key
+// At the start of a file only, recognise a hashbang comment.
+shebang  #!  note0 COMMENT
+shebang  \   start
+
+// Keywords, including ones reserved for future use, ones which can also be
+// used as ids, and ones which are not strictly keywords but are restricted.
+
+start  arguments as async await break case catch class const continue  key
+start  debugger default delete do else enum eval export extends false  key
+start  finally for from function get if implements import in           key
+start  instanceof interface of new null package private protected      key
+start  public return set super switch target this throw true try       key
+start  typeof var void while with yield                                key
+key    a..z A..Z 0..9 $ _ \\u                                          id
+key    \\u{                                                            id1
+key    \                                                               start KEY
 
 // Operators and signs
-start < > <= >= == != === !== + - * % ** ++ -- << >> >>> & | ^ !  regex OP
-start ~ && || = += -= *= %= **= <<= >>= >>>= &= |= ^= => ??       regex OP
-start . ... ; , ? regex SIGN
-start : regex :
+
+start  ++ --                                                 start OP0
+start  ~ !                                                   regex OP1
+start  < > <= >= == != === !== + - * % ** << >> >>> & | ^    regex OP3
+start  && || = += -= *= %= **= <<= >>= >>>= &= |= ^= => ??   regex OP3
+start  / /=                                                  regex OP3
+start  ...                                                   start SIGN0
+start  . ; , :                                               regex SIGN3
+start  ?                                                     chain
+
+// Check for ? operator or ?. chaining operator or ?.42  ==  ? .42
+
+chain  \.0 \.1 \.2 \.3 \.4 \.5 \.6 \.7 \.8 \.9   start OP3
+chain  . \                                       regex OP3
+
+// Identifiers
+
+start  A..Z a..z $ _ \u        id
+start  \u{                     id1
+id     a..z A..Z 0..9 $ _ \\u  id
+id     \                       start ID
+id1    0..9 A..F a..f          id1
+id1    }                       id
+id1    \                       start UNKNOWN
 
 // Brackets
-start ( regex (
-start ) start )
-start [ regex [
-start ] start ]
-start { regex {
-start } start }
 
-// Identifiers, comments
-start a..z $ _ \u id
-start // start #
-start /* start /
-start */ start \
+start { regex BEGIN0
+start } start END0
+start [ regex BEGIN2
+start ] start END2
+start ( regex BEGIN3
+start ) start END3
+
+// One-line comment
+
+start    //     note0 COMMENT
+note0    !..~   note1
+note0    \s     note0
+note0    \n     start
+note1    !..~   note1
+note1    \s     note0 COMMENT
+note1    \n     start COMMENT
+
+// Multi-line comment
+
+start      /*     comment0 COMMENT
+comment0   !..~   comment1
+comment0   \s \n  comment0
+comment0   */     start COMMENT
+comment1   !..~   comment1
+comment1   \s \n  comment0 COMMENT
+comment1   \*/     comment0 COMMENT
+
+// ============================================
 
 // Possible regular expression literal
 regex / regex1

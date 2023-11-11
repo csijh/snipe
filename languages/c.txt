@@ -143,7 +143,7 @@ comment0   \s \n  comment0
 comment0   */     start COMMENT
 comment1   !..~   comment1
 comment1   \s \n  comment0 COMMENT
-comment1   */     comment0 COMMENT
+comment1   \*/     comment0 COMMENT
 
 // Numbers. There is no attempt to detect malformed numbers.
 start    0..9           decimal
@@ -295,10 +295,10 @@ start     \s \n   start
 < I_z_Q   C C _C _C  _C       .
 
 > /*  "*/"//"; /* abc "*/"//";
-< C __C
+< C __CC Q   z_C _C  _CC Q   z.
 
 > obj.x, obj->x, f(x)
-<
+< I  zIz_I  z Iz_I(I).
 
 > n = f   (x);
-<
+< I_z_I___(I)z.
