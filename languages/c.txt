@@ -74,6 +74,7 @@ check2    \                          start
 // Check for structure bracket  = {
 check3    {                          start BEGIN1
 check3    (                          check4 BEGIN3
+check3    \s \n                      check3
 check3    \                          start
 
 // Check for   = (   or   = (struct
@@ -263,3 +264,41 @@ start     \s \n   start
 // Leading spaces
 >    x
 < ___I.
+
+// A few general tests
+
+> if (b) n = 1;
+< K _(I)_I_z_Vz.
+
+> if (b) { n = 1; }
+< K _(I)_{_I_z_Vz_}.
+
+> int n;
+< T  _Iz.
+
+> string s;
+< I     _Iz.
+
+> enum suit { Club, Diamond, Heart, Spade };
+< K   _I   _<_I   z_I      z_I    z_I    _}z.
+
+> int ns[] = { 1, 2, 34};
+< T  _I []_z_<_Vz_Vz_V }z.
+
+> char *s = "a\nb\0c\04d";
+< T   _dI_z_Q            z.
+
+> char *s = "\037e\038f\xffg";
+< T   _dI_z_Q                z.
+
+> s = "*/"//"; /* abc "*/"//";
+< I_z_Q   C C _C _C  _C       .
+
+> /*  "*/"//"; /* abc "*/"//";
+< C __C
+
+> obj.x, obj->x, f(x)
+<
+
+> n = f   (x);
+<
