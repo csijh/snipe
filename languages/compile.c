@@ -1,5 +1,9 @@
 // Free and open source, see licence.txt.
-// Provide a standalone scanner to test language definitions.
+
+// Compile a language definition. Read in a file such as c.txt, check the rules
+// for consistency, run the tests and, if everything succeeds, write out a
+// compact state table in binary file c.bin.
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -13,33 +17,36 @@
 // ---------- Tags -------------------------------------------------------------
 // This enumeration of tags and their names must be kept the same as in other
 // Snipe components, and kept to a maximum of 64 entries. The default if there
-// is no tag is ADD meaning continue the token.
+// is no tag is NONE meaning continue the token.
 
 enum tag {
-    ADD, ARTICLE, BEGIN0, BEGIN1, BEGIN2, BEGIN3, COMMENT, END0, END1, END2,
-    END3, FUNCTION, GAP, ID, JOIN, KEY, NEWLINE, OP0, OP1, OP2, OP3, NOTE,
+    NONE, ARTICLE, BEGIN0, BEGIN1, BEGIN2, BEGIN3, COMMENT, END0, END1, END2,
+    END3, FUNCTION, GAP, ID, JOIN, KEY, NEWLINE, OP0, OP1, OP2, OP3,
     PROPERTY, QUOTE, RESERVED, SIGN0, SIGN1, SIGN2, SIGN3, TYPE, UNKNOWN,
     VALUE
 };
 
 char *tagNames[64] = {
-    [ADD]="ADD",[ARTICLE]="ARTICLE", [BEGIN0]="BEGIN0", [BEGIN1]="BEGIN1",
+    [NONE]="NONE", [ARTICLE]="ARTICLE", [BEGIN0]="BEGIN0", [BEGIN1]="BEGIN1",
     [BEGIN2]="BEGIN2", [BEGIN3]="BEGIN3", [COMMENT]="COMMENT", [END0]="END0",
     [END1]="END1", [END2]="END2", [END3]="END3", [FUNCTION]="FUNCTION",
     [GAP]="GAP", [ID]="ID",[JOIN]="JOIN", [KEY]="KEY", [NEWLINE]="NEWLINE",
-    [OP0]="OP0",[OP1]="OP1",[OP2]="OP2", [OP3]="OP3",[NOTE]="NOTE",
+    [OP0]="OP0",[OP1]="OP1",[OP2]="OP2", [OP3]="OP3",
     [PROPERTY]="PROPERTY", [QUOTE]="QUOTE",[RESERVED]="RESERVED",
     [SIGN0]="SIGN0",[SIGN1]="SIGN1",[SIGN2]="SIGN2", [SIGN3]="SIGN3",
     [TYPE]="TYPE",[UNKNOWN]="UNKNOWN",[VALUE]="VALUE"
 };
 
-int findTag(char *name) {
-    for (int i = 0; i < 64; i++) {
-        if (tagNames[i] == NULL) continue;
-        if (strcmp(tagNames[i], name) == 0) return i;
-    }
-    return -1;
-}
+// One-character abbreviations: the first character, or {<[()]>} for brackets,
+// abcd for operators, wxyz for signs, space or _ or . for NONE, GAP, NEWLINE.
+char tagChars[64] = {
+    [NONE]=' ', [ARTICLE]='A', [BEGIN0]='{', [BEGIN1]='<', [BEGIN2]='[',
+    [BEGIN3]='(', [COMMENT]='C', [END0]='}',[END1]='>', [END2]=']', [END3]=')',
+    [FUNCTION]='F',[GAP]='_', [ID]='I',[JOIN]='J', [KEY]='K', [NEWLINE]='.',
+    [OP0]='a',[OP1]='b',[OP2]='c', [OP3]='d',[PROPERTY]='P', [QUOTE]='Q',
+    [RESERVED]='R',[SIGN0]='w',[SIGN1]='x',[SIGN2]='y', [SIGN3]='z',[TYPE]='T',
+    [UNKNOWN]='U',[VALUE]='V'
+};
 
 void error(char *format, ...) {
     va_list args;
@@ -51,9 +58,24 @@ void error(char *format, ...) {
     exit(1);
 }
 
+// Find a tag by name, other than GAP, NEWLINE.
+int findTag(char *name) {
+    for (int i = 0; i < 64; i++) {
+        if (tagNames[i] == NULL) continue;
+        if (strcmp(tagNames[i], name) == 0) {
+            if (i == GAP || i == NEWLINE) {
+                error("Tags GAP, NEWLINE are reserved for internal use");
+            }
+            return i;
+        }
+    }
+    return -1;
+}
+
 // ---------- Arrays -----------------------------------------------------------
-// Arrays are allocated with a preceding size (aligned, initially 0). A maximum
-// capacity is given for a variable-size array, to avoid reallocation.
+// Arrays are allocated with a preceding size (aligned, initially 0). An array
+// is assumed to be allocated with a capacity large enough to cover the maximum
+// size ever needed, to avoid reallocation.
 
 enum { ALIGN = alignof(max_align_t) };
 
@@ -73,10 +95,6 @@ void resize(void *a, int n) {
     ((int *) p)[0] = n;
 }
 
-void resizeBy(void *a, int d) {
-    resize(a, size(a) + d);
-}
-
 void release(void *a) {
     char *p = (char *)a - ALIGN;
     free(p);
@@ -87,7 +105,7 @@ void release(void *a) {
 // text into lines, in place.
 
 // Read file as string, ignore I/O errors, add final newline if necessary.
-char *readFile(char const *path) {
+char *readFile(char *path) {
     FILE *file = fopen(path, "rb");
     fseek(file, 0, SEEK_END);
     int size = ftell(file);
@@ -147,7 +165,7 @@ char **splitLines(char *text) {
 struct rule { int row; char **tokens; };
 typedef struct rule rule;
 
-// Split a line into tokens, adding ADD for a rule with no tag.
+// Split a line into tokens in place, adding NONE for a rule with no tag.
 char **splitTokens(char *line) {
     int len = strlen(line), n = 0, start = 0;
     char **tokens = allocate(len * sizeof(char *));
@@ -159,7 +177,7 @@ char **splitTokens(char *line) {
     }
     tokens[n++] = &line[start];
     bool hasTag = isupper(tokens[n-1][0]);
-    if (! hasTag) tokens[n++] = "ADD";
+    if (! hasTag) tokens[n++] = "NONE";
     resize(tokens, n);
     return tokens;
 }
@@ -192,15 +210,27 @@ int countPatterns(rule *rules, char *name) {
 // ---------- States and patterns ----------------------------------------------
 // Convert the rules into an array of states with patterns.
 
+// Single character strings covering \n \s !..~ for expanding ranges etc.
+char *singles[128] = {
+    "?","?","?", "?","?","?","?","?","?","?","\n","?","?", "?","?","?",
+    "?","?","?", "?","?","?","?","?","?","?","?", "?","?", "?","?","?",
+    " ","!","\"","#","$","%","&","'","(",")","*", "+",",", "-",".","/",
+    "0","1","2", "3","4","5","6","7","8","9",":", ";","<", "=",">","?",
+    "@","A","B", "C","D","E","F","G","H","I","J", "K","L", "M","N","O",
+    "P","Q","R", "S","T","U","V","W","X","Y","Z", "[","\\","]","^","_",
+    "`","a","b", "c","d","e","f","g","h","i","j", "k","l", "m","n","o",
+    "p","q","r", "s","t","u","v","w","x","y","z", "{","|", "}","~","?"
+};
+
 // A pattern is a string to be matched, and the action to take (i.e. maybe add
-// to the token, maybe give it a type, jump to the target state).
-struct pattern { char *match; bool lookahead; int tag; int target; };
+// to the token, maybe terminate it, jump to the target state).
+struct pattern { char *original, *match; bool lookahead; int tag; int target; };
 typedef struct pattern pattern;
 
-// A state has a name, an array of patterns, and flags to say whether the state
-// can occur at the start of a token, or can occur after the start. A visited
-// flag helps check for cycles of states.
-struct state { char *name; pattern *patterns; bool starts, resumes, visited; };
+// A state has a name, and an array of patterns. It has a flag to say whether it
+// occurs at or after the start of tokens. It has a visited flag used when
+// checking for infinite loops.
+struct state { char *name; pattern *patterns; bool starter, visited; };
 typedef struct state state;
 
 // Find an existing state by name, returning its index or -1.
@@ -216,24 +246,24 @@ int findState(state *states, char *name) {
 void addState(state *states, char *name, int maxPatterns) {
     int n = size(states);
     pattern *patterns = allocate(maxPatterns * sizeof(pattern));
-    resizeBy(states, 1);
+    resize(states, n+1);
     states[n] = (state) {
-        .name=name, .patterns=patterns,
-        .starts=false, .resumes=false, .visited=false
+        .name=name, .patterns=patterns, .starter=false, .visited=false
     };
 }
 
 // Convert a string, target and tag to a pattern. Take off a backslash
 // indicating a lookahead, and convert a double backslash into a single.
 void convert(char *s, int target, int tag, pattern *p) {
+    p->original = s;
     p->target = target;
     p->tag = tag;
     p->lookahead = false;
     if (s[0] == '\\' && (s[1] != '\\' || s[2] == '\\')) {
         p->lookahead = true;
         s = &s[1];
-        if (strcmp(s, "s") == 0) s[0] = ' ';
-        if (strcmp(s, "n") == 0) s[0] = '\n';
+        if (strcmp(s, "s") == 0) s = singles[' '];
+        if (strcmp(s, "n") == 0) s = singles['\n'];
     }
     else if (s[0] == '\\' && s[1] == '\\') s = &s[1];
     p->match = s;
@@ -259,7 +289,8 @@ state *makeStates(rule *rules) {
     return states;
 }
 
-// Transfer patterns from a rule into its base state.
+// Transfer patterns from a rule into its base state. Expand a \ pattern as
+// \ followed by x..~ where x is \n.
 void fillState(rule *r, state *states) {
     char **tokens = r->tokens;
     int n = size(tokens);
@@ -276,14 +307,10 @@ void fillState(rule *r, state *states) {
     int count = size(base->patterns);
     for (int i = 1; i < n-2; i++) {
         char *t = tokens[i];
-        /*
         if (strcmp(t, "\\") == 0) {
-            convert("\\!..~", target, tag, &base->patterns[count++]);
-            convert("\\s", target, tag, &base->patterns[count++]);
-            convert("\\n", target, tag, &base->patterns[count++]);
+            convert("\\\n..~", target, tag, &base->patterns[count++]);
             continue;
         }
-        */
         if (t[0] == '\\' && 'a' <= t[1] && t[1] <= 'z' && t[2] == '\0') {
             if (t[1] != 's' && t[1] != 'n') {
                 error("bad lookahead on line %d", r->row);
@@ -302,30 +329,15 @@ void fillStates(rule *rules, state *states) {
 // ---------- Ranges -----------------------------------------------------------
 // Expand ranges such as 0..9 to several one-character patterns, with more
 // specific patterns (subranges and individual characters) taking precedence.
-// Treat \ as a range covering \!..~ \s \n.
-
-// Single character strings covering \n \s !..~ for expanding ranges.
-char *singles[128] = {
-    "?","?","?", "?","?","?","?","?","?","?","\n","?","?", "?","?","?",
-    "?","?","?", "?","?","?","?","?","?","?","?", "?","?", "?","?","?",
-    " ","!","\"","#","$","%","&","'","(",")","*", "+",",", "-",".","/",
-    "0","1","2", "3","4","5","6","7","8","9",":", ";","<", "=",">","?",
-    "@","A","B", "C","D","E","F","G","H","I","J", "K","L", "M","N","O",
-    "P","Q","R", "S","T","U","V","W","X","Y","Z", "[","\\","]","^","_",
-    "`","a","b", "c","d","e","f","g","h","i","j", "k","l", "m","n","o",
-    "p","q","r", "s","t","u","v","w","x","y","z", "{","|", "}","~","?"
-};
+// A range may be x..~ where x is '\n' to represent the \ abbreviation.
 
 bool isRange(char *s) {
-    if (strlen(s) == 0) return true;
     if (strlen(s) != 4) return false;
     if (s[1] != '.' || s[2] != '.') return false;
     return true;    
 }
 
 bool subRange(char *s, char *t) {
-    if (strlen(s) == 0) return false;
-    if (strlen(t) == 0) return true;
     return s[0] >= t[0] && s[3] <= t[3];
 }
 
@@ -336,7 +348,7 @@ bool overlap(char *s, char *t) {
 }
 
 // Remove the i'th pattern from a state's patterns. The patterns are not yet
-// sorted, so replace it with the last pattern.
+// sorted, so just replace it with the last pattern.
 pattern extract(state *base, int i) {
     int n = size(base->patterns);
     pattern p = base->patterns[i];
@@ -362,12 +374,9 @@ void addSingle(state *base, pattern *range, int ch) {
 // Expand a state's range into singles, and add them if not already handled.
 void derange(state *base, pattern *range) {
     char *s = range->match;
-    if (strlen(s) == 0) {
-        for (int ch = '!'; ch <= '~'; ch++) addSingle(base, range, ch);
-        addSingle(base, range, ' ');
-        addSingle(base, range, '\n');
+    for (int ch = s[0]; ch <= s[3]; ch++) {
+        if (ch == '\n' || ch >= ' ') addSingle(base, range, ch);
     }
-    else for (int ch = s[0]; ch <= s[3]; ch++) addSingle(base, range, ch);
 }
 
 // For a given state, find a most specific range, expand it, return success.
@@ -381,7 +390,7 @@ bool derangeState(state *base) {
             if (overlap(s,t)) {
                 error("ranges %s %s overlap in %s", s, t, base->name);
             }
-            if (subRange(t,s)) index = i;
+            if (subRange(s,t)) index = i;
         }
         else index = i;
     }
@@ -436,46 +445,27 @@ void sortAll(state *states) {
 }
 
 // ---------- Checks -----------------------------------------------------------
-// Check that a scanner handles every input unambiguously. Also check that it
-// doesn't get stuck in an infinite loop or produce empty tokens, by following
-// jumps, i.e. lookahead patterns which transfer control to a target state
-// without consuming input. 
-
-// Scan the states to set their flags. Set the starts flag for a state which
-// can occur at the start of a token, and the resumes flag for a state which can
-// occur after the start.
-void scanPatterns(state *states) {
-    states[0].starts = true;
-    for (int s = 0; s < size(states); s++) {
-        state *base = &states[s];
-        pattern *list = base->patterns;
-        for (int j = 0; j < size(list); j++) {
-            pattern *p = &list[j];
-            state *target = &states[p->target];
-            if (p->tag != ADD) target->starts = true;
-            else if (! p->lookahead) target->resumes = true;
-        }
-    }
-}
+// Check that a scanner handles every input unambiguously. Check that states are
+// unambiguously starters or continuers. Check that the scanner doesn't get
+// stuck in an infinite loop. Check that it doesn't produce empty tokens.
 
 // Check that a state has no duplicate patterns.
 void noDuplicates(state *base) {
     pattern *list = base->patterns;
     for (int i = 0; i < size(list); i++) {
-        char *s = list[i].match;
+        pattern *p = &list[i];
+        char *s = p->match;
         for (int j = i+1; j < size(list); j++) {
             char *t = list[j].match;
             if (strcmp(s,t) != 0) continue;
-            error("state %s has pattern %s twice", base->name, s);
+            error("state %s has pattern %s twice", base->name, p->original);
         }
     }
 }
 
-// Check that a state handles every singleton character. If a state can only
-// occur at the start of a token, it need not handle \s or \n. 
+// Check that a state handles every singleton character.
 void complete(state *base) {
-    noDuplicates(base);
-    char ch = base->resumes ? '\n' : '!';
+    char ch = '\n';
     for (int i = 0; i < size(base->patterns); i++) {
         char *s = base->patterns[i].match;
         if (s[1] != '\0') continue;
@@ -490,16 +480,49 @@ void complete(state *base) {
     else error("state %s doesn't handle %c", base->name, ch);
 }
 
-void allComplete(state *states) {
-    for (int i = 0; i < size(states); i++) complete(&states[i]);
+// Set the starter flag for a state, if \s has no tag.
+void classify(state *base) {
+    for (int i = 0; i < size(base->patterns); i++) {
+        pattern *p = &base->patterns[i];
+        if (p->match[0] != ' ') continue;
+        base->starter = (p->tag == NONE);
+    }    
+}
+
+// Check that the target states reachable from a state have the right starter
+// flag. Also check that the state can't create empty tokens.
+void look(state *base, state *states) {
+    for (int i = 0; i < size(base->patterns); i++) {
+        pattern *p = &base->patterns[i];
+        state *target = &states[p->target];
+        bool ok = true;
+        if (p->tag != NONE && ! target->starter) ok = false;
+        if (p->tag == NONE) {
+            if (! p->lookahead) {
+                if (target->starter) ok = false;
+            }
+            else if (p->match[0] != ' ' && p->match[0] != '\n') {
+                if (target->starter != base->starter) ok = false;
+            }
+        }
+        if (! ok) {
+            printf("state %s starter %d\n", target->name, target->starter);
+            error(
+                "according to pattern %s in state %s,\n"
+                "state %s can both start and continue tokens",
+                p->original, base->name, target->name
+            );
+        }
+        if (base->starter && p->lookahead && p->tag != NONE) {
+            error("state %s can create an empty token", base->name);
+        }
+    }
 }
 
 // Search for a chain of lookaheads from a given state which can cause an
-// infinite loop or create an empty token. The look argument is the longest
-// lookahead in the chain so far, to ensure the lookaheads in the chain are all
-// compatible. The atStart argument indicates whether the search started from a
-// possible start of token.
-void follow(state *states, state *base, char *look, bool atStart) {
+// infinite loop. The look argument is the longest lookahead in the chain so
+// far, to ensure the lookaheads in the chain are all compatible.
+void follow(state *states, state *base, char *look) {
     if (base->visited) error("state %s can loop", base->name);
     base->visited = true;
     for (int i = 0; i < size(base->patterns); i++) {
@@ -511,54 +534,61 @@ void follow(state *states, state *base, char *look, bool atStart) {
         if (prefix(s, look)) next = look;
         else if (prefix(look, s)) next = s;
         else continue;
-        if (atStart && base->patterns[i].tag != ADD) {
-            error("state %s can create an empty token", base->name);
-        }
         state *target = &states[base->patterns[i].target];
-        follow(states, target, next, atStart);
+        follow(states, target, next);
     }
     base->visited = false;
 }
 
-// Start a search from a given state, for each possible input character. If the
-// state can only occur at the start of a token, exclude \n and \s.
+// Start a search from a given state, for each possible input character.
 void search(state *states, state *base) {
-    char ch0 = base->resumes ? '\n' : '!';
-    for (int ch = ch0; ch <= '~'; ch++) {
+    for (int ch = '\n'; ch <= '~'; ch++) {
+        if ('\n' < ch && ch < ' ') continue;
         char *look = singles[ch];
-        follow(states, base, look, base->starts);
+        follow(states, base, look);
     }
 }
 
-void searchAll(state *states) {
-    for (int i = 0; i < size(states); i++) search(states, &states[i]);
+void checkAll(state *states) {
+    for (int i = 0; i < size(states); i++) {
+        noDuplicates(&states[i]);
+        complete(&states[i]);
+        classify(&states[i]);
+    }
+    for (int i = 0; i < size(states); i++) {
+        look(&states[i], states);
+        search(states, &states[i]);
+    }
 }
 
 // ---------- Compiling --------------------------------------------------------
 // Compile the states into a compact transition table. The table has a row for
 // each state, followed by an overflow area used when there is more than one
 // pattern for a particular character. Each row consists of 96 entries of two
-// bytes each, one for each character \s !..~ \n. The scanner uses the current
-// state and the next character in the source text to look up an entry. The
-// entry may be an action for that single character, or an offset relative to
-// the start of the table to a list of patterns starting with that character,
-// with their actions.
+// bytes each, one for each character \s, !, ..., ~, 0x7F where 0x7F is used to
+// represent \n. Spaces and newlines are handled by changing \s and \n patterns
+// with tag NONE to non-lookahead patterns with tag GAP or NEWLINE. The scanner
+// uses the current state and the next character in the source text to look up
+// an entry. The entry may be an action for that single character, or an offset
+// relative to the start of the table to a list of patterns starting with that
+// character, with their actions.
 
 typedef unsigned char byte;
 
-// Convert a character to a column index in the table. Allow for a line to
-// be terminated either with \n or with \0.
-int column(char ch) {
-    return (ch == '\n' || ch == '\0') ? 95 : (ch - ' ');
-}
+// Use 0x7F to terminate a line, so that (ch - ' ') can be used as a column
+// index in the 96-column table.
+enum { EOL = 0x7F };
 
 // Fill in an action for a given pattern, as two bytes, one for the tag and one
 // for the target state. The tag has a bit 0x40 added to indicate a lookahead
-// action. The top bit 0x80 is zero.
+// action. The top bit 0x80 is zero. NONE becomes GAP or NEWLINE and lookahead
+// becomes false for \s or \n.
 void compileAction(byte *action, pattern *p) {
-//    if (p->match[0] == '"') printf("compA %s\n", p->match);
     int code = p->tag;
-    if (p->lookahead) code += 0x40;
+    bool look = p->lookahead;
+    if (code == NONE && p->match[0] == ' ') { code = GAP; look = false; }
+    if (code == NONE && p->match[0] == '\n') { code = NEWLINE; look = false; }
+    if (look) code += 0x40;
     action[0] = code;
     action[1] = p->target; 
 }
@@ -570,30 +600,30 @@ void compileLink(byte *action, int offset) {
     action[1] = offset & 0xFF;
 }
 
-// Fill in a pattern after the end of the table. It is stored as a byte
+// Fill in a pattern at the end of the overflow area. It is stored as a byte
 // containing the length, followed by the characters of the pattern after the
 // first, followed by the action. For example <= with tag OP and target t is
 // stored as 4 bytes [2, '=', OP, t].
 void compileExtra(pattern *p, byte *table) {
     int len = strlen(p->match);
-    byte *entry = &table[size(table)];
-    resizeBy(table, len + 2);
+    int n = size(table);
+    byte *entry = &table[n];
+    resize(table, n + len + 2);
     entry[0] = len;
     strncpy((char *)&entry[1], p->match + 1, len - 1);
     compileAction(&entry[len], p);
-//printf("%d) %d %s %d %d\n", size(table)-len-2, len, p->match, entry[len+1], entry[len+2]);
 }
 
 // Fill in the patterns from the position in the given array which start with
-// the same character. If there is one (a singleton character), put an action
-// in the table. Otherwise, put a link in the table and put the patterns and
-// actions in the overflow area. The group of patterns doesn't need to be
-// terminated because the last pattern is always a singleton character which
-// matches. Return the new index in the array.
+// the same character. If there is one pattern (necessarily a singleton
+// character), put an action in the table. Otherwise, put a link in the table
+// and put the patterns and actions in the overflow area. The group of patterns
+// doesn't need to be terminated because the last pattern is always a singleton
+// character which matches. Return the new index in the array of patterns.
 int compileGroup(pattern *patterns, int n, byte *table, int row) {
     bool immediate = strlen(patterns[n].match) == 1;
     char ch = patterns[n].match[0];
-    int col = column(ch);
+    int col = (ch == '\n') ? 95 : ch - ' ';
     byte *entry = &table[2 * (96 * row + col)]; 
     if (immediate) {
         compileAction(entry, &patterns[n]);
@@ -622,36 +652,37 @@ void compile(state *states, byte *table) {
 // ---------- Scanning ---------------------------------------------------------
 // A line of source text is scanned to produce an array of bytes, one for each
 // character. The first byte corresponding to a token gives its type (e.g. ID
-// for an identifier, or GAP for a group of spaces, or NEWLINE for a newline
-// character). The remaining bytes contain ADD. The scanner first marks any
-// leading spaces, then uses the transition table to handle the remaining
-// characters.
+// for an identifier). The bytes corresponding to the remaining characters of
+// the token contain NONE. The scanner first marks any leading spaces, then uses
+// the transition table to handle the remaining characters.
+
+// Switch on to trace states and pattern matches.
+enum { DEBUG = 0 };
 
 // Use the given table and start state to scan the given input line, producing
-// the result in the given byte array, and returning the final state.
-int scan(byte *table, int state, char *in, byte *out) {
-    for (int i = 0; in[i] != '\0'; i++) out[i] = ADD;
-    int at = 0;
-    if (in[at] == ' ') out[at] = GAP;
-    while (in[at] == ' ') at++;
-    int start = at;
-    while (true) {
+// the result in the given byte array, and returning the final state. Use
+// the states for names in messages.
+int scan(byte *table, int st, char *in, byte *out, state *states) {
+    int n = strlen(in);
+    in[n] = EOL;
+    for (int i = 0; i<=n; i++) out[i] = NONE;
+    int at = 0, start = 0;
+    while (at <= n) {
         char ch = in[at];
-        int col = column(ch);
-        byte *action = &table[2 * (96 * state + col)];
+        if (DEBUG) printf("%s ", states[st].name);
+        int col = ch - ' ';
+        byte *action = &table[2 * (96 * st + col)];
         bool immediate = (action[0] & 0x80) == 0;
         int len;
-        printf("outer loop at=%d ch=%c i=%d\n", at, in[at], immediate);
         if (immediate) len = 1;
         else {
             int offset = ((action[0] & 0x7F) << 8) + action[1];
             byte *p = table + offset;
             while (true) {
                 len = p[0];
-//                printf("inner %d %d\n", offset, len);
                 int i;
                 for (i = 1; i < len; i++) {
-                    if (in[i] != p[i]) break;
+                    if (in[at + i] != p[i]) break;
                 }
                 if (i == len) break;
                 else p = p + len + 2;
@@ -660,61 +691,92 @@ int scan(byte *table, int state, char *in, byte *out) {
         }
         bool lookahead = (action[0] & 0x40) != 0;
         int tag = action[0] & 0x3F;
-        printf("lookahead %d tag %s\n", lookahead, tagNames[tag]);
+        if (DEBUG) {
+            if (lookahead) printf("\\ ");
+            if (in[at] == ' ') printf("SP");
+            else if (in[at] == EOL) printf("NL");
+            else for (int i = 0; i < len; i++) printf("%c", in[at+i]);
+            printf(" %s\n", tagNames[tag]);
+        }
         if (! lookahead) at = at + len;
-        if (tag != ADD) {
+        if (tag != NONE) {
             out[start] = tag;
             start = at;
         }
-        state = action[1];
-        if (ch == '\n' || ch == '\0') break;
+        st = action[1];
     }
-    return state;
+    in[n] = '\0';
+    return st;
 }
 
 // ---------- Testing ----------------------------------------------------------
-//
+// The tests in a language description are intended to check that the rules work
+// as expected. They also act as tests for this program. A line starting with >
+// is a test and one starting with < is the expected output.
 
-int main() {
-    clock_t t;
-    t = clock();
-    char *text = readFile("c.txt");
+// Carry out a test, given a line of input and an expected line of output.
+int runTest(byte *table, int st, char *in, char *expected, state *states) {
+    int n = strlen(in) + 1;
+    byte bytes[n];
+    st = scan(table, st, in+2, bytes+2, states);
+    char out[100] = "< ";
+    for (int i = 2; i < n; i++) out[i] = tagChars[bytes[i]];
+    out[n] = '\0';
+    if (strcmp(out, expected) == 0) return st;
+    printf("Test failed. Input, expected output and actual output are:\n");
+    printf("%s\n", in);
+    printf("%s\n", expected);
+    printf("%s\n", out);
+    exit(1);
+    return st;
+}
+
+void runTests(byte *table, char **lines, state *states) {
+    int st = 0;
+    int count = 0;
+    for (int i = 0; i < size(lines); i++) {
+        if (lines[i][0] != '>') continue;
+        char *in = lines[i];
+        char *expected = lines[i+1];
+        st = runTest(table, st, in, expected, states);
+        count++;
+    }
+    printf("Passed %d tests.\n", count);
+}
+
+// ---------- Writing ----------------------------------------------------------
+// The table and its overflow are written out to a binary file.
+
+void write(char *path, byte *table) {
+    FILE *p = fopen(path, "wb");
+    fwrite(table, size(table), 1, p);
+    fclose(p);
+}
+
+int main(int n, char *args[n]) {
+    if (n != 2 || strcmp(args[1] + strlen(args[1]) - 4, ".txt") != 0) {
+        printf("Usage: compile c.txt\n");
+        exit(0);
+    }
+    char *text = readFile(args[1]);
     normalize(text);
     char **lines = splitLines(text);
     rule *rules = getRules(lines);
-    printf("#rules: %d\n", size(rules));
     state *states = makeStates(rules);
-    printf("#states: %d\n", size(states));
     fillStates(rules, states);
     derangeAll(states);
     sortAll(states);
-    scanPatterns(states);
-    allComplete(states);
-    searchAll(states);
+    checkAll(states);
+
     byte *table = allocate(2*96*size(states) + 10000);
     resize(table, 2*96*size(states));
     compile(states, table);
+    runTests(table, lines, states);
 
-   // for (int i = 0; i < 2; i++) {
-   //     printf("State %s: %d patterns\n", states[i].name, size(states[i].patterns));
-   //     for (int j = 0; j < size(states[i].patterns); j++) {
-   //         printf("%s\n", states[i].patterns[j].match);
-   //     }
-   // }
-
-    // for (int i = 0; i < 95; i++) {
-    //      int ch = ' ' + i;
-    //      byte *action = &table[2*i];
-    //      int tag = action[0], t = action[1];
-    //      if (tag & 0x80) printf("%c: --> %d\n", ch, ((tag&0x7F) << 8) + t);
-    //      else printf("%c: %d %s %d\n", ch, tag&0x40, tagNames[tag&0x3F], t); 
-    //  }
-
-   char in[] = "(count+1)";
-   byte out[80];
-   int state = scan(table, 0, in, out);
-   for (int i = 0; i < 9; i++) printf("%s ", tagNames[out[i]]);
-    printf("\n");
+    char outfile[100];
+    strcpy(outfile, args[1]);
+    strcpy(outfile + strlen(outfile) - 4, ".bin");
+    write(outfile, table);
 
     release(table);
     for (int i = 0; i < size(states); i++) release(states[i].patterns);
@@ -723,7 +785,4 @@ int main() {
     release(rules);
     release(lines);
     release(text);
-    t = clock() - t;
-    double time_taken = ((double)t)/CLOCKS_PER_SEC;
-    printf("The program took %f seconds to execute\n", time_taken);
 }

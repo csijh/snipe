@@ -3,9 +3,8 @@
 // The source text is assumed to be normalised, with no control characters
 // other than \n and no digraphs or trigraphs.
 
-// Keywords which are types or related to types. A few ids such as bool,
-// false, true from <stdbool.h> are treated as keywords. The type state checks
-// for additional characters which mean the token is an id.
+// Keywords which are types or related to types. Include bool from <stdbool.h>.
+// The type state checks for additional characters, making the token an id.
 
 start   _Atomic _Bool _Complex _Generic _Imaginary      type
 start   bool char double float int long                 type
@@ -13,8 +12,8 @@ start   short signed unsigned void                      type
 type    a..z A..Z 0..9 _ \\U \\u                        id
 type    \                                               start TYPE
 
-// Other keywords. The key states check for additional characters.
-// The enum and struct keywords cause bracket checking.
+// Other keywords. Include false, true from <stdbool.h>. The enum and struct
+// keywords cause bracket checking. The key state checks for added characters.
 
 start   _Alignas _Noreturn _Static_assert _Thread_Local         key
 start   alignof auto break case const continue default do else  key
@@ -27,7 +26,9 @@ key     \                                                       start KEY
 key2    a..z A..Z 0..9 _ \\U \\u                                id
 key2    \                                                       check0 KEY
 
-// Operators and signs.
+// Operators and signs. A + or - is marked infix, and a ++ or -- is marked
+// nonfix, for semicolon insertion, on the assumption that when it has one
+// operand, it won't be separated by a newline from the operand.
 
 start   ++ --                                       start OP0
 start   ! ~                                         start OP1
@@ -55,30 +56,43 @@ start  ]   start END2
 start  (   start BEGIN3
 start  )   start END3
 
-// Check for { as a structure bracket in these contexts:
-// enum {       OR    struct {
-// enum ID {    OR    struct ID {
-// = {
-// = ( ID ) {
-// = ( struct ID ) {
-
+// Check for structure brackets  enum {  or  struct {
 check0    {                          start BEGIN1
 check0    a..z A..Z _ \\U \\u        check1
+check0    \s \n                      check0
 check0    \                          start
+
+// Check for  enum e  or  struct s
 check1    a..z A..Z 0..9 _ \\U \\u   check1
 check1    \                          check2 ID
+
+// Check for structure brackets  enum e {  or  struct s {
 check2    {                          start BEGIN1
+check2    \s \n                      check2
 check2    \                          start
+
+// Check for structure bracket  = {
 check3    {                          start BEGIN1
 check3    (                          check4 BEGIN3
 check3    \                          start
+
+// Check for   = (   or   = (struct
 check4    struct                     check4 KEY
 check4    a..z A..Z _ \\U \\u        check5
+check4    \s \n                      check4
 check4    \                          start
+
+
+// Check for   = (t   or   = (struct s
 check5    a..z A..Z 0..9 _ \\U \\u   check5
 check5    \                          check6 ID
+
+// Check for   = (t)   or   = (struct s)
 check6    )                          check7 END3
+check6    \s \n                      check6
 check6    \                          start
+
+// Check for   = (t) {   or   = (struct s) {
 check7    {                          start BEGIN1
 check7    \                          start
 
@@ -90,33 +104,47 @@ dot     \      start SIGN3
 
 // Character and string literals.
 
-start   '      char
-char    !..~   char
-char    \\'    char
-char    \s     char QUOTE
-char    ' \n   start QUOTE
+start   '         char1
+char0   !..~ \\'  char1
+char0   \s        char0
+char0   '         start QUOTE
+char0   \n        start
+char1   !..~ \\'  char1
+char1   \s        char0 QUOTE
+char1   '         start QUOTE
+char1   \n        start UNKNOWN
 
-start   "      string
-string  !..~   string
-string  \\"    string
-string  \s     string QUOTE
-string  " \n   start QUOTE
+start     "          string1
+string0   !..~ \\"   string1
+string0   \s         string0
+string0   "          start QUOTE
+string0   \n         start
+string1   !..~ \\"   string1
+string1   \s         string0 QUOTE
+string1   "          start QUOTE
+string1   \n         start UNKNOWN
 
-// One-line comment. Mark /* or */ as warning.
+// One-line comment.
 
-start    //     note
-note     !..~   note
-note     \s     note COMMENT
-note     \n     start COMMENT
+start    //     note0 COMMENT
+note0    !..~   note1
+note0    \s     note0
+note0    \n     start
+note1    !..~   note1
+note1    \s     note0 COMMENT
+note1    \n     start COMMENT
 
 // Multi-line comment.
 
-start     /*     comment
-comment   !..~   comment
-comment   \s \n  comment COMMENT
-comment   */     start COMMENT
+start      /*     comment0 COMMENT
+comment0   !..~   comment1
+comment0   \s \n  comment0
+comment0   */     start COMMENT
+comment1   !..~   comment1
+comment1   \s \n  comment0 COMMENT
+comment1   */     comment0 COMMENT
 
-// Numbers.
+// Numbers. There is no attempt to detect malformed numbers.
 start    0..9           decimal
 start    0x 0X          hex
 decimal  0..9 .         decimal
@@ -129,11 +157,8 @@ hex      p+ p- P+ P-    hex
 hex      u U l L ll LL  hex
 hex      \              start VALUE
 
-// Backslash newline is only supported between tokens.
-
-start \\ start JOIN
-
-// Reserved words, and include files.
+// Reserved words. Preprocessor tokens are handled as normal tokens, except for
+// <filename> after #include.
 
 start     #                                 hash RESERVED
 hash      \s                                hash
@@ -141,14 +166,100 @@ hash      include                           include RESERVED
 hash      define elif else endif error if   start RESERVED
 hash      ifdef ifndef line pragma undef    start RESERVED
 hash      \                                 start
-include   <                                 filename
+
+include   <                                 filename0 QUOTE
+include   \s                                include
 include   \                                 start
-filename  !..~                              filename
-filename  \s                                filename QUOTE
-filename  > \n                              start QUOTE
 
-// Illegal characters (\s \n should never occur).
-start     $ @ ` \s \n                       start UNKNOWN
+filename0  !..~                             filename1
+filename0  >                                start QUOTE
+filename0  \s                               filename0
+filename0  \n                               start
 
-// TODO: check tags are COMMENT, FUNCTION, ID, JOIN, KEY, OP, PROPERTY, QUOTE,
-// RESERVED, SIGN, TYPE, UNKNOWN, VALUE, BEGINi, ENDi, (GAP, NEWLINE)
+filename1  !..~                             filename1
+filename1  \> \s                            filename0 QUOTE
+filename1  \n                               start QUOTE
+
+// Backslash newline is only supported between tokens (only needed for #define)
+
+start \\ start JOIN
+
+// Illegal characters and white space.
+start     $ @ `   start UNKNOWN
+start     \s \n   start
+
+// ---------- Tests ------------------------------------------------------------
+// In the expected output for a test, the first character of each token is
+// marked by an abbreviation of its type. A space is marked _ underline and a
+// newline as . dot. Begin brackets are marked with {<[( and end brackets with
+// }>]) and operators with abcd and signs with wxyz.
+
+// A few tokens
+> (count+1)
+< (I    dV).
+
+// An id can start with a type or keyword
+> char chart for form
+< T   _I    _K  _I   .
+
+// Operators and signs of different fixities
+> ++!<<=...->
+< a bd  w  z .
+
+// Structure and block brackets (begin structure bracket marked <)
+> s={}; do{}
+< Iz<}z_K {}.
+
+// More begin structure brackets
+> enum{  struct{  enum E{  struct S{
+< K   <__K     <__K   _I<__K     _I<.
+
+// More open structure brackets
+> ={ =(t){ =(struct t){
+< z<_z(I)<_z(K     _I)<.
+
+// Dot as sign or as part of number
+> s.x 1.2 .2
+< IzI_V  _V .
+
+// Character literals, including unclosed at end of line
+> 'x' '\'' 'x
+< Q  _Q   _U .
+
+// String literals, including unclosed
+> "hello world" "a\"b" "unclosed
+< Q     _Q     _Q     _U        .
+
+// One line comment
+> n = 0; // note
+< I_z_Vz_C _C   .
+
+// Multi-line comment
+> n = 0; /* line one
+< I_z_Vz_C _C   _C  .
+> line two */ n = 1;
+< C   _C  _C _I_z_Vz.
+
+// Numbers
+> 42 1.2e+3 4.5E-6 0x7f 0x7F 0x7c.def 0xa.bcp+d 0xaU 0xaL 
+< V _V     _V     _V   _V   _V       _V        _V   _V   .
+
+// Reserved words (there can be spaces between # and a reserved word)
+> #if # else #define #include
+< RR _R_R   _RR     _RR      .
+
+// Include filename
+> #include <f> #include <one two.ext>
+< RR      _QQQ_RR      _QQ  _Q      Q.
+
+// Joiner
+> #define f(x) \
+< RR     _I(I)_J.
+
+// Illegal characters
+> $ @ `
+< U_U_U.
+
+// Leading spaces
+>    x
+< ___I.

@@ -65,15 +65,15 @@ state at the beginning of the line.</p>
 
 <h2>Rules</h2>
 
-<p>A language description contains <u title="aka ASCII (obsolete and
-non-international)">basic latin</u> text, excluding control characters other
-than newlines. The rules in the file specify how basic latin source text
-characters, excluding control characters, are divided into tokens. An
-interpreter which uses the description may treat every Unicode character beyond
-basic Latin in the same way as a letters. That is sufficient to handle the
-common uses of Unicode in identifiers, string literals and comments. The scanner
-may also handle control characters by treating them the same as something else,
-or translating them, or marking them as illegal tokens.</p>
+<p>A language description contains simple text (<u title="aka ASCII(obsolete and
+non-international)">basic Latin</u> <code>'\n'</code> and <code>' '</code> to
+<code>'~'</code>). The rules in the file specify how simple source text is
+divided into tokens. An interpreter which uses the description may treat every
+Unicode character beyond basic Latin in the same way as letters. That is
+sufficient to handle the common uses of Unicode in identifiers, string literals
+and comments. The scanner may also handle control characters by converting
+them, or treating them the same as something else, or marking them as illegal
+tokens.</p>
 
 <p>In a language description file, a line which is blank or begins with a
 non-letter such as <code>#</code> or <code>/</code> is a comment line which is
@@ -117,7 +117,7 @@ for <code>0 1 2 3 4 5 6 7 8 9</code>. For example:</p>
 <p>This rule says that if the scanner is in the <code>start</code> state, and
 a digit appears next in the input, the scanner matches the digit and goes into
 the <code>number</code> state. The pattern <code>!..~</code> can be used to
-match any single visible character.</p>
+match any character other than space or newline.</p>
 
 <p>A limited form of lookahead is provided. A pattern which starts with a
 single backslash <code>\</code> is a lookahead pattern. It indicates a string
@@ -126,10 +126,14 @@ to be matched without being included in the current token. For example:</p>
 <pre>id \( start FUNCTION
 </pre>
 
-<p>In the <code>id</code> state, which presumably recognizes identifier
-tokens, if the next character in the source text is an open bracket, the
-current token is marked as a <code>FUNCTION</code> instead of the usual
-identifier type. A lookahead pattern can also be a range:</p>
+<p>In the <code>id</code> state, which presumably recognizes identifier tokens,
+if the next character in the source text is an open bracket, the current token
+is marked as a <code>FUNCTION</code> instead of the usual identifier type. That
+allows a function name to be highlighted differently when immediately followed
+by an open bracket, but the same approach can't be used to recognise <code>f
+(</code> because by the time the <code>(</code> is reached, it is too late to
+change the type of the token <code>f</code>. A lookahead pattern can also be a
+range:</p>
 
 <pre>dot \0..9 float
 </pre>
@@ -139,14 +143,11 @@ character, if a digit appears next in the source text, the scanner goes to the
 <code>float</code> state without moving past the digit.</p>
 
 <p>A lookahead pattern <code>\s</code> matches a space and <code>\n</code>
-matches a newline. If the current rule has no tag, the scanner jumps straight
-to the target state as with other lookahead patterns. If the rule has a tag,
-the current token is terminated and given the tag as a type, as usual, but then
-all spaces and newlines are skipped and suitably marked as separators until the
-next visible character is reached. Neither a space nor a newline can be
-recognized other than as a lookahead. Other single-letter lookahead patterns
-are reserved for future development. A literal single letter such as
-<code>x</code> can be recognized as a lookahead using a range such as
+matches a newline. If the current rule has no tag, the space or newline is
+tagged as a separator and skipped before entering the target state. Neither a
+space nor a newline can be included in tokens. Other single-letter lookahead
+patterns such as <code>\x</code> are treated as errors. A literal single letter
+<code>x</code> can be recognized as a lookahead using a range
 <code>\x..x</code>.</p>
 
 <p>A pattern beginning with two backslashes such as <code>\\u</code> is a
@@ -154,30 +155,27 @@ non-lookahead pattern matching a string such as <code>\u</code> starting with a
 single backslash. A pattern beginning with three backslashes such as
 <code>\\\u</code> is a lookahead for a string such as <code>\u</code> starting
 with a single backslash. A backslash anywhere else in a pattern stands for
-itself. A pattern <code>\</code> consisting of just a backslash acts as a
-default equivalent to <code>\!..~ \s \n</code> matching any character not
-otherwise handled.</p>
+itself. A pattern <code>\</code> consisting of just a backslash is treated as
+an abbreviation for <code>\!..~ \s \n</code> matching any character as a
+lookahead.</p>
 
 <h2>States</h2>
 
 <p>A state is defined by the rules which have that state as their base state.
 The rules defining a state can be in any order and need not necessarily be
-contiguous.</p>
-
-<p>If the input matches a pattern mentioned in any one of the rules for a
-state, that rule is applied. For example:</p>
+contiguous. If the input matches a pattern mentioned in any one of the rules
+for a state, that rule is applied. For example:</p>
 
 <pre>start == != start OP
 start a..z A..Z id
 </pre>
 
-<p>In the <code>start</code> state, if an equality operator appears next in
-the input, it is marked with type <code>OP</code> and the scanner remains in
-the <code>start</code> state, whereas if a letter appears, the scanner goes
-into the <code>id</code> state.</p>
-
-<p>If two different patterns, whether normal or lookahead, match at one
-position in the input, the longer pattern takes precedence:</p>
+<p>In the <code>start</code> state, if an equality operator appears next in the
+input, it is marked with type <code>OP</code> and the scanner remains in the
+<code>start</code> state, whereas if a letter appears, the scanner goes into
+the <code>id</code> state. If two different patterns, whether normal or
+lookahead, match at one position in the input, the longer pattern takes
+precedence:</p>
 
 <pre>start = start SIGN
 start == != start OP
@@ -185,10 +183,8 @@ start == != start OP
 
 <p>In this example, if there are two equal signs next in the input, the second
 rule applies, not the first. If there is only a single equal sign, the first
-rule applies.</p>
-
-<p>If a single character is matched directly by one pattern and as part of a
-range in another pattern, the direct pattern takes precedence:</p>
+rule applies. If a single character is matched directly by one pattern and as
+part of a range in another pattern, the direct pattern takes precedence:</p>
 
 <pre>string !..~ string
 string " start STRING
@@ -216,87 +212,84 @@ input into tokens and separators, handles all possible inputs, and terminates
 without getting stuck in a loop.</p>
 
 <p>There is a check that every state has at least one rule, does not contain
-duplicate patterns, and handles all the single characters <code>!..~</code> in
-some way. If a state can occur after the start of a token, it must also handle
-<code>\s</code> and <code>\n</code> (which can't occur at the start of a token
-because of automatic skipping). There is a check that no state can cause an
-empty token to be created. Where a lookahead pattern in a rule with no tag
-causes a jump between states without consuming input, there is a check that no
-infinite loop of jumps can occur.</p>
+duplicate patterns, and handles all the single characters
+<code>!..~ \s \n</code> in some way. Where a lookahead pattern in a rule with
+no tag causes a jump between states without consuming input, there is a check
+that no infinite loop of jumps can occur.</p>
+
+<p>To prevent empty tokens, there is a check that each state always occurs at
+the start of tokens, or always occurs after the start. If a state which always
+occurs at the start has a rule containing a lookahead, including
+<code>\s</code> or <code>\n</code>, the rule must not have a tag, because that
+would create an empty token. If a state which always occurs after the start of
+tokens has a rule containing a <code>\s</code> or <code>\n</code>, that rule
+must have a tag, to terminate the token before the space or newline.</p>
 
 <h2>Examples</h2>
 
-<p>In many programming languages, an identifier is allowed
-to start with a keyword. In that case, identifiers can be handled by rules
-like these:</p>
+<p>In many programming languages, an identifier is allowed to start with a
+keyword. In that case, identifiers can be handled by rules like these:</p>
 
-<pre>start if else for while key
-start a..z A..Z id
+<pre>start  if else for while  key
+start  a..z A..Z          id
 
-key a..z A..Z 0..9 id
-key \ start KEY
+key    a..z A..Z 0..9     id
+key    \                  start KEY
 
-id a..z A..Z 0..9 id
-id \ start ID
+id     a..z A..Z 0..9     id
+id     \                  start ID
 </pre>
 
-<p>Suppose the keyword <code>for</code> appears next in the input. The
-scanner goes to the <code>key</code> state which gives the token the type
-<code>KEY</code>.</p>
+<p>Suppose the keyword <code>for</code> appears next in the input. The scanner
+goes to the <code>key</code> state which gives the token the type
+<code>KEY</code>. Suppose instead that the identifier <code>form</code> appears
+next in the input. The prefix <code>for</code> is matched and the scanner goes
+into the <code>key</code> state. Then the <code>m</code> is matched, the
+scanner goes into the <code>id</code> state, and the token ends up being given
+the type <code>ID</code>.</p>
 
-<p>Suppose instead that the identifier <code>form</code> appears next in the
-input. The prefix <code>for</code> is matched and the scanner goes into the
-<code>key</code> state. Then the <code>m</code> is matched, the scanner goes
-into the <code>id</code> state, and the token ends up being given the type
-<code>ID</code>.</p>
+<p>Where language constructs contain spaces or newlines and so need to be
+divided into mini-tokens, two states are often needed, one for the start of the
+mini-tokens, and one for after the start. For example, one-line comments, say
+starting with <code>//</code> and continuing to the end of the line, can be
+handled with rules of the form:</p>
 
-<p>One-line comments, say starting with <code>//</code> and continuing to the
-end of the line, can be handled with rules of the form:</p>
+<pre>start    //     note0 COMMENT
 
-<pre>start // note
+note0    !..~   note1
+note0    \s     note0
+note0    \n     start
 
-note !..~ note
-note \s note NOTE
-note \n start NOTE
+note1    !..~   note1
+note1    \s     note0 COMMENT
+note1    \n     start COMMENT
 </pre>
 
 <p>A comment line then consists of a sequence of tokens of type
-<code>NOTE</code>, separated by spaces. There is a potential problem with
+<code>COMMENT</code>, separated by spaces. There is a potential problem with
 trailing spaces at the end of a line, which could prevent <code>\n</code> from
-being matched to terminate the comment. The scanner must either make sure there
-are no trailing spaces before scanning the line, or it must arrange for them to
-match <code>\n</code> rather than <code>\s</code>.</p>
+being matched to terminate the comment. Either trailing spaces must not occur,
+or the scanner must arrange for them to match <code>\n</code> rather than
+<code>\s</code>.</p>
 
 <p>Multi-line comments, say starting with <code>/*</code> and ending with
 <code>*/</code> and not nesting, can be handled by:</p>
 
-<pre>start /* comment
+<pre>start      /*     comment0 COMMENT
 
-comment !..~ comment
-comment \s \n comment COMMENT
-comment */ start COMMENT
-</pre>
+comment0   !..~   comment1
+comment0   \s \n  comment0
+comment0   */     start COMMENT
 
-<p>Multi-line comments which nest can be implemented to a small fixed level of
-nesting. In fact, one level of nesting is all that is needed to be able to use
-them for commenting out, handled like this:</p>
-
-<pre>start /* comment1
-
-comment1 /* comment2
-comment1 !..~ comment1
-comment1 \s \n comment1 COMMENT
-comment1 */ start COMMENT
-
-comment2 !..~ comment2
-comment2 \s \n comment2 COMMENT
-comment2 */ comment1 COMMENT
+comment1   !..~   comment1
+comment1   \s \n  comment0 COMMENT
+comment1   */     comment0 COMMENT
 </pre>
 
 <p>Suppose a language description contained the following rules:</p>
 
 <pre>even \a..z odd
-odd \a..z even
+odd  \a..z even
 </pre>
 
 <p>An error would be reported, because this could result in an infinite loop
@@ -304,36 +297,35 @@ when scanning. A more subtle example of an error might be:</p>
 
 <pre>start . dot
 
-dot 0..9 number
-dot \a..z \A..Z prop SIGN
-dot \ start SIGN
+dot  0..9         number
+dot  \a..z \A..Z  prop SIGN
+dot  \            start SIGN
 
-prop a..z A..Z 0..9 prop
-prop \ start PROPERTY
+prop  a..z A..Z 0..9  prop
+prop  \               start PROPERTY
 </pre>
 
 <p>The idea behind these rules is that if a dot is followed by an identifier,
 the identifier should be highlighted differently, as a <code>PROPERTY</code>.
-However, the <code>prop</code> state is classified as a starting state,
-because it follows the completion of a <code>SIGN</code> token in the second
-<code>dot</code> rule. On the other hand, it has to be a continuing state,
-both because it is the target of its own first rule, and because it completes
-a <code>PROPERTY</code> token in its second rule. This can be corrected by
-writing:</p>
+However, the <code>prop</code> state can occur at the start of a token because
+it follows the completion of a <code>SIGN</code> token in the second
+<code>dot</code> rule. On the other hand, it can also occur after the start of
+a token, because it is the target of its own first rule. This can be corrected
+by writing:</p>
 
-<pre>dot 0..9 number
-dot \ prop0 SIGN
+<pre>dot  0..9  number
+dot  \     prop0 SIGN
 
-prop0 a..z A..Z prop1
-prop0 \ start
+prop0  a..z A..Z  prop1
+prop0  \          start
 
-prop1 a..z A..Z 0..9 prop1
-prop1 .. start PROPERTY +
+prop1  a..z A..Z 0..9  prop1
+prop1  \               start PROPERTY
 </pre>
 
-<p>Now, <code>prop0</code> is a starting state which matches only the first
-letter, and <code>prop1</code> is a continuing state which recognizes the rest
-of the token.</p>
+<p>Now, <code>prop0</code> can only occur at the start of tokens and matches the
+first letter, and <code>prop1</code> can only occur after the start and
+recognizes the rest of the token.</p>
 
 <h2>Tags</h2>
 
@@ -368,7 +360,7 @@ SIGN1     (ditto, prefix)
 SIGN2     (ditto, postfix)
 SIGN3     (ditto, infix)
 TYPE      (type-related keyword or id)
-UNKNOWN   (ill-formed token)
+UNKNOWN   (ill-formed token, e.g. unclosed quote)
 VALUE     (number or other constant)
 </pre>
 
@@ -477,15 +469,22 @@ are no long pauses.</p>
 
 <p>A language description can contain tests, which also act as examples
 illustrating the operation of the rules. A line starting with <code>></code>
-represents a line of source text. A line starting with <code>&lt;</code>
-represents the output from the scanner, as a sequence of tokens, each preceded
-by an abbreviation for its type. The scanner state after scanning the input
-line is used as the start state for the next test, which allows for extended
-examples. For example:</p>
+represents a line of source text. An immediately following line starting with
+<code>&lt;</code> represents the output from the scanner. For example:</p>
 
-<pre>&gt; (count+1)
-&lt; B3 ( I count O3 + E3 )
+<pre>&gt; (count + 1)
+&lt; (I    GdGV).
 </pre>
+
+<p>The output has a one-character abbreviation for the type of each token,
+placed under its first character. The abbreviation for each type is its first
+letter, except <code>{&lt;[(</code> are used for the <code>BEGIN</code> types,
+<code>}>])</code> for the <code>END</code> types, <code>abcd</code> for the
+<code>OP</code> types, and <code>wxyz</code> for the <code>SIGN</code> types. A
+newline is marked as a <code>.</code> dot and a space is marked as a
+<code>_</code> underline. The scanner state after scanning the input line is
+used as the start state for the next test, which allows for extended
+examples.</p>
 
 <hr/>
 
