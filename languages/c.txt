@@ -30,13 +30,12 @@ key2    \                                                       check0 KEY
 // nonfix, for semicolon insertion, on the assumption that when it has one
 // operand, it won't be separated by a newline from the operand.
 
-start   ++ --                                       start OP0
-start   ! ~                                         start OP1
-start   != %= % && &= & *= * += + -= - /= / ?       start OP3
-start   <<= << <= < == >= >>= >> > ^= ^ |= || |     start OP3
-start   ...                                         start SIGN0
-start   ## , ; : ->                                 start SIGN3
-start   =                                           check3 SIGN3
+start   ++ -- ! ~                                   start UNARY
+start   != %= % && &= & *= * += + -= - /= / ?       start OP
+start   <<= << <= < == >= >>= >> > ^= ^ |= || |     start OP
+start   ...                                         start MARK
+start   ## , ; : ->                                 start SIGN
+start   =                                           check3 SIGN
 
 // Identifiers
 
@@ -44,20 +43,20 @@ start   a..z A..Z _ \\U \\u        id
 id      a..z A..Z 0..9 _ \\U \\u   id
 id      \                          start ID
 
-// Brackets. By default { and } are block brackets, level 1. To help with
-// semicolon insertion, the opener { is marked as a structure bracket BEGIN2
-// instead, by the rules below. The closer } is changed from BEGIN1 to BEGIN2
-// to match by Snipe during bracket matching.
+// Brackets. By default { and } are block brackets. To help with semicolon
+// insertion, the opener { is marked as an inline bracket LEFT instead, by the
+// rules below. The closer } is changed from END to RIGHT to match by Snipe
+// during bracket matching.
 
-start  {   start BEGIN0
-start  }   start END0
-start  [   start BEGIN2
-start  ]   start END2
-start  (   start BEGIN3
-start  )   start END3
+start  {   start BEGIN
+start  }   start END
+start  [   start LEFT
+start  ]   start RIGHT
+start  (   start LEFT
+start  )   start RIGHT
 
 // Check for structure brackets  enum {  or  struct {
-check0    {                          start BEGIN1
+check0    {                          start LEFT
 check0    a..z A..Z _ \\U \\u        check1
 check0    \s \n                      check0
 check0    \                          start
@@ -67,13 +66,13 @@ check1    a..z A..Z 0..9 _ \\U \\u   check1
 check1    \                          check2 ID
 
 // Check for structure brackets  enum e {  or  struct s {
-check2    {                          start BEGIN1
+check2    {                          start LEFT
 check2    \s \n                      check2
 check2    \                          start
 
 // Check for structure bracket  = {
-check3    {                          start BEGIN1
-check3    (                          check4 BEGIN3
+check3    {                          start LEFT
+check3    (                          check4 LEFT
 check3    \s \n                      check3
 check3    \                          start
 
@@ -89,19 +88,19 @@ check5    a..z A..Z 0..9 _ \\U \\u   check5
 check5    \                          check6 ID
 
 // Check for   = (t)   or   = (struct s)
-check6    )                          check7 END3
+check6    )                          check7 RIGHT
 check6    \s \n                      check6
 check6    \                          start
 
 // Check for   = (t) {   or   = (struct s) {
-check7    {                          start BEGIN1
+check7    {                          start LEFT
 check7    \                          start
 
-// A dot starts a number, or is a sign.
+// A dot starts a number, or is an operator.
 
 start   .      dot
 dot     \0..9  decimal
-dot     \      start SIGN3
+dot     \      start OP
 
 // Character and string literals.
 
@@ -113,7 +112,7 @@ char0   \n        start
 char1   !..~ \\'  char1
 char1   \s        char0 QUOTE
 char1   '         start QUOTE
-char1   \n        start UNKNOWN
+char1   \n        start WRONG
 
 start     "          string1
 string0   !..~ \\"   string1
@@ -123,26 +122,26 @@ string0   \n         start
 string1   !..~ \\"   string1
 string1   \s         string0 QUOTE
 string1   "          start QUOTE
-string1   \n         start UNKNOWN
+string1   \n         start WRONG
 
 // One-line comment.
 
-start    //     note0 COMMENT
+start    //     note0 NOTE
 note0    !..~   note1
 note0    \s     note0
 note0    \n     start
 note1    !..~   note1
-note1    \s     note0 COMMENT
-note1    \n     start COMMENT
+note1    \s     note0 NOTE
+note1    \n     start NOTE
 
 // Multi-line comment.
 
-start      /*     comment0 COMMENT
-comment0   !..~   comment1
-comment0   \s \n  comment0
-comment0   */     start COMMENT
-comment1   !..~   comment1
-comment1   \s \n  comment0 COMMENT
+start      /*      comment0 COMMENT
+comment0   !..~    comment1
+comment0   \s \n   comment0
+comment0   */      start COMMENT
+comment1   !..~    comment1
+comment1   \s \n   comment0 COMMENT
 comment1   \*/     comment0 COMMENT
 
 // Numbers. There is no attempt to detect malformed numbers.
@@ -161,11 +160,11 @@ hex      \              start VALUE
 // Reserved words. Preprocessor tokens are handled as normal tokens, except for
 // <filename> after #include.
 
-start     #                                 hash RESERVED
+start     #                                 hash MARK
 hash      \s                                hash
-hash      include                           include RESERVED
-hash      define elif else endif error if   start RESERVED
-hash      ifdef ifndef line pragma undef    start RESERVED
+hash      include                           include MARK
+hash      define elif else endif error if   start MARK
+hash      ifdef ifndef line pragma undef    start MARK
 hash      \                                 start
 
 include   <                                 filename0 QUOTE
@@ -179,25 +178,24 @@ filename0  \n                               start
 
 filename1  !..~                             filename1
 filename1  \> \s                            filename0 QUOTE
-filename1  \n                               start QUOTE
+filename1  \n                               start WRONG
 
 // Backslash newline is only supported between tokens (only needed for #define)
 
 start \\ start JOIN
 
 // Illegal characters and white space.
-start     $ @ `   start UNKNOWN
+start     $ @ `   start WRONG
 start     \s \n   start
 
 // ---------- Tests ------------------------------------------------------------
-// In the expected output for a test, the first character of each token is
-// marked by an abbreviation of its type. A space is marked _ underline and a
-// newline as . dot. Begin brackets are marked with {<[( and end brackets with
-// }>]) and operators with abcd and signs with wxyz.
+// In the expected output for a test, the start of each token is marked by the
+// first letter of its type. Remaining characters are marked with space, a
+// space is marked with an underline, and a newline is marked with a dot.
 
 // A few tokens
 > (count+1)
-< (I    dV).
+< LI    OVR.
 
 // An id can start with a type or keyword
 > char chart for form
@@ -205,41 +203,41 @@ start     \s \n   start
 
 // Operators and signs of different fixities
 > ++!<<=...->
-< a bd  w  z .
+< U UO  M  S .
 
-// Structure and block brackets (begin structure bracket marked <)
+// Structure and block brackets (left structure bracket marked L)
 > s={}; do{}
-< Iz<}z_K {}.
+< ISLES_K BE.
 
-// More begin structure brackets
+// More left structure brackets
 > enum{  struct{  enum E{  struct S{
-< K   <__K     <__K   _I<__K     _I<.
+< K   L__K     L__K   _IL__K     _IL.
 
-// More open structure brackets
+// More left structure brackets
 > ={ =(t){ =(struct t){
-< z<_z(I)<_z(K     _I)<.
+< SL_SLIRL_SLK     _IRL.
 
 // Dot as sign or as part of number
 > s.x 1.2 .2
-< IzI_V  _V .
+< IOI_V  _V .
 
 // Character literals, including unclosed at end of line
 > 'x' '\'' 'x
-< Q  _Q   _U .
+< Q  _Q   _W .
 
 // String literals, including unclosed
 > "hello world" "a\"b" "unclosed
-< Q     _Q     _Q     _U        .
+< Q     _Q     _Q     _W        .
 
 // One line comment
 > n = 0; // note
-< I_z_Vz_C _C   .
+< I_S_VS_N _N   .
 
 // Multi-line comment
 > n = 0; /* line one
-< I_z_Vz_C _C   _C  .
+< I_S_VS_C _C   _C  .
 > line two */ n = 1;
-< C   _C  _C _I_z_Vz.
+< C   _C  _C _I_S_VS.
 
 // Numbers
 > 42 1.2e+3 4.5E-6 0x7f 0x7F 0x7c.def 0xa.bcp+d 0xaU 0xaL 
@@ -247,19 +245,19 @@ start     \s \n   start
 
 // Reserved words (there can be spaces between # and a reserved word)
 > #if # else #define #include
-< RR _R_R   _RR     _RR      .
+< MM _M_M   _MM     _MM      .
 
 // Include filename
 > #include <f> #include <one two.ext>
-< RR      _QQQ_RR      _QQ  _Q      Q.
+< MM      _QQQ_MM      _QQ  _Q      Q.
 
 // Joiner
 > #define f(x) \
-< RR     _I(I)_J.
+< MM     _ILIR_J.
 
 // Illegal characters
 > $ @ `
-< U_U_U.
+< W_W_W.
 
 // Leading spaces
 >    x
@@ -268,37 +266,37 @@ start     \s \n   start
 // A few general tests
 
 > if (b) n = 1;
-< K _(I)_I_z_Vz.
+< K _LIR_I_S_VS.
 
 > if (b) { n = 1; }
-< K _(I)_{_I_z_Vz_}.
+< K _LIR_B_I_S_VS_E.
 
 > int n;
-< T  _Iz.
+< T  _IS.
 
 > string s;
-< I     _Iz.
+< I     _IS.
 
 > enum suit { Club, Diamond, Heart, Spade };
-< K   _I   _<_I   z_I      z_I    z_I    _}z.
+< K   _I   _L_I   S_I      S_I    S_I    _ES.
 
 > int ns[] = { 1, 2, 34};
-< T  _I []_z_<_Vz_Vz_V }z.
+< T  _I LR_S_L_VS_VS_V ES.
 
 > char *s = "a\nb\0c\04d";
-< T   _dI_z_Q            z.
+< T   _OI_S_Q            S.
 
 > char *s = "\037e\038f\xffg";
-< T   _dI_z_Q                z.
+< T   _OI_S_Q                S.
 
 > s = "*/"//"; /* abc "*/"//";
-< I_z_Q   C C _C _C  _C       .
+< I_S_Q   N N _N _N  _N       .
 
 > /*  "*/"//"; /* abc "*/"//";
-< C __CC Q   z_C _C  _CC Q   z.
+< C __CC Q   S_C _C  _CC Q   S.
 
 > obj.x, obj->x, f(x)
-< I  zIz_I  z Iz_I(I).
+< I  OIS_I  S IS_ILIR.
 
 > n = f   (x);
-< I_z_I___(I)z.
+< I_S_I___LIRS.

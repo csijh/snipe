@@ -15,37 +15,24 @@
 #include <time.h>
 
 // ---------- Tags -------------------------------------------------------------
-// This enumeration of tags and their names must be kept the same as in other
-// Snipe components, and kept to a maximum of 64 entries. The default if there
-// is no tag is NONE meaning continue the token.
+// These tags and their names must be kept the same as in other Snipe modules,
+// and kept to a maximum of 32 entries. For the first 26, the tag value is the
+// same as (ch-'A') where ch is the first letter. There are gaps for unused
+// letters. The last 3 tags can't be mentioned in language definitions. The
+// default if there is no tag is NONE meaning continue the token.
 
 enum tag {
-    NONE, ARTICLE, BEGIN0, BEGIN1, BEGIN2, BEGIN3, COMMENT, END0, END1, END2,
-    END3, FUNCTION, GAP, ID, JOIN, KEY, NEWLINE, OP0, OP1, OP2, OP3,
-    PROPERTY, QUOTE, RESERVED, SIGN0, SIGN1, SIGN2, SIGN3, TYPE, UNKNOWN,
-    VALUE
+    A, BEGIN, COMMENT, DOCUMENT, END, FUNCTION, G, H, IDENTIFIER, JOIN, KEYWORD,
+    LEFT, MARK, NOTE, OP, PROPERTY, QUOTE, RIGHT, SIGN, TYPE, UNARY, VALUE,
+    WRONG, X, Y, Z, GAP, NEWLINE, NONE
 };
 
-char *tagNames[64] = {
-    [NONE]="NONE", [ARTICLE]="ARTICLE", [BEGIN0]="BEGIN0", [BEGIN1]="BEGIN1",
-    [BEGIN2]="BEGIN2", [BEGIN3]="BEGIN3", [COMMENT]="COMMENT", [END0]="END0",
-    [END1]="END1", [END2]="END2", [END3]="END3", [FUNCTION]="FUNCTION",
-    [GAP]="GAP", [ID]="ID",[JOIN]="JOIN", [KEY]="KEY", [NEWLINE]="NEWLINE",
-    [OP0]="OP0",[OP1]="OP1",[OP2]="OP2", [OP3]="OP3",
-    [PROPERTY]="PROPERTY", [QUOTE]="QUOTE",[RESERVED]="RESERVED",
-    [SIGN0]="SIGN0",[SIGN1]="SIGN1",[SIGN2]="SIGN2", [SIGN3]="SIGN3",
-    [TYPE]="TYPE",[UNKNOWN]="UNKNOWN",[VALUE]="VALUE"
-};
-
-// One-character abbreviations: the first character, or {<[()]>} for brackets,
-// abcd for operators, wxyz for signs, space or _ or . for NONE, GAP, NEWLINE.
-char tagChars[64] = {
-    [NONE]=' ', [ARTICLE]='A', [BEGIN0]='{', [BEGIN1]='<', [BEGIN2]='[',
-    [BEGIN3]='(', [COMMENT]='C', [END0]='}',[END1]='>', [END2]=']', [END3]=')',
-    [FUNCTION]='F',[GAP]='_', [ID]='I',[JOIN]='J', [KEY]='K', [NEWLINE]='.',
-    [OP0]='a',[OP1]='b',[OP2]='c', [OP3]='d',[PROPERTY]='P', [QUOTE]='Q',
-    [RESERVED]='R',[SIGN0]='w',[SIGN1]='x',[SIGN2]='y', [SIGN3]='z',[TYPE]='T',
-    [UNKNOWN]='U',[VALUE]='V'
+// The first character is used in tests.
+char *tagNames[32] = {
+    "?", "BEGIN", "COMMENT", "DOCUMENT", "END", "FUNCTION", "?", "?",
+    "IDENTIFIER", "JOIN", "KEYWORD", "LEFT", "MARK", "NOTE", "OP", "PROPERTY",
+    "QUOTE", "RIGHT", "SIGN", "TYPE", "UNARY", "VALUE", "WRONG", "?", "?", "?",
+    "_", ".", " "
 };
 
 void error(char *format, ...) {
@@ -58,16 +45,18 @@ void error(char *format, ...) {
     exit(1);
 }
 
-// Find a tag by name, other than GAP, NEWLINE.
+bool prefix(char *s, char *t) {
+    if (strlen(s) >= strlen(t)) return false;
+    if (strncmp(s, t, strlen(s)) == 0) return true;
+    return false;
+}
+
+// Find a tag or abbreviation by name, other than NONE, GAP, NEWLINE.
 int findTag(char *name) {
     for (int i = 0; i < 64; i++) {
         if (tagNames[i] == NULL) continue;
-        if (strcmp(tagNames[i], name) == 0) {
-            if (i == GAP || i == NEWLINE) {
-                error("Tags GAP, NEWLINE are reserved for internal use");
-            }
-            return i;
-        }
+        if (strcmp(name, tagNames[i]) == 0) return i;
+        if (prefix(name, tagNames[i])) return i;
     }
     return -1;
 }
@@ -177,7 +166,7 @@ char **splitTokens(char *line) {
     }
     tokens[n++] = &line[start];
     bool hasTag = isupper(tokens[n-1][0]);
-    if (! hasTag) tokens[n++] = "NONE";
+    if (! hasTag) tokens[n++] = tagNames[NONE];
     resize(tokens, n);
     return tokens;
 }
@@ -411,12 +400,6 @@ void derangeAll(state *states) {
 // ---------- Sorting ----------------------------------------------------------
 // Sort the patterns for each state into lexicographic order, except that if s
 // is a prefix of t, t comes before s.
-
-bool prefix(char *s, char *t) {
-    if (strlen(s) >= strlen(t)) return false;
-    if (strncmp(s, t, strlen(s)) == 0) return true;
-    return false;
-}
 
 int compare(char *s, char *t) {
     if (prefix(s,t)) return 1;
@@ -720,7 +703,7 @@ int runTest(byte *table, int st, char *in, char *expected, state *states) {
     byte bytes[n];
     st = scan(table, st, in+2, bytes+2, states);
     char out[100] = "< ";
-    for (int i = 2; i < n; i++) out[i] = tagChars[bytes[i]];
+    for (int i = 2; i < n; i++) out[i] = tagNames[bytes[i]][0];
     out[n] = '\0';
     if (strcmp(out, expected) == 0) return st;
     printf("Test failed. Input, expected output and actual output are:\n");

@@ -7,12 +7,22 @@
 // The approach only fails in rare cases such as regex strings containing
 // spaces, or  if(a)/re/  or  ++/re/.
 
+// TODO: for templates, assume embedded expressions are simple, in particular
+// no keywords, no curly brackets, no template strings, no comments, no quotes,
+// no regexps.
+start ` head
+head !..~ \\` \\$ head
+head \s \n head QUOTE
+head ${ sub
+head ` start QUOTE
+sub keys ops signs ids () []
+
 // At the start of a file only, recognise a hashbang comment.
+
 shebang  #!  note0 COMMENT
 shebang  \   start
 
-// Keywords, including ones reserved for future use, ones which can also be
-// used as ids, and ones which are not strictly keywords but are restricted.
+// Keywords, reserved words and restricted words.
 
 start  arguments as async await break case catch class const continue  key
 start  debugger default delete do else enum eval export extends false  key

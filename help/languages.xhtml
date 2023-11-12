@@ -38,30 +38,30 @@ unlimited nesting of multi-line comments. A scanner based on regular expressions
 or a state machine can only support nesting to a small fixed depth. Another
 common reason is if the lexical rules for a language depend on syntactic
 context. A multi-language editor doesn't normally support full parsing of
-languages. On the other hand, the scanner:</p>
+languages. On the other hand, the Snipe scanner:</p>
 
 <ul>
-<li>must partition the whole text into tokens</li>
-<li>must be able to handle any text, whether valid or not</li>
-<li>may support dynamic loading of language definitions</li>
-<li>may support incremental rescanning</li>
-<li>may help with 'word'-based reflow or cursor movement</li>
-<li>may help with bracket matching, indenting or semicolon insertion</li>
+<li>partitions the whole text into tokens</li>
+<li>handles any text, whether valid or not</li>
+<li>supports dynamic loading of language definitions</li>
+<li>supports incremental rescanning</li>
+<li>helps with 'word'-based reflow or cursor movement</li>
+<li>helps with bracket matching, indenting and semicolon insertion</li>
 </ul>
 
 <p>Languages for programming editors are often expressed using regular
-expressions. Languages for Snipe are instead expressed as string-matching
-state machine tables. These are easier to read and maintain, and only a little
-less compact. For example, the C language is described by the
-<code>c.txt</code> file in the directory <code>snipe/languages</code>. A
-generic scanner uses the state machine table in the file to scan source text
-in the C language.</p>
+expressions. Languages for Snipe are instead expressed as string-matching state
+machine tables. These are easier to read and maintain, and only a little less
+compact.</p>
 
-<p>To support incremental rescanning and help with word-based operations, long
-sequences such as comments and string literals are broken up into mini-tokens
-at spaces and newlines, which are always treated as separators.  A line of
-source text can be re-scanned in isolation, given only a suitable starting
-state at the beginning of the line.</p>
+<p>For example, the C language is described by the <code>c.txt</code> file in
+the directory <code>snipe/languages</code>. The commands <code>make
+compile</code> and <code>./compile c.txt</code> can be used to compile the
+file. The compiler analyses the language definition to ensure that the scanner
+can handle any source text, that it can't get stuck in an infinite loop, and
+that it can't produce empty tokens. It then carries out tests which are
+included in the <code>c.txt</code> file and, if they pass, produces a compact
+table in file <code>c.bin</code> for use by Snipe's scanner.</p>
 
 <h2>Rules</h2>
 
@@ -331,42 +331,19 @@ recognizes the rest of the token.</p>
 
 <p>These are the available tags:</p>
 
-<pre>ARTICLE   (multi-line quotation)
-BEGIN0    (block bracket, infix)
-BEGIN1    (initialiser bracket, prefix)
-BEGIN2    (list bracket, prefix)
-BEGIN3    (parenthesis, prefix)
-COMMENT   (multi-line)
-END0      (block bracket, infix)
-END1      (inilialiser bracket, postfix)
-END2      (list bracket, postfix)
-END3      (parenthesis, postfix)
-FUNCTION  (alternative id - a function or method name)
-GAP       (spaces - not used explicitly in language definitions)
-ID        (any kind of id)
-JOIN      (line joiner, e.g. backslash before newline in C)
-KEY       (keyword)
-NEWLINE   (newline - not used explicitly in language definitions)
-OP0       (operator, non-fix)
-OP1       (operator, prefix)
-OP2       (operator, postfix)
-OP3       (operator, infix)
-NOTE      (one-line)
-PROPERTY  (alternative id, e.g. field name)
-QUOTE     (one-line string or character literal)
-RESERVED  (alternative type of keyword)
-SIGN0     (symbol or punctuation, nonfix)
-SIGN1     (ditto, prefix)
-SIGN2     (ditto, postfix)
-SIGN3     (ditto, infix)
-TYPE      (type-related keyword or id)
-UNKNOWN   (ill-formed token, e.g. unclosed quote)
-VALUE     (number or other constant)
+<pre>KEYWORD, TYPE, MARK,               - kinds of keyword
+IDENTIFIER, FUNCTION, PROPERTY,    - kinds of identifier
+VALUE, QUOTE, DOCUMENT,            - literals
+BEGIN, END, LEFT, RIGHT,           - block and inline brackets
+NOTE, COMMENT,                     - one-line and multi-line comments
+OP, UNARY, SIGN, JOIN,             - operators and punctuation
+WRONG                              - malformed token
 </pre>
 
-<p>The scanning conventions and the tags are designed to help with reformatting,
-syntax highlighting, bracket matching, indenting, semicolon insertion, and
-incremental rescanning.</p>
+<p>These can be shortened, e.g. <code>KEY</code> or <code>ID</code>, or
+abbreviated to a single letter. The scanning conventions and the tags are
+designed to help with reformatting, syntax highlighting, bracket matching,
+indenting, semicolon insertion, and incremental rescanning as follows.</p>
 
 <p><b>Reformatting:</b> A multi-line comment or a sequence of one-line comments
 is reformatted by changing the line breaks so that the maximum number of tokens
@@ -377,53 +354,52 @@ space, and one-line comments with two or more spaces after the initial symbol,
 are not reformatted. The small tokens also help with word-based cursor
 movement.</p>
 
-<p><b>Syntax highlighting:</b> Each token type can be displayed in a different
-style. For this purpose, numerical suffixes are ignored (which means that the
-initial letters of the types are unique).</p>
+<p><b>Syntax highlighting:</b> Each token type can be displayed differently,
+according to a style definition.</p>
 
 <p><b>Bracket matching:</b> A language definition must accurately tag comments
 and quotes, so that brackets inside them are not active. It must also give
-active begin and end brackets suitable types, e.g. <code>BEGIN2</code> and
-<code>END2</code> for <code>[</code> and <code>]</code>, so that the bracket
-matcher can pair them up accurately.</p>
+active begin and end brackets suitable types, so that the bracket matcher can
+recognise them.</p>
 
 <p><b>Indenting:</b> Snipe has a very simple and uniform rule for fully
 automatic indenting. The indent of a line is determined by the number of
-unmatched begin brackets from preceding lines, minus the number of unmatched
-end brackets on the line itself. Multi-line comments or multi-line string
-literals are not automatically indented, but one-line comments are.</p>
+unmatched open brackets from preceding lines, minus the number of unmatched
+close brackets on the line itself. Multi-line comments (<code>COMMENT</code>) or
+multi-line string literals (<code>DOCUMENT</code>) are not automatically
+indented, but one-line comments (<code>NOTE</code>) are.</p>
 
 <p><b>Semicolon insertion:</b> Snipe inserts semicolons at the ends of lines
 where appropriate, using a simple and uniform rule. A line should have a final
-semicolon added unless it ends with a prefix, or the following line begins with
-a postfix token. A token is regarded as prefix if it expects a token to follow
-immediately, and as postfix if it expects an immediately preceding token. A
-token can be nonfix, i.e. neither prefix and postfix, or infix, i.e. both.</p>
+semicolon added unless it ends with a prefix token, or the following line
+begins with a postfix token. A token is regarded as prefix if it expects an
+immediately following token other than semicolon, as postfix if it expects an
+immediately preceding token other than semicolon, as infix if it is both, and
+as nonfix if it is neither.</p>
 
-<p>Most of the tags correspond to nonfix tokens. However, operators and signs
-can be given prefix, postfix or infix tags, as appropriate. An operator such as
-<code>+</code> which can be a prefix or infix operator is best declared as
-infix (<code>OP3</code>) on the assumption that when it is a prefix operator,
-it won't be separated by a newline from its operand, so a line starting with
-<code>+</code> is always treated as a continuation line. An operator such as
-<code>++</code> which can be either a prefix or postfix operator is best tagged
-as nonfix(<code>OP0</code>) on the assumption that the operator will never be
-separated by a newline from its operand.</p>
+<p>Most token types are nonfix. The types <code>OP</code>, <code>SIGN</code> and
+<code>JOIN</code> (line joiner such as backslash) are infix. Signs
+(e.g. <code>...</code>) which are nonfix should be given a type such as
+<code>MARK</code>. A <code>UNARY</code> operator (e.g. <code>++</code>) is
+regarded as nonfix, on the assumption that a newline never separates it from
+its operand. An operator such as minus which can be either prefix or infix
+should be given type <code>OP</code> so that it is treated as infix, on the
+assumption that a prefix version never appears at the start of a line.</p>
 
-<p>A begin block bracket should normally be tagged as infix
-(<code>BEGIN0</code>) rather than prefix (<code>BEGIN1</code>), because a block
-<code>{...}</code> is almost always attached to the end of a statement, so that
-a line starting with <code>{</code> is a continuation line. An end block
-bracket should also normally be tagged as infix (<code>END0</code>), rather
-than postfix (<code>END1</code>), because it does not need to be followed by a
-semicolon.</p>
+<p>Brackets of type <code>LEFT</code> or <code>RIGHT</code> are treated as
+prefix and postfix respectively. A <code>BEGIN</code> bracket is treated as
+infix rather than prefix, on the assumption that it is the start of a block
+which is attached to the end of a statement so shouldn't be preceded by a
+semicolon. An <code>END</code> bracket is treated as postfix rather than
+prefix, on the assumption that a semicolon is appropriate before it but not
+after it.</p>
 
 <p>Languages in the C family often use curly brackets <code>{}</code> both as
-block brackets and as declaration or initialisation brackets. In the latter
-case, a semicolon is required after the end bracket. To cope with this, the
-language definition should, at least approximately, tag the open bracket as
-<code>BEGIN1</code> rather than <code>BEGIN0</code>, according to context. For
-example, in C itself, the common cases are:</p>
+block brackets and as structure brackets. In the latter case, a semicolon is
+required after the close bracket. To cope with this, the language definition
+should, at least approximately, tag the open bracket as <code>LEFT</code>
+rather than <code>BEGIN</code>, according to context. For example, in C itself,
+the common cases are:</p>
 
 <pre>enum {...
 struct {...
@@ -434,23 +410,16 @@ struct ID {...
 = ( struct ID ) {...
 </pre>
 
-<p>The fact that scanner states are preserved across white space means that
-these cases can be handled quite accurately. The bracket matcher adjusts the
-tag of the end bracket. When a <code>{</code> token marked as
-<code>BEGIN0</code> matches a <code>}</code> token marked <code>END1</code>,
-the <code>END1</code> tag is changed to <code>END0</code>, and similarly for
-<code>BEGIN1</code> matching with <code>END0</code>. This carries the
-information across from the begin bracket to the end bracket.</p>
+<p>In all these cases, the <code>{</code> should be tagged as <code>LEFT</code>.
+The bracket matcher can then adjust the tag of the end bracket to
+<code>RIGHT</code> to match, so that a semicolon is expected after it.</p>
 
-<p><b>Incremental rescanning:</b> A line of source text can be rescanned in isolation, using only a recorded
-start state for the line.</p>
+<p><b>Incremental rescanning:</b> A line of source text can be rescanned in
+isolation, using only a recorded start state for the line.</p>
 
 <p>When a newline is matched with a <code>\n</code> lookahead pattern, the
-scanner, in principle, skips past any number of newlines and spaces, marking
-them appropriately as separators, then continues scanning in the target state.
-So, that target state can be recorded as the starting state for the line
-following the newline. The scanner can then rescan the line in isolation by
-marking any leading spaces as separators and then continuing to scan in that
+target state can be recorded as the starting state for the line following the
+newline. The scanner can then rescan the line in isolation by starting in that
 state. A scanning state can, in general, depend on characters beyond the
 current scanning position, because of lookahead patterns. However, language
 rules cannot look ahead past a newline, so the start state for a line depends
@@ -458,12 +427,9 @@ only on the previous lines.</p>
 
 <p>If the target state after rescanning a changed line is not the same as the
 recorded start state of the next line, the next line may have to be rescanned
-as well. However, if the states are the same, rescanning can stop. Thus the
-only likely situation to cause a lot of rescanning is when the opener of a
-multi-line comment is inserted which makes the rest of the text become a
-comment, or the reverse. However, the fact that lines can be rescanned in
-isolation makes it easy to interleave rescanning with user actions, so there
-are no long pauses.</p>
+as well, and there are occasional cases where a lot of rescanning might be
+required. The fact that lines can be rescanned in isolation makes it easy to
+interleave rescanning with user actions, to avoid long pauses.</p>
 
 <h2>Tests</h2>
 
@@ -473,18 +439,13 @@ represents a line of source text. An immediately following line starting with
 <code>&lt;</code> represents the output from the scanner. For example:</p>
 
 <pre>&gt; (count + 1)
-&lt; (I    GdGV).
+&lt; LI    _O_VR.
 </pre>
 
-<p>The output has a one-character abbreviation for the type of each token,
-placed under its first character. The abbreviation for each type is its first
-letter, except <code>{&lt;[(</code> are used for the <code>BEGIN</code> types,
-<code>}>])</code> for the <code>END</code> types, <code>abcd</code> for the
-<code>OP</code> types, and <code>wxyz</code> for the <code>SIGN</code> types. A
-newline is marked as a <code>.</code> dot and a space is marked as a
-<code>_</code> underline. The scanner state after scanning the input line is
-used as the start state for the next test, which allows for extended
-examples.</p>
+<p>The output has the one-letter abbreviation for the type of each token, placed
+under its first character. A space is marked as an underline and a newline is
+marked as a dot. The scanner state after scanning the input line is used as the
+start state for the next test, which allows for extended examples.</p>
 
 <hr/>
 
