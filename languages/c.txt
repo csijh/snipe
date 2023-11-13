@@ -1,10 +1,7 @@
-// C language definition, based on the C11 standard
-// See http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1548.pdf
-// The source text is assumed to be normalised, with no control characters
-// other than \n and no digraphs or trigraphs.
+// C language definition, based on the C11 standard.
 
 // Keywords which are types or related to types. Include bool from <stdbool.h>.
-// The type state checks for additional characters, making the token an id.
+// The type state checks for added characters which make the token an id.
 
 start   _Atomic _Bool _Complex _Generic _Imaginary      type
 start   bool char double float int long                 type
@@ -12,19 +9,19 @@ start   short signed unsigned void                      type
 type    a..z A..Z 0..9 _ \\U \\u                        id
 type    \                                               start TYPE
 
-// Other keywords. Include false, true from <stdbool.h>. The enum and struct
-// keywords cause bracket checking. The key state checks for added characters.
+// Other keywords. Include false, true from <stdbool.h>. The key states check
+// for added characters. The enum and struct keywords cause bracket checking.
 
 start   _Alignas _Noreturn _Static_assert _Thread_Local         key
 start   alignof auto break case const continue default do else  key
 start   extern false for goto if inline register restrict       key
 start   return sizeof static switch true typedef union          key
 start   volatile while                                          key
-start   enum struct                                             key2
+start   enum struct                                             key1
 key     a..z A..Z 0..9 _ \\U \\u                                id
 key     \                                                       start KEY
-key2    a..z A..Z 0..9 _ \\U \\u                                id
-key2    \                                                       check0 KEY
+key1    a..z A..Z 0..9 _ \\U \\u                                id
+key1    \                                                       decl KEY
 
 // Operators and signs. A + or - is marked infix, and a ++ or -- is marked
 // nonfix, for semicolon insertion, on the assumption that when it has one
@@ -35,7 +32,7 @@ start   != %= % && &= & *= * += + -= - /= / ?       start OP
 start   <<= << <= < == >= >>= >> > ^= ^ |= || |     start OP
 start   ...                                         start MARK
 start   ## , ; : ->                                 start SIGN
-start   =                                           check3 SIGN
+start   =                                           init SIGN
 
 // Identifiers
 
@@ -55,46 +52,45 @@ start  ]   start RIGHT
 start  (   start LEFT
 start  )   start RIGHT
 
-// Check for structure brackets  enum {  or  struct {
-check0    {                          start LEFT
-check0    a..z A..Z _ \\U \\u        check1
-check0    \s \n                      check0
-check0    \                          start
+// Check for declaration brackets  enum {  or  struct {
+decl   {                           start LEFT
+decl   a..z A..Z _ \\U \\u         decl1
+decl   \s \n                       decl
+decl   \                           start
 
-// Check for  enum e  or  struct s
-check1    a..z A..Z 0..9 _ \\U \\u   check1
-check1    \                          check2 ID
+// Check for  enum ID  or  struct ID
+decl1   a..z A..Z 0..9 _ \\U \\u   decl1
+decl1   \                          decl2 ID
 
-// Check for structure brackets  enum e {  or  struct s {
-check2    {                          start LEFT
-check2    \s \n                      check2
-check2    \                          start
+// Check for  enum ID {  or  struct ID {
+decl2   {                          start LEFT
+decl2   \s \n                      decl2
+decl2   \                          start
 
-// Check for structure bracket  = {
-check3    {                          start LEFT
-check3    (                          check4 LEFT
-check3    \s \n                      check3
-check3    \                          start
+// Check for initialiser brackets  = {
+init    {                          start LEFT
+init    (                          init1 LEFT
+init    \s \n                      init
+init    \                          start
 
 // Check for   = (   or   = (struct
-check4    struct                     check4 KEY
-check4    a..z A..Z _ \\U \\u        check5
-check4    \s \n                      check4
-check4    \                          start
+init1   struct                     init1 KEY
+init1   a..z A..Z _ \\U \\u        init2
+init1   \s \n                      init1
+init1   \                          start
 
+// Check for   = (ID   or   = (struct ID
+init2   a..z A..Z 0..9 _ \\U \\u   init2
+init2   \                          init3 ID
 
-// Check for   = (t   or   = (struct s
-check5    a..z A..Z 0..9 _ \\U \\u   check5
-check5    \                          check6 ID
+// Check for   = (ID)   or   = (struct ID)
+init3   )                          init4 RIGHT
+init3   \s \n                      init3
+init3   \                          start
 
-// Check for   = (t)   or   = (struct s)
-check6    )                          check7 RIGHT
-check6    \s \n                      check6
-check6    \                          start
-
-// Check for   = (t) {   or   = (struct s) {
-check7    {                          start LEFT
-check7    \                          start
+// Check for   = (ID) {   or   = (struct ID) {
+init4   {                          start LEFT
+init4   \                          start
 
 // A dot starts a number, or is an operator.
 
@@ -102,47 +98,79 @@ start   .      dot
 dot     \0..9  decimal
 dot     \      start OP
 
-// Character and string literals.
+// Character literals. Allow joiners
 
-start   '         char1
-char0   !..~ \\'  char1
-char0   \s        char0
-char0   '         start QUOTE
-char0   \n        start
-char1   !..~ \\'  char1
-char1   \s        char0 QUOTE
-char1   '         start QUOTE
-char1   \n        start WRONG
+start   '      char1
+char    !..~   char1
+char    \\     char2
+char    \s     char
+char    '      start QUOTE
+char    \n     start
 
-start     "          string1
-string0   !..~ \\"   string1
-string0   \s         string0
-string0   "          start QUOTE
-string0   \n         start
-string1   !..~ \\"   string1
-string1   \s         string0 QUOTE
-string1   "          start QUOTE
-string1   \n         start WRONG
+// After '
+char1   !..~   char1
+char1   \\     char2
+char1   \s     char QUOTE
+char1   '      start QUOTE
+char1   \n     start WRONG
 
-// One-line comment.
+// After '...\
+char2   \n \s  char3 QUOTE
+char2   ' \    char1
 
-start    //     note0 NOTE
-note0    !..~   note1
-note0    \s     note0
-note0    \n     start
+// After '...\ with a newline next
+char3   \n \   char
+
+// String literals. Allow joiners
+
+start     "      string1
+string    !..~   string1
+string    \\     string2
+string    \s     string
+string    "      start QUOTE
+string    \n     start
+
+// After "
+string1   !..~   string1
+string1   \\     string2
+string1   \s     string QUOTE
+string1   "      start QUOTE
+string1   \n     start WRONG
+
+// After "...\
+string2   \n \s  string3 QUOTE
+string2   " \    string1
+
+// After "...\ with a newline next
+string3   \n \   string
+
+// One-line comment. Allow joiner.
+
+start    //     note NOTE
+note     !..~   note1
+note     \\     note2
+note     \s     note
+note     \n     start
 note1    !..~   note1
-note1    \s     note0 NOTE
-note1    \n     start NOTE
+note1    \\     note2
+note1    \s \n  note NOTE
+note2    \n \s  note3 NOTE
+note2    \      note1
+note3    \n \   note
 
-// Multi-line comment.
+// Multi-line comment. Allow joiner.
 
-start      /*      comment0 COMMENT
-comment0   !..~    comment1
-comment0   \s \n   comment0
-comment0   */      start COMMENT
-comment1   !..~    comment1
-comment1   \s \n   comment0 COMMENT
-comment1   \*/     comment0 COMMENT
+start      /*         comment COMMENT
+comment    !..~       comment1
+comment    \\         comment2
+comment    \s \n      comment
+comment    */         start COMMENT
+comment1   !..~       comment1
+comment1   \\         comment2
+comment1   \s \n \*/  comment COMMENT
+comment2   \n \s      comment3 COMMENT
+comment2   \          comment1
+comment3   \n \       comment
 
 // Numbers. There is no attempt to detect malformed numbers.
 start    0..9           decimal
@@ -225,13 +253,31 @@ start     \s \n   start
 > 'x' '\'' 'x
 < Q  _Q   _W .
 
+// Character literal, with joiner (unlikely)
+> '\
+< Q .
+> x'
+< Q .
+
 // String literals, including unclosed
 > "hello world" "a\"b" "unclosed
 < Q     _Q     _Q     _W        .
 
+// String literal with joiner
+> "hello \
+< Q     _Q.
+> world"
+< Q     .
+
 // One line comment
 > n = 0; // note
 < I_S_VS_N _N   .
+
+// One line comment with joiner.
+> n = 0; // note \
+< I_S_VS_N _N   _N.
+> n = 1;
+< N_N_N .
 
 // Multi-line comment
 > n = 0; /* line one

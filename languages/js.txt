@@ -1,26 +1,12 @@
-// JavaScript language definition, based on the JS11=ES2020 standard
-// See https://262.ecma-international.org/11.0/ sections 11 and A.1
+// JavaScript language definition, based on the ES2023 standard
 
-// Recognising / as the start of a regex such as /abc/ instead of a division
-// operator is a problem. In the standard, grammar-dependent contexts are used.
-// Here, regexes are recognised after open brackets, signs and operators.
-// The approach only fails in rare cases such as regex strings containing
-// spaces, or  if(a)/re/  or  ++/re/.
+// At the start of a file only, recognise a hashbang comment. To distinguish
+// between / as divison and / as start of regex, check for regex at the start
+// of the file, after infix tokens, some brackets, and a few of the keywords.
+// Otherwise, the start state accepts / as a division operator.
 
-// TODO: for templates, assume embedded expressions are simple, in particular
-// no keywords, no curly brackets, no template strings, no comments, no quotes,
-// no regexps.
-start ` head
-head !..~ \\` \\$ head
-head \s \n head QUOTE
-head ${ sub
-head ` start QUOTE
-sub keys ops signs ids () []
-
-// At the start of a file only, recognise a hashbang comment.
-
-shebang  #!  note0 COMMENT
-shebang  \   start
+hashbang  #!  note NOTE
+hashbang  \   regex
 
 // Keywords, reserved words and restricted words.
 
@@ -34,69 +20,191 @@ key    a..z A..Z 0..9 $ _ \\u                                          id
 key    \\u{                                                            id1
 key    \                                                               start KEY
 
-// Operators and signs
+// Operators and signs. After OP/SIGN, check for regex.
 
-start  ++ --                                                 start OP0
-start  ~ !                                                   regex OP1
-start  < > <= >= == != === !== + - * % ** << >> >>> & | ^    regex OP3
-start  && || = += -= *= %= **= <<= >>= >>>= &= |= ^= => ??   regex OP3
-start  / /=                                                  regex OP3
-start  ...                                                   start SIGN0
-start  . ; , :                                               regex SIGN3
-start  ?                                                     chain
+start  ++ -- ~ !                                             start UNARY
+start  < > <= >= == != === !== + - * % ** << >> >>> & | ^    regex OP
+start  && || = += -= *= %= **= <<= >>= >>>= &= |= ^= => ??   regex OP
+start  / ?. ?                                                regex OP
+start  ...                                                   start MARK
+start  ; , :                                                 regex SIGN
 
-// Check for ? operator or ?. chaining operator or ?.42  ==  ? .42
+// Brackets: } is postfix, so never has a semicolon added after it. When {} are
+// used for structures, JavaScript's own semicolon insertion rules will add one.
+// After an open bracket, check for regex.
 
-chain  \.0 \.1 \.2 \.3 \.4 \.5 \.6 \.7 \.8 \.9   start OP3
-chain  . \                                       regex OP3
+start { regex BEGIN
+start } start END
+start [ regex LEFT
+start ] start RIGHT
+start ( regex LEFT
+start ) start RIGHT
 
-// Identifiers
+// Check for regex literal with flags, otherwise jump to start.
+regex   /        regex1
+regex   \        start
 
-start  A..Z a..z $ _ \u        id
+regex1  /        regex3
+regex1  [        regex2
+regex1  !..~ \s  regex1
+regex1  \n       start WRONG
+
+regex2  ]        regex1
+regex2  !..~ \s  regex2
+regex2  \n       start WRONG
+
+regex3  a..z A..Z 0..9 $ _ \\u  regex3
+regex3  \                       start QUOTE
+
+// Identifier
+
+start  A..Z a..z $ _ \\u       id
 start  \u{                     id1
 id     a..z A..Z 0..9 $ _ \\u  id
 id     \                       start ID
 id1    0..9 A..F a..f          id1
 id1    }                       id
-id1    \                       start UNKNOWN
+id1    \                       start WRONG
 
-// Brackets
+// A dot starts a number, or is an operator.
 
-start { regex BEGIN0
-start } start END0
-start [ regex BEGIN2
-start ] start END2
-start ( regex BEGIN3
-start ) start END3
+start   .      dot
+dot     \0..9  decimal
+dot     \      start OP
 
-// One-line comment
+// One-line comment.
 
-start    //     note0 COMMENT
-note0    !..~   note1
-note0    \s     note0
-note0    \n     start
+start    //     note NOTE
+note     !..~   note1
+note     \s     note
+note     \n     start
 note1    !..~   note1
-note1    \s     note0 COMMENT
-note1    \n     start COMMENT
+note1    \\     note2
+note1    \s \n  note NOTE
 
-// Multi-line comment
+// Multi-line comment.
 
-start      /*     comment0 COMMENT
-comment0   !..~   comment1
-comment0   \s \n  comment0
-comment0   */     start COMMENT
-comment1   !..~   comment1
-comment1   \s \n  comment0 COMMENT
-comment1   \*/     comment0 COMMENT
+start      /*         comment COMMENT
+comment    !..~       comment1
+comment    \s \n      comment
+comment    */         start COMMENT
+comment1   !..~       comment1
+comment1   \s \n \*/  comment COMMENT
+
+// Character literal.
+
+start   '      char1
+char    !..~   char1
+char    \'     char1
+char    \s     char
+char    '      start QUOTE
+char    \n     start
+
+// After '
+char1   !..~   char1
+char1   \\'    char1
+char1   \s     char QUOTE
+char1   '      start QUOTE
+char1   \n     start WRONG
+
+// String literal.
+
+start     "      string1
+string    !..~   string1
+string    \\"    string1
+string    \s     string
+string    "      start QUOTE
+string    \n     start
+
+// After "
+string1   !..~   string1
+string1   \\"    string1
+string1   \s     string QUOTE
+string1   "      start QUOTE
+string1   \n     start WRONG
+
+// Number.
+start     0b 0B    binary
+start     0o 0O    octal
+start     0x 0X    hex
+start     0..9     decimal
+
+binary    0..1 _   binary
+binary    n \      start VALUE      
+
+octal     0..7 _   octal
+octal     n \      start VALUE      
+
+hex       0..9 _   hex
+hex       a..f     hex
+hex       A..F     hex
+hex       n \      start VALUE      
+
+decimal   0..9 _        decimal
+decimal   .             float
+decimal   e+ e- E+ E-   exponent
+decimal   n \           start VALUE
+float     0..9          float
+float     e+ e- E+ E-   exponent
+float     \             start VALUE
+exponent  0..9          exponent
+exponent  \             start VALUE
+
+// Template string literal.
+
+start     `         template
+template  ${        sub DOC
+template  !..~ \\`  template
+template  `         start DOC
+template  \s \n     template DOC
+
+// Very simple substitution expression. No keywords, no { }, no `...`, no //...,
+// no /*...*/, no regex, no DOC
+
+sub  this yield await null true false   subkey
+sub  a..z A..Z 0..9 $ _ \\u             subid
+sub  \\u{                               subid1
+sub  ++ -- ~ !                          sub UNARY
+sub  < > <= >= == != === !== + -        sub OP
+sub  * % ** << >> >>> & | ^             sub OP
+sub  && || = += -= *= %= **= <<= >>=    sub OP
+sub  >>>= &= |= ^= => ?? /              sub OP
+sub  ?. ?                               sub OP
+sub  ...                                sub MARK
+sub  ; , :                              sub SIGN
+sub  [ (                                sub LEFT
+sub  ] )                                sub RIGHT
+sub  }                                  template DOC
+# TODO sub literals, array literals
+
+subkey  a..z A..Z 0..9 $ _ \\u  subid
+subkey  \\u{                    subid1
+subkey  \                       sub KEY
+
+subid   a..z A..Z 0..9 $ _ \\u  subid
+subid   \                       sub ID
+subid1  0..9 A..F a..f          subid1
+subid1  }                       subid
+subid1  \                       sub WRONG
+
+// Illegal characters and white space.
+start     @       start WRONG
+start     \s \n   start
+
+//------------------------------------------------------------------------------
+
+// TODO: for templates, assume embedded expressions are simple, in particular
+// no keywords, no curly brackets, no template strings, no comments, no ml quotes.
+start ` head
+head !..~ \\` \\$ head
+head \s \n head QUOTE
+head ${ sub
+head ` start QUOTE
+
+
+
 
 // ============================================
-
-// Possible regular expression literal
-regex / regex1
-regex start
-regex1 / start =
-regex1 !..~ regex1
-regex1 start ?
 
 // Escape sequence
 escape ' " \ b f n r t v start ?

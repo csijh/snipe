@@ -143,7 +143,20 @@ character, if a digit appears next in the source text, the scanner goes to the
 <code>float</code> state without moving past the digit.</p>
 
 <p>A lookahead pattern <code>\s</code> matches a space and <code>\n</code>
-matches a newline. If the current rule has no tag, the space or newline is
+matches a newline. When used in a rule with a tag, the effect is the same as for any other lookahead. For example:</p>
+
+<pre>id \s \n start ID
+</pre>
+
+<p>Here, while scanning an identifier, if a space is encountered next in the
+input, the identifier is given type <code>ID</code> and the scanner goes to the
+<code>start</code> state to deal with the space. The rule may have no tag. For
+example:</p>
+
+<pre>start \s \n start
+</pre>
+
+<p>In this case, there is a side effect, which is that the space or newline is
 tagged as a separator and skipped before entering the target state. Neither a
 space nor a newline can be included in tokens. Other single-letter lookahead
 patterns such as <code>\x</code> are treated as errors. A literal single letter
@@ -254,36 +267,30 @@ mini-tokens, and one for after the start. For example, one-line comments, say
 starting with <code>//</code> and continuing to the end of the line, can be
 handled with rules of the form:</p>
 
-<pre>start    //     note0 COMMENT
+<pre>start    //     note NOTE
 
-note0    !..~   note1
-note0    \s     note0
-note0    \n     start
+note     !..~   note1
+note     \s     note
+note     \n     start
 
 note1    !..~   note1
-note1    \s     note0 COMMENT
-note1    \n     start COMMENT
+note1    \s \n  note NOTE
 </pre>
 
 <p>A comment line then consists of a sequence of tokens of type
-<code>COMMENT</code>, separated by spaces. There is a potential problem with
-trailing spaces at the end of a line, which could prevent <code>\n</code> from
-being matched to terminate the comment. Either trailing spaces must not occur,
-or the scanner must arrange for them to match <code>\n</code> rather than
-<code>\s</code>.</p>
+<code>NOTE</code>, separated by spaces.</p>
 
 <p>Multi-line comments, say starting with <code>/*</code> and ending with
 <code>*/</code> and not nesting, can be handled by:</p>
 
-<pre>start      /*     comment0 COMMENT
+<pre>start      /*         comment COMMENT
 
-comment0   !..~   comment1
-comment0   \s \n  comment0
-comment0   */     start COMMENT
+comment    !..~       comment1
+comment    \s \n      comment
+comment    */         start COMMENT
 
-comment1   !..~   comment1
-comment1   \s \n  comment0 COMMENT
-comment1   */     comment0 COMMENT
+comment1   !..~       comment1
+comment1   \s \n \*/  comment COMMENT
 </pre>
 
 <p>Suppose a language description contained the following rules:</p>
@@ -314,16 +321,16 @@ a token, because it is the target of its own first rule. This can be corrected
 by writing:</p>
 
 <pre>dot  0..9  number
-dot  \     prop0 SIGN
+dot  \     prop SIGN
 
-prop0  a..z A..Z  prop1
-prop0  \          start
+prop  a..z A..Z  prop1
+prop  \          start
 
 prop1  a..z A..Z 0..9  prop1
 prop1  \               start PROPERTY
 </pre>
 
-<p>Now, <code>prop0</code> can only occur at the start of tokens and matches the
+<p>Now, <code>prop</code> can only occur at the start of tokens and matches the
 first letter, and <code>prop1</code> can only occur after the start and
 recognizes the rest of the token.</p>
 
@@ -364,10 +371,10 @@ recognise them.</p>
 
 <p><b>Indenting:</b> Snipe has a very simple and uniform rule for fully
 automatic indenting. The indent of a line is determined by the number of
-unmatched open brackets from preceding lines, minus the number of unmatched
-close brackets on the line itself. Multi-line comments (<code>COMMENT</code>) or
-multi-line string literals (<code>DOCUMENT</code>) are not automatically
-indented, but one-line comments (<code>NOTE</code>) are.</p>
+unmatched open brackets in the file, up to the end of the line. Lines belonging
+to multi-line constructs, i.e. lines starting with a <code>COMMENT</code> or
+<code>DOCUMENT</code> token, are not automatically indented, whereas lines
+starting with a <code>NOTE</code> or <code>QUOTE</code> are.</p>
 
 <p><b>Semicolon insertion:</b> Snipe inserts semicolons at the ends of lines
 where appropriate, using a simple and uniform rule. A line should have a final
@@ -390,28 +397,16 @@ assumption that a prefix version never appears at the start of a line.</p>
 prefix and postfix respectively. A <code>BEGIN</code> bracket is treated as
 infix rather than prefix, on the assumption that it is the start of a block
 which is attached to the end of a statement so shouldn't be preceded by a
-semicolon. An <code>END</code> bracket is treated as postfix rather than
-prefix, on the assumption that a semicolon is appropriate before it but not
+semicolon. An <code>END</code> bracket is treated as prefix rather than
+postfix, on the assumption that a semicolon is appropriate before it but not
 after it.</p>
 
 <p>Languages in the C family often use curly brackets <code>{}</code> both as
 block brackets and as structure brackets. In the latter case, a semicolon is
 required after the close bracket. To cope with this, the language definition
-should, at least approximately, tag the open bracket as <code>LEFT</code>
-rather than <code>BEGIN</code>, according to context. For example, in C itself,
-the common cases are:</p>
-
-<pre>enum {...
-struct {...
-enum ID {...
-struct ID {...
-= {...
-= ( ID ) {...
-= ( struct ID ) {...
-</pre>
-
-<p>In all these cases, the <code>{</code> should be tagged as <code>LEFT</code>.
-The bracket matcher can then adjust the tag of the end bracket to
+should, at least approximately, tag the open bracket of a structure as
+<code>LEFT</code> rather than <code>BEGIN</code>, according to context. The
+bracket matcher can then adjust the tag of the end bracket to
 <code>RIGHT</code> to match, so that a semicolon is expected after it.</p>
 
 <p><b>Incremental rescanning:</b> A line of source text can be rescanned in
@@ -447,40 +442,99 @@ under its first character. A space is marked as an underline and a newline is
 marked as a dot. The scanner state after scanning the input line is used as the
 start state for the next test, which allows for extended examples.</p>
 
+<h2>Specific languages</h2>
+
+<p>Regardless of what a language standard may say, Snipe applies some
+restrictions to source text across all languages. In particular, no encoding is
+supported other than UTF-8, no newlines are allowed other than <code>\n</code>,
+and no other control characters are allowed. In addition to those restrictions,
+each language has its own peculiarities:</p>
+
+<h4>The C language</h4>
+
+<p>In the C language, digraphs, trigraphs and line joiners are supposed to be
+handled by preprocessing. Digraphs and trigraphs are long-obsolete, and are not
+supported. An occasional line joiner( i.e. backslash before newline) is,
+however, still found, particularly in <code>#define</code> directives, so it is
+supported, except in pathological cases such as in the middle of a
+keyword.</p>
+
+<p>Tokens which can be infix or unary are treated as infix, for semicolon
+insertion purposes. The most likely situation where this could cause confusion
+is:</p>
+
+<pre>n = 0
+*p = 0
+</pre>
+
+<p>No automatic semicolon is inserted at the end of the first line, so an
+explicit manually inserted semicolon is needed.</p>
+
+<p>To indicate that a structure should be followed by a semicolon, the C
+language definition tags the open bracket of a structure as <code>LEFT</code>
+rather than <code>BEGIN</code> in these common cases:</p>
+
+<pre>enum {...
+struct {...
+enum ID {...
+struct ID {...
+= {...
+= ( ID ) {...
+= ( struct ID ) {...
+</pre>
+
+<p>It is reasonable for a programmer to stick to these cases and avoid more
+obscure ones.</p>
+
+<h4>The JavaScript language</h4>
+
+<p>There are two places where fully correct scanning of the language depends on
+parsing context.</p>
+
+<p>The first is the ambiguity between <code>/</code> used as a division operator
+and <code>/</code> as the first character of a regular expression pattern such
+as <code>/[a-z]+/</code>. The language definition takes a typically simple and
+local approach. When preceded by a prefix or infix token such as an open
+bracket or operator, a regular expression pattern is expected, otherwise a
+division operator is expected. So, in rare cases such as after a close bracket
+or certain keywords, a regular expression pattern needs to be bracketed to be
+recognised correctly. For example:</p>
+
+<pre>if (n>0) (/pattern/).exec(...)
+</pre>
+
+<p>The second place is with template strings, which can contain arbitrary
+substitution expressions:</p>
+
+<pre>s = `x = ${...} and y = ${...} and z = 0`
+</pre>
+
+<p>The parser needs to match the curly brackets and backquotes within a <code>$
+{...}</code> substitution expression, so that it can recognise the
+<code>}</code> as returning to the outer template string. It is not possible to
+do that with a state-based scanner. So the JavaScript language definition only
+supports simple substitution expressions, in particular not ones involving
+curly brackets, or template strings, or keywords, or comments, or multi-line
+strings.</p>
+
+<p>JavaScript has its own semicolon insertion rules. That means a Snipe user has
+the choice of using JavaScript's rules, or the Snipe rules, which are much
+simpler but not officially completely accurate. In fact, the approach in the
+JavaScript language definition uses the language's automatic insertion to
+simplify its own rules. Curly brackets are always tagged <code>BEGIN</code> and
+<code>END</code>. That means when curly brackets are used for structures, no
+semicolon gets added. For example:</p>
+
+<pre>obj = { x:1 }
+n = obj.x
+</pre>
+
+<p>The Snipe scanner does not insert a semicolon in this case, on the assumption
+that JavaScript itself will.</p>
+
 <hr/>
 
-<h2>Compiling...</h2>
-
-
-
-
-
-
-
-<p>A language description in <code>tokens.txt</code> can be compiled into a
-table using <code>compile.c</code> in <code>snipe/languages</code> and then
-executed for testing using <code>interpret.c</code>. The interpreter carries out
-tests in a file <code>tests.txt</code>. Each test consists of optional comment
-lines starting with <code>#</code>, followed by a line of text, followed by a
-line of tags generated by the scanner. For example:</p>
-
-<p>Thus the type of a token may be affected by the next token, but no more than
-that. To scan incrementally in the editor, when a token is altered, the editor
-needs to go back at least as far as the beginning of the previous token before
-the changed one, and find what state the scanner was in at that point, to start
-re-scanning.</p>
-
 <h3>Scanner operation</h3>
-
-<p>The current state of the scanner can be recorded now and then, e.g. at the
-start of each line of the text. Then, when some text changes while editing,
-re-scanning of the changed text need begin no earlier than at the start of the
-affected line. Re-scanning would then continue until synchronisation, i.e. until
-the current state of the scanner at the start of a line matches the previous
-state recorded at that point. It is desirable that this synchronisation should
-happen after only a line or two, to avoid visual instability for the user as
-well as inefficiency in the editor. Scanning is then effectively
-incremental.</p>
 
 <p>The first state to be defined in a language description is the default one
 for the scanner to start in. It is normal for most tokens to be scanned starting

@@ -489,7 +489,6 @@ void look(state *base, state *states) {
             }
         }
         if (! ok) {
-            printf("state %s starter %d\n", target->name, target->starter);
             error(
                 "according to pattern %s in state %s,\n"
                 "state %s can both start and continue tokens",
