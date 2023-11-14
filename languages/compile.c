@@ -441,7 +441,7 @@ void noDuplicates(state *base) {
         for (int j = i+1; j < size(list); j++) {
             char *t = list[j].match;
             if (strcmp(s,t) != 0) continue;
-            error("state %s has pattern %s twice", base->name, p->original);
+            error("state %s has pattern for %s twice", base->name, p->match);
         }
     }
 }
@@ -479,12 +479,14 @@ void look(state *base, state *states) {
         pattern *p = &base->patterns[i];
         state *target = &states[p->target];
         bool ok = true;
-        if (p->tag != NONE && ! target->starter) ok = false;
-        if (p->tag == NONE) {
+        if (p->tag != NONE) {
+            if (! target->starter) ok = false;
+        }
+        else {
             if (! p->lookahead) {
                 if (target->starter) ok = false;
             }
-            else if (p->match[0] != ' ' && p->match[0] != '\n') {
+            else {
                 if (target->starter != base->starter) ok = false;
             }
         }
@@ -638,20 +640,17 @@ void compile(state *states, byte *table) {
 // the token contain NONE. The scanner first marks any leading spaces, then uses
 // the transition table to handle the remaining characters.
 
-// Switch on to trace states and pattern matches.
-enum { DEBUG = 0 };
-
 // Use the given table and start state to scan the given input line, producing
 // the result in the given byte array, and returning the final state. Use
-// the states for names in messages.
-int scan(byte *table, int st, char *in, byte *out, state *states) {
+// the states for names when tracing.
+int scan(byte *table, int st, char *in, byte *out, state *states, bool trace) {
     int n = strlen(in);
     in[n] = EOL;
     for (int i = 0; i<=n; i++) out[i] = NONE;
     int at = 0, start = 0;
     while (at <= n) {
         char ch = in[at];
-        if (DEBUG) printf("%s ", states[st].name);
+        if (trace) printf("%s ", states[st].name);
         int col = ch - ' ';
         byte *action = &table[2 * (96 * st + col)];
         bool immediate = (action[0] & 0x80) == 0;
@@ -673,7 +672,7 @@ int scan(byte *table, int st, char *in, byte *out, state *states) {
         }
         bool lookahead = (action[0] & 0x40) != 0;
         int tag = action[0] & 0x3F;
-        if (DEBUG) {
+        if (trace) {
             if (lookahead) printf("\\ ");
             if (in[at] == ' ') printf("SP");
             else if (in[at] == EOL) printf("NL");
@@ -697,10 +696,12 @@ int scan(byte *table, int st, char *in, byte *out, state *states) {
 // is a test and one starting with < is the expected output.
 
 // Carry out a test, given a line of input and an expected line of output.
-int runTest(byte *table, int st, char *in, char *expected, state *states) {
+int runTest(
+    byte *table, int st, char *in, char *expected, state *states, bool trace
+) {
     int n = strlen(in) + 1;
     byte bytes[n];
-    st = scan(table, st, in+2, bytes+2, states);
+    st = scan(table, st, in+2, bytes+2, states, trace);
     char out[100] = "< ";
     for (int i = 2; i < n; i++) out[i] = tagNames[bytes[i]][0];
     out[n] = '\0';
@@ -713,14 +714,14 @@ int runTest(byte *table, int st, char *in, char *expected, state *states) {
     return st;
 }
 
-void runTests(byte *table, char **lines, state *states) {
+void runTests(byte *table, char **lines, state *states, bool trace) {
     int st = 0;
     int count = 0;
     for (int i = 0; i < size(lines); i++) {
         if (lines[i][0] != '>') continue;
         char *in = lines[i];
         char *expected = lines[i+1];
-        st = runTest(table, st, in, expected, states);
+        st = runTest(table, st, in, expected, states, trace);
         count++;
     }
     printf("Passed %d tests.\n", count);
@@ -736,11 +737,14 @@ void write(char *path, byte *table) {
 }
 
 int main(int n, char *args[n]) {
-    if (n != 2 || strcmp(args[1] + strlen(args[1]) - 4, ".txt") != 0) {
-        printf("Usage: compile c.txt\n");
+    bool trace = (n < 2) ? false : strcmp(args[1], "-t") == 0;
+    char *file = args[n-1];
+    bool txt = strcmp(file + strlen(file) - 4, ".txt") == 0;
+    if (n > 3 || (n == 3 && ! trace) || ! txt) {
+        printf("Usage: compile [-t] c.txt\n");
         exit(0);
     }
-    char *text = readFile(args[1]);
+    char *text = readFile(file);
     normalize(text);
     char **lines = splitLines(text);
     rule *rules = getRules(lines);
@@ -753,10 +757,10 @@ int main(int n, char *args[n]) {
     byte *table = allocate(2*96*size(states) + 10000);
     resize(table, 2*96*size(states));
     compile(states, table);
-    runTests(table, lines, states);
+    runTests(table, lines, states, trace);
 
     char outfile[100];
-    strcpy(outfile, args[1]);
+    strcpy(outfile, file);
     strcpy(outfile + strlen(outfile) - 4, ".bin");
     write(outfile, table);
 

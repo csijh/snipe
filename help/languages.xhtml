@@ -19,7 +19,15 @@
 
 <h1>Languages</h1>
 
-<!-- C, C++, Java, JavaScript, Python, Haskell, HTML -->
+<!-- TODO C, C++, Java, JavaScript, Python, Haskell, HTML -->
+<!-- TODO
+A state name may have a single upper case letter suffix e.g. startA or startB
+If a base state name has two or more upper case letters at the end, e.g.
+stateAB, this is defining rules for two states at once. The target can be
+a specific name with zero or one suffix, e.g. next or nextA or nextC or
+it can have the same suffix as the base, e.g. nextAB meaning ...
+BUT how distinguish having a tag or not? [ID,]
+ -->
 
 <p><mark>Snipe</mark> has a scanner, which is implemented as a string-matching
 state machine, to divide the text of a file being edited into tokens, and to
@@ -230,13 +238,18 @@ duplicate patterns, and handles all the single characters
 no tag causes a jump between states without consuming input, there is a check
 that no infinite loop of jumps can occur.</p>
 
-<p>To prevent empty tokens, there is a check that each state always occurs at
-the start of tokens, or always occurs after the start. If a state which always
-occurs at the start has a rule containing a lookahead, including
-<code>\s</code> or <code>\n</code>, the rule must not have a tag, because that
-would create an empty token. If a state which always occurs after the start of
-tokens has a rule containing a <code>\s</code> or <code>\n</code>, that rule
-must have a tag, to terminate the token before the space or newline.</p>
+<p>To prevent empty tokens, there is a check that each state is a starter or a
+continuer, i.e. always occurs at the start of tokens, or always occurs after
+the start. It is easy to tell the difference, because a starter state must not
+have a tag when <code>\s</code> or <code>\n</code> is matched, whereas a
+continuer state must have a tag when they are matched.</p>
+
+<p>If a rule has a tag, the target state must be a starter. If a rule has a
+non-lookahead pattern and no tag, the target state must be a continuer. If a
+rule has a lookahead pattern and no tag, the target state must be a starter or
+a continuer, according to whether the base tag is a starter or continuer.
+Finally, if a starter state has a rule containing a lookahead, the rule must
+not have a tag, because that would create an empty token.</p>
 
 <h2>Examples</h2>
 
@@ -493,44 +506,46 @@ parsing context.</p>
 
 <p>The first is the ambiguity between <code>/</code> used as a division operator
 and <code>/</code> as the first character of a regular expression pattern such
-as <code>/[a-z]+/</code>. The language definition takes a typically simple and
-local approach. When preceded by a prefix or infix token such as an open
-bracket or operator, a regular expression pattern is expected, otherwise a
-division operator is expected. So, in rare cases such as after a close bracket
-or certain keywords, a regular expression pattern needs to be bracketed to be
-recognised correctly. For example:</p>
+as <code>/[a-z]+/</code>. The language definition takes simple local approach.
+When preceded by a prefix or infix token such as an open bracket or operator, a
+regular expression pattern is expected, otherwise a division operator is
+expected. So, in rare cases such as after a close bracket or certain keywords,
+a regular expression pattern needs to be bracketed to be recognised correctly.
+For example:</p>
 
 <pre>if (n>0) (/pattern/).exec(...)
 </pre>
 
-<p>The second place is with template strings, which can contain arbitrary
-substitution expressions:</p>
+<p>The second place where parsing context is used is with template strings,
+which can contain arbitrary substitution expressions:</p>
 
 <pre>s = `x = ${...} and y = ${...} and z = 0`
 </pre>
 
 <p>The parser needs to match the curly brackets and backquotes within a <code>$
 {...}</code> substitution expression, so that it can recognise the
-<code>}</code> as returning to the outer template string. It is not possible to
-do that with a state-based scanner. So the JavaScript language definition only
+<code>}</code> which returns to the outer template string. It is not possible
+to do that with a state-based scanner. So the Snipe language definition only
 supports simple substitution expressions, in particular not ones involving
-curly brackets, or template strings, or keywords, or comments, or multi-line
-strings.</p>
+curly brackets, or template strings, or most keywords, or comments.</p>
 
 <p>JavaScript has its own semicolon insertion rules. That means a Snipe user has
 the choice of using JavaScript's rules, or the Snipe rules, which are much
-simpler but not officially completely accurate. In fact, the approach in the
-JavaScript language definition uses the language's automatic insertion to
-simplify its own rules. Curly brackets are always tagged <code>BEGIN</code> and
-<code>END</code>. That means when curly brackets are used for structures, no
-semicolon gets added. For example:</p>
+simpler. In fact, the approach in the JavaScript language definition uses the
+language's automatic insertion to simplify its own rules. Curly brackets are
+always tagged <code>BEGIN</code> and <code>END</code>. That means when curly
+brackets are used for structures, no semicolon gets added. For example:</p>
 
 <pre>obj = { x:1 }
 n = obj.x
 </pre>
 
 <p>The Snipe scanner does not insert a semicolon in this case, on the assumption
-that JavaScript itself will.</p>
+that the JavaScript conventions will.</p>
+
+<p>JavaScript has a few extra conventions which come into play when it is
+embedded in a <code>script</code> element in an HTML page. Those conventions
+are not covered by the Snipe language description.</p>
 
 <hr/>
 

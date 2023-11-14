@@ -11,7 +11,7 @@ hashbang  \   regex
 // Keywords, reserved words and restricted words.
 
 start  arguments as async await break case catch class const continue  key
-start  debugger default delete do else enum eval export extends false  key
+start  debugger default delete do else enum export extends eval false  key
 start  finally for from function get if implements import in           key
 start  instanceof interface of new null package private protected      key
 start  public return set super switch target this throw true try       key
@@ -25,6 +25,7 @@ key    \                                                               start KEY
 start  ++ -- ~ !                                             start UNARY
 start  < > <= >= == != === !== + - * % ** << >> >>> & | ^    regex OP
 start  && || = += -= *= %= **= <<= >>= >>>= &= |= ^= => ??   regex OP
+start  &&= ||= ??=                                           regex OP
 start  / ?. ?                                                regex OP
 start  ...                                                   start MARK
 start  ; , :                                                 regex SIGN
@@ -40,26 +41,47 @@ start ] start RIGHT
 start ( regex LEFT
 start ) start RIGHT
 
-// Check for regex literal with flags, otherwise jump to start.
+// Check for regex literal (with flags), otherwise jump to start.
+// Deal with  /..\/../  and  /..[../..]../  and spaces.
 regex   /        regex1
 regex   \        start
 
-regex1  /        regex3
-regex1  [        regex2
-regex1  !..~ \s  regex1
+// After /.. space
+regex0  /        regex4
+regex0  \\/      regex1
+regex0  [        regex3
+regex0  !..~     regex1
+regex0  \s       regex0
+regex0  \n       start
+
+// After /..
+regex1  /        regex4
+regex1  \\/      regex1
+regex1  [        regex3
+regex1  !..~     regex1
+regex1  \s       regex0 QUOTE
 regex1  \n       start WRONG
 
+// After /..[.. space
 regex2  ]        regex1
-regex2  !..~ \s  regex2
-regex2  \n       start WRONG
+regex2  !..~     regex3
+regex2  \s       regex2
+regex2  \n       start
 
-regex3  a..z A..Z 0..9 $ _ \\u  regex3
-regex3  \                       start QUOTE
+// After /..[..
+regex3  ]        regex1
+regex3  !..~     regex3
+regex3  \s       regex2 QUOTE
+regex3  \n       start WRONG
+
+// After /../
+regex4  a..z A..Z 0..9 $ _ \\u  regex4
+regex4  \                       start QUOTE
 
 // Identifier
 
-start  A..Z a..z $ _ \\u       id
-start  \u{                     id1
+start  A..Z a..z $ _ \\u #     id
+start  \\u{                    id1
 id     a..z A..Z 0..9 $ _ \\u  id
 id     \                       start ID
 id1    0..9 A..F a..f          id1
@@ -69,7 +91,7 @@ id1    \                       start WRONG
 // A dot starts a number, or is an operator.
 
 start   .      dot
-dot     \0..9  decimal
+dot     \0..9  float
 dot     \      start OP
 
 // One-line comment.
@@ -79,7 +101,6 @@ note     !..~   note1
 note     \s     note
 note     \n     start
 note1    !..~   note1
-note1    \\     note2
 note1    \s \n  note NOTE
 
 // Multi-line comment.
@@ -91,37 +112,49 @@ comment    */         start COMMENT
 comment1   !..~       comment1
 comment1   \s \n \*/  comment COMMENT
 
-// Character literal.
+// Single quote string literal.
 
-start   '      char1
-char    !..~   char1
-char    \'     char1
-char    \s     char
-char    '      start QUOTE
-char    \n     start
+start     '      single1
+single    !..~   single1
+single    \\     single2
+single    \s     single
+single    '      start QUOTE
+single    \n     start
 
 // After '
-char1   !..~   char1
-char1   \\'    char1
-char1   \s     char QUOTE
-char1   '      start QUOTE
-char1   \n     start WRONG
+single1   !..~   single1
+single1   \\     single2
+single1   \s     single QUOTE
+single1   '      start QUOTE
+single1   \n     start WRONG
 
-// String literal.
+// After '..\ accept ' and newline
+single2   !..~   single1
+single2   \s \n  single3 QUOTE
 
-start     "      string1
-string    !..~   string1
-string    \\"    string1
-string    \s     string
-string    "      start QUOTE
-string    \n     start
+// After '..\ with a newline next
+single3   \n \   single
+
+// Double quote string literal.
+
+start     "      double1
+double    !..~   double1
+double    \\     double2
+double    \s     double
+double    "      start QUOTE
+double    \n     start
 
 // After "
-string1   !..~   string1
-string1   \\"    string1
-string1   \s     string QUOTE
-string1   "      start QUOTE
-string1   \n     start WRONG
+double1   !..~   double1
+double1   \\     double2
+double1   \s     double QUOTE
+double1   "      start QUOTE
+double1   \n     start WRONG
+
+// After "..\ accept " and newline
+double2   !..~   double1
+double2   \s \n  double3 QUOTE
+double3   \n \   double
 
 // Number.
 start     0b 0B    binary
@@ -152,64 +185,208 @@ exponent  \             start VALUE
 
 // Template string literal.
 
-start     `         template
-template  ${        sub DOC
-template  !..~ \\`  template
-template  `         start DOC
-template  \s \n     template DOC
-
-// Very simple substitution expression. No keywords, no { }, no `...`, no //...,
-// no /*...*/, no regex, no DOC
-
-sub  this yield await null true false   subkey
-sub  a..z A..Z 0..9 $ _ \\u             subid
-sub  \\u{                               subid1
-sub  ++ -- ~ !                          sub UNARY
-sub  < > <= >= == != === !== + -        sub OP
-sub  * % ** << >> >>> & | ^             sub OP
-sub  && || = += -= *= %= **= <<= >>=    sub OP
-sub  >>>= &= |= ^= => ?? /              sub OP
-sub  ?. ?                               sub OP
-sub  ...                                sub MARK
-sub  ; , :                              sub SIGN
-sub  [ (                                sub LEFT
-sub  ] )                                sub RIGHT
-sub  }                                  template DOC
-# TODO sub literals, array literals
-
-subkey  a..z A..Z 0..9 $ _ \\u  subid
-subkey  \\u{                    subid1
-subkey  \                       sub KEY
-
-subid   a..z A..Z 0..9 $ _ \\u  subid
-subid   \                       sub ID
-subid1  0..9 A..F a..f          subid1
-subid1  }                       subid
-subid1  \                       sub WRONG
+start      `         template1
+template   ${        sub DOC
+template   !..~ \\`  template1
+template   `         start DOC
+template   \s \n     template
+template1  ${        sub DOC
+template1  !..~ \\`  template1
+template1  `         start DOC
+template1  \s \n     template DOC
 
 // Illegal characters and white space.
-start     @       start WRONG
+start     @ \\    start WRONG
 start     \s \n   start
 
-//------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// Sublanguage of simple expressions supported in templates. No curly brackets,
+// no templates, no comments, few keywords.
 
-// TODO: for templates, assume embedded expressions are simple, in particular
-// no keywords, no curly brackets, no template strings, no comments, no ml quotes.
-start ` head
-head !..~ \\` \\$ head
-head \s \n head QUOTE
-head ${ sub
-head ` start QUOTE
+// Sublanguage keywords.
 
+sub     this yield await null true false    subkey
+subkey  a..z A..Z 0..9 $ _ \\u              subid
+subkey  \\u{                                subid1
+subkey  \                                   sub KEY
 
+// Sublanguage operators and signs.
 
+sub  ++ -- ~ !                          sub UNARY
+sub  < > <= >= == != === !== + -        subreg OP
+sub  * % ** << >> >>> & | ^             subreg OP
+sub  && || = += -= *= %= **= <<= >>=    subreg OP
+sub  >>>= &= |= ^= => ?? /              subreg OP
+sub  &&= ||= ??=                        subreg OP
+sub  ?. ?                               subreg OP
+sub  ...                                sub MARK
+sub  ; , :                              subreg SIGN
 
-// ============================================
+// Sublanguage brackets. No open curly. Close curly terminates the substitution.
 
-// Escape sequence
-escape ' " \ b f n r t v start ?
-escape 0 escape2
-escape2 0..9 escape3
-escape2 start ?
-escape3 0..9 escape3
-escape3 start ?
+sub  [ (                                subreg LEFT
+sub  ] )                                sub RIGHT
+sub  }                                  template DOC
+
+// Sublanguage identifier
+
+sub     a..z A..Z 0..9 $ _ \\u #  subid
+sub     \\u{                      subid1
+subid   a..z A..Z 0..9 $ _ \\u    subid
+subid   \                         sub ID
+subid1  0..9 A..F a..f            subid1
+subid1  }                         subid
+subid1  \                         sub WRONG
+
+// Sublanguage dot
+
+sub     .      subdot
+subdot  \0..9  subfloat
+subdot  \      sub OP
+
+// Sublanguage single quote string literal.
+
+sub        '      subsingle1
+subsingle  !..~   subsingle1
+subsingle  \\     subsingle2
+subsingle  \s     subsingle
+subsingle  '      sub QUOTE
+subsingle  \n     sub
+
+subsingle1   !..~   subsingle1
+subsingle1   \\     subsingle2
+subsingle1   \s     subsingle QUOTE
+subsingle1   '      sub QUOTE
+subsingle1   \n     sub WRONG
+
+subsingle2   !..~   subsingle1
+subsingle2   \s \n  subsingle3 QUOTE
+subsingle3   \n \   subsingle
+
+// Sublanguage double quote string literal.
+
+sub        "      subdouble1
+subdouble  !..~   subdouble1
+subdouble  \\     subdouble2
+subdouble  \s     subdouble
+subdouble  "      sub QUOTE
+subdouble  \n     sub
+
+subdouble1   !..~   subdouble1
+subdouble1   \\     subdouble2
+subdouble1   \s     subdouble QUOTE
+subdouble1   "      sub QUOTE
+subdouble1   \n     sub WRONG
+
+subdouble2   !..~   subdouble1
+subdouble2   \s \n  subdouble3 QUOTE
+subdouble3   \n \   subdouble
+
+// Sublanguage number.
+
+sub     0b 0B    subbinary
+sub     0o 0O    suboctal
+sub     0x 0X    subhex
+sub     0..9     subdecimal
+
+subbinary    0..1 _   subbinary
+subbinary    n \      sub VALUE
+
+suboctal     0..7 _   suboctal
+suboctal     n \      sub VALUE
+
+subhex       0..9 _   subhex
+subhex       a..f     subhex
+subhex       A..F     subhex
+subhex       n \      sub VALUE      
+
+subdecimal   0..9 _        subdecimal
+subdecimal   .             subfloat
+subdecimal   e+ e- E+ E-   subexponent
+subdecimal   n \           sub VALUE
+subfloat     0..9          subfloat
+subfloat     e+ e- E+ E-   subexponent
+subfloat     \             sub VALUE
+subexponent  0..9          subexponent
+subexponent  \             sub VALUE
+
+// Sublanguage regex
+subreg   /        subreg1
+subreg   \        sub
+
+subreg0  /        subreg4
+subreg0  \\/      subreg1
+subreg0  [        subreg3
+subreg0  !..~     subreg1
+subreg0  \s       subreg0
+subreg0  \n       sub
+
+subreg1  /        subreg4
+subreg1  \\/      subreg1
+subreg1  [        subreg3
+subreg1  !..~     subreg1
+subreg1  \s       subreg0 QUOTE
+subreg1  \n       sub WRONG
+
+subreg2  ]        subreg1
+subreg2  !..~     subreg3
+subreg2  \s       subreg2
+subreg2  \n       sub
+
+subreg3  ]        subreg1
+subreg3  !..~     subreg3
+subreg3  \s       subreg2 QUOTE
+subreg3  \n       sub WRONG
+
+subreg4  a..z A..Z 0..9 $ _ \\u  subreg4
+subreg4  \                       sub QUOTE
+
+// Sublanguage illegal characters and white space.
+
+sub     @ \\ ` {  sub WRONG
+sub     \s \n     sub
+
+// ---------- Tests ------------------------------------------------------------
+// In the expected output for a test, the start of each token is marked by the
+// first letter of its type. Remaining characters are marked with space, a
+// space is marked with an underline, and a newline is marked with a dot.
+
+// A few tokens
+> (count+1)
+< LI    OVR.
+
+// An id can start with a keyword
+> do dot for form
+< K _I  _K  _I   .
+
+// Operators and signs of different fixities
+> ++!<<=...=>
+< U UO  M  O .
+
+// Curly brackets (always treated as block brackets)
+> s={}; do{}
+< IOBES_K BE.
+
+// Dot as sign or as part of number
+> s.x 1.2 .2
+< IOI_V  _V .
+
+// Single quotes, including unclosed at end of line
+> 'x' '\'' 'x
+< Q  _Q   _W .
+
+// Single quotes, with joiner
+> '\
+< Q .
+> x'
+< Q .
+
+// Double quotes, including unclosed
+> "hello world" "a\"b" "unclosed
+< Q     _Q     _Q     _W        .
+
+// Double quotes, with joiner
+> "hello \
+< Q     _Q.
+> world"
+< Q     .
