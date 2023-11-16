@@ -2,8 +2,8 @@
 
 // At the start of a file only, recognise a hashbang comment. To distinguish
 // between / as divison and / as start of regex, check for regex at the start
-// of the file, after infix tokens, some brackets, and a few of the keywords.
-// Otherwise, the start state accepts / as a division operator.
+// of the file, after prefix or infix tokens. Otherwise, the start state
+// accepts / as a division operator.
 
 hashbang  #!  note NOTE
 hashbang  \   regex
@@ -83,6 +83,7 @@ regex4  \                       start QUOTE
 start  A..Z a..z $ _ \\u #     id
 start  \\u{                    id1
 id     a..z A..Z 0..9 $ _ \\u  id
+id     \\u{                    id1
 id     \                       start ID
 id1    0..9 A..F a..f          id1
 id1    }                       id
@@ -226,7 +227,7 @@ sub  ; , :                              subreg SIGN
 
 sub  [ (                                subreg LEFT
 sub  ] )                                sub RIGHT
-sub  }                                  template DOC
+sub  }                                  template1
 
 // Sublanguage identifier
 
@@ -390,3 +391,46 @@ sub     \s \n     sub
 < Q     _Q.
 > world"
 < Q     .
+
+// One line comment
+> n = 0; // note
+< I_O_VS_N _N   .
+
+// Multi-line comment
+> n = 0; /* line one
+< I_O_VS_C _C   _C  .
+> line two */ n = 1;
+< C   _C  _C _I_O_VS.
+
+// Numbers TODO
+> 42 1.2e+3 4.5E-6 0X7f 0O37 0B10 0b0 0o0 0xa 
+< V _V     _V     _V   _V   _V   _V  _V  _V  .
+
+// Big numbers
+> 42n 0X7Fn 0O37n 0B10n
+< V  _V    _V    _V    .
+
+// Illegal characters
+> @ \
+< W_W.
+
+// Leading spaces
+>    x
+< ___I.
+
+// One line template, and two-line template
+> n=1; `abc` n=2; `abc
+< IOVS_D    _IOVS_D   .
+> def` n=3;
+< D   _IOVS.
+
+// Template with joiner.
+> n=1; `abc\
+< IOVS_D    .
+> def` n=2;
+< D   _IOVS.
+
+// Template with one sub, and with two subs.
+> n=1; `abc${x}def` n=2; `abc${x}def${y}ghi`
+< IOVS_D     ID    _IOVS_D     ID     ID    .
+

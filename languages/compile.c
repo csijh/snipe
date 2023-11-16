@@ -14,24 +14,37 @@
 #include <ctype.h>
 #include <time.h>
 
+// TODO: get rid of WRONG. Consider QUOTE?
+// TODO: ADD for added semicolon.
+
 // ---------- Tags -------------------------------------------------------------
 // These tags and their names must be kept the same as in other Snipe modules,
-// and kept to a maximum of 32 entries. For the first 26, the tag value is the
+// and kept to a maximum of 64 entries. For the first 26, the tag value is the
 // same as (ch-'A') where ch is the first letter. There are gaps for unused
-// letters. The last 3 tags can't be mentioned in language definitions. The
-// default if there is no tag is NONE meaning continue the token.
+// letters. The tags GAP, NEWLINE, NONE can't be mentioned explicitly in
+// language definitions. The default if there is no tag is NONE meaning
+// continue the token.
 
 enum tag {
     A, BEGIN, COMMENT, DOCUMENT, END, FUNCTION, G, H, IDENTIFIER, JOIN, KEYWORD,
     LEFT, MARK, NOTE, OP, PROPERTY, QUOTE, RIGHT, SIGN, TYPE, UNARY, VALUE,
-    WRONG, X, Y, Z, GAP, NEWLINE, NONE
+    WRONG, X, Y, Z,
+    BEGIN0, END0, BEGIN1, END1, BEGIN2, END2, BEGIN3, END3,
+    BEGIN4, END4, BEGIN5, END5, BEGIN6, END6, BEGIN7, END7,
+    LEFT0, RIGHT0, LEFT1, RIGHT1, LEFT2, RIGHT2, LEFT3, RIGHT3,
+    LEFT4, RIGHT4, LEFT5, RIGHT5, LEFT6, RIGHT6, LEFT7, RIGHT7,
+    GAP, NEWLINE, NONE,
 };
 
 // The first character is used in tests.
-char *tagNames[32] = {
+char *tagNames[64] = {
     "?", "BEGIN", "COMMENT", "DOCUMENT", "END", "FUNCTION", "?", "?",
     "IDENTIFIER", "JOIN", "KEYWORD", "LEFT", "MARK", "NOTE", "OP", "PROPERTY",
     "QUOTE", "RIGHT", "SIGN", "TYPE", "UNARY", "VALUE", "WRONG", "?", "?", "?",
+    "BEGIN0", "END0", "BEGIN1", "END1", "BEGIN2", "END2", "BEGIN3", "END3",
+    "BEGIN4", "END4", "BEGIN5", "END5", "BEGIN6", "END6", "BEGIN7", "END7",
+    "LEFT0", "RIGHT0", "LEFT1", "RIGHT1","LEFT2", "RIGHT2", "LEFT3", "RIGHT3",
+    "LEFT4", "RIGHT4", "LEFT5", "RIGHT5", "LEFT6", "RIGHT6", "LEFT7", "RIGHT7",
     "_", ".", " "
 };
 
@@ -55,10 +68,32 @@ bool prefix(char *s, char *t) {
 int findTag(char *name) {
     for (int i = 0; i < 64; i++) {
         if (tagNames[i] == NULL) continue;
-        if (strcmp(name, tagNames[i]) == 0) return i;
-        if (prefix(name, tagNames[i])) return i;
+        char *s = name, *t = tagNames[i];
+        int ns = strlen(s), nt = strlen(t);
+        if ('0' <= s[ns-1] && s[ns-1] <= '9') {
+            if (s[ns-1] != t[nt-1]) continue;
+            ns--;
+            nt--;
+        }
+        if (ns > nt) continue;
+        if (strncmp(s,t,ns) == 0) return i;
     }
     return -1;
+}
+
+// Check if a tag is an open bracket.
+bool isOpen(int tag) {
+    return BEGIN0 <= tag && tag <= RIGHT7 && (tag & 0x01) == 0;
+}
+
+// Check if a tag is a close bracket.
+bool isOClose(int tag) {
+    return BEGIN0 <= tag && tag <= RIGHT7 && (tag & 0x01) != 0;
+}
+
+// Check if two bracket tags match.
+bool match(int open, int close) {
+    return (open + 1 == close);
 }
 
 // ---------- Arrays -----------------------------------------------------------
@@ -564,17 +599,19 @@ typedef unsigned char byte;
 enum { EOL = 0x7F };
 
 // Fill in an action for a given pattern, as two bytes, one for the tag and one
-// for the target state. The tag has a bit 0x40 added to indicate a lookahead
-// action. The top bit 0x80 is zero. NONE becomes GAP or NEWLINE and lookahead
-// becomes false for \s or \n.
+// for the target state. The top bit 0x80 of the tag byte is zero, to indicate
+// an action rather then a link. The top bit 0x80 of the target byte is one for
+// a for a lookahead action. For \s or \n with tag NONE, the tag is changed to
+// GAP or NEWLINE, and the lookahead bit is changed to zero.
 void compileAction(byte *action, pattern *p) {
-    int code = p->tag;
+    int tag = p->tag;
+    int target = p->target;
     bool look = p->lookahead;
-    if (code == NONE && p->match[0] == ' ') { code = GAP; look = false; }
-    if (code == NONE && p->match[0] == '\n') { code = NEWLINE; look = false; }
-    if (look) code += 0x40;
-    action[0] = code;
-    action[1] = p->target; 
+    if (tag == NONE && p->match[0] == ' ') { tag = GAP; look = false; }
+    if (tag == NONE && p->match[0] == '\n') { tag = NEWLINE; look = false; }
+    if (look) target += 0x80;
+    action[0] = tag;
+    action[1] = target; 
 }
 
 // When there is more than one pattern for a state starting with a character,
@@ -670,8 +707,8 @@ int scan(byte *table, int st, char *in, byte *out, state *states, bool trace) {
             }
             action = p + len;
         }
-        bool lookahead = (action[0] & 0x40) != 0;
-        int tag = action[0] & 0x3F;
+        bool lookahead = (action[1] & 0x80) != 0;
+        int tag = action[0] & 0x7F;
         if (trace) {
             if (lookahead) printf("\\ ");
             if (in[at] == ' ') printf("SP");
@@ -684,7 +721,7 @@ int scan(byte *table, int st, char *in, byte *out, state *states, bool trace) {
             out[start] = tag;
             start = at;
         }
-        st = action[1];
+        st = action[1] & 0x7F;
     }
     in[n] = '\0';
     return st;
@@ -753,7 +790,7 @@ int main(int n, char *args[n]) {
     derangeAll(states);
     sortAll(states);
     checkAll(states);
-
+printf("#states %d\n", size(states));
     byte *table = allocate(2*96*size(states) + 10000);
     resize(table, 2*96*size(states));
     compile(states, table);

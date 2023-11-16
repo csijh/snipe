@@ -1,0 +1,61 @@
+// C++ language definition (based on a draft of the C++20 standard).
+// See https://eel.is/c++draft/gram.lex
+
+// Keywords. The key state checks for extra characters, which turn the keyword
+// into an identifier.
+
+start  alignas alignof asm auto bool break case catch char  key
+start  char8_t char16_t char32_t class concept const        key
+start  consteval constexpr constinit const_cast continue    key
+start  co_await co_return co_yield decltype default delete  key
+start  do double dynamic_cast else enum explicit export     key
+start  extern false float for friend goto if inline int     key
+start  long mutable namespace new noexcept nullptr          key
+start  operator private protected public register           key
+start  reinterpret_cast requires return short signed        key
+start  sizeof static static_assert static_cast struct       key
+start  switch template this thread_local throw true try     key
+start  typedef typeid typename union unsigned using         key
+start  virtual void volatile wchar_t while                  key
+
+key    a..z A..Z 0..9 _ \\U \\u  id
+key    \\u{ \\N{                 id1
+key    \                         start KEY
+
+// Identifiers
+
+start  a..z A..Z _ \\U \\u        id
+start  \\u{ \\N{                  id1
+
+id     a..z A..Z 0..9 _ \\U \\u   id
+id     \\u{ \\N{                  id1
+id     \                          start ID
+
+id1    }                          id
+id1    \!..~ \s                   id1
+id1    \n                         start WRONG
+
+// Operators and signs. A + or - is marked infix, and a ++ or -- is marked
+// nonfix, for semicolon insertion, on the assumption that when it has one
+// operand, it won't be separated by a newline from the operand.
+
+start   ++ -- ! ~                                   start UNARY
+start   != %= % && &= & *= * += + -= - /= / ?       start OP
+start   <<= << <= < == >= >>= >> > ^= ^ |= || |     start OP
+start   = <=> .*                                    start OP
+start   ...                                         start MARK
+start   ## , ; : :: -> ->*                          start SIGN
+start  and and_eq bitand bitor compl                opname
+start  not not_eq or or_eq xor xor_eq               opname
+
+// Brackets. By default { and } are block brackets. To help with semicolon
+// insertion, the opener { is marked as an inline bracket LEFT instead, by the
+// rules below. The closer } is changed from END to RIGHT by Snipe during
+// bracket matching.
+
+start  {   start BEGIN
+start  }   start END
+start  [   start LEFT
+start  ]   start RIGHT
+start  (   start LEFT
+start  )   start RIGHT

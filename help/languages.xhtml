@@ -19,42 +19,20 @@
 
 <h1>Languages</h1>
 
-<!-- TODO C, C++, Java, JavaScript, Python, Haskell, HTML -->
-<!-- TODO
-A state name may have a single upper case letter suffix e.g. startA or startB
-If a base state name has two or more upper case letters at the end, e.g.
-stateAB, this is defining rules for two states at once. The target can be
-a specific name with zero or one suffix, e.g. next or nextA or nextC or
-it can have the same suffix as the base, e.g. nextAB meaning ...
-BUT how distinguish having a tag or not? [ID,]
- -->
+<!-- TODO C++, Java, Python, Haskell, HTML -->
 
 <p><mark>Snipe</mark> has a scanner, which is implemented as a string-matching
-state machine, to divide the text of a file being edited into tokens, and to
-give each token a type. A scanner for an editor has different goals from those
-of a scanner in a compiler. On the one hand the scanner:</p>
+state machine. It divides a source text into
+tokens, and gives each token a type. The result may be approximate, compared to
+a scanner in a compiler, especially if a language has token rules which depend
+on the current parsing context. On the other hand, the Snipe scanner:</p>
 
 <ul>
-<li>may omit some details needed only for full compiling</li>
-<li>may accept some tokens that a compiler would reject</li>
-<li>may split or classify tokens differently</li>
-<li>may be approximate</li>
-</ul>
-
-<p>One common reason for a scanner to be approximate is when the language has
-unlimited nesting of multi-line comments. A scanner based on regular expressions
-or a state machine can only support nesting to a small fixed depth. Another
-common reason is if the lexical rules for a language depend on syntactic
-context. A multi-language editor doesn't normally support full parsing of
-languages. On the other hand, the Snipe scanner:</p>
-
-<ul>
-<li>partitions the whole text into tokens</li>
-<li>handles any text, whether valid or not</li>
+<li>partitions the whole text into tokens, whether valid or not</li>
 <li>supports dynamic loading of language definitions</li>
 <li>supports incremental rescanning</li>
-<li>helps with 'word'-based reflow or cursor movement</li>
-<li>helps with bracket matching, indenting and semicolon insertion</li>
+<li>includes bracket matching, using a stack</li>
+<li>aids indenting, semicolon insertion, and comment reformatting</li>
 </ul>
 
 <p>Languages for programming editors are often expressed using regular
@@ -73,15 +51,13 @@ table in file <code>c.bin</code> for use by Snipe's scanner.</p>
 
 <h2>Rules</h2>
 
-<p>A language description contains simple text (<u title="aka ASCII(obsolete and
-non-international)">basic Latin</u> <code>'\n'</code> and <code>' '</code> to
-<code>'~'</code>). The rules in the file specify how simple source text is
-divided into tokens. An interpreter which uses the description may treat every
-Unicode character beyond basic Latin in the same way as letters. That is
-sufficient to handle the common uses of Unicode in identifiers, string literals
-and comments. The scanner may also handle control characters by converting
-them, or treating them the same as something else, or marking them as illegal
-tokens.</p>
+<p>A language description contains simple text (<u title="aka ASCII (obsolete
+and non-international)">basic Latin</u> characters <code>' '</code> to
+<code>'~'</code> plus <code>'\n'</code>). The rules in the file specify how
+simple source text is divided into tokens. The scanner which uses the
+description treats every Unicode character beyond basic Latin in the same
+way as letters. That is sufficient to handle the common uses of Unicode in
+identifiers, string literals and comments.</p>
 
 <p>In a language description file, a line which is blank or begins with a
 non-letter such as <code>#</code> or <code>/</code> is a comment line which is
@@ -105,7 +81,7 @@ double quote character appears next in the input, the scanner moves past the
 character and goes into the <code>string</code> state.</p>
 
 <p>If a rule has a tag, the current token is ended, with the tag as its type.
-The tag should normally be one of those expected by Snipe. For example:</p>
+The tag should be one of those expected by Snipe. For example:</p>
 
 <pre>start == != start OP
 </pre>
@@ -183,7 +159,10 @@ lookahead.</p>
 <h2>States</h2>
 
 <p>A state is defined by the rules which have that state as their base state.
-The rules defining a state can be in any order and need not necessarily be
+The base state of the first rule in a language description is the starting
+state for the scanner when scanning of a source text begins.</p>
+
+<p>The rules defining a state can be in any order and need not necessarily be
 contiguous. If the input matches a pattern mentioned in any one of the rules
 for a state, that rule is applied. For example:</p>
 
@@ -221,8 +200,8 @@ id \ start ID
 </pre>
 
 <p>If a letter or digit appears next, the first rule applies, even though
-letters and digits are included in the implicit range <code>!..~</code> in the
-second rule. If any other character appears, the second rule applies.</p>
+letters and digits are included in the implicit range in the second rule. If
+any other character appears, the second rule applies.</p>
 
 <p>Any ambiguity not covered above between two patterns in the rules for a state
 is an error.</p>
@@ -251,102 +230,6 @@ a continuer, according to whether the base tag is a starter or continuer.
 Finally, if a starter state has a rule containing a lookahead, the rule must
 not have a tag, because that would create an empty token.</p>
 
-<h2>Examples</h2>
-
-<p>In many programming languages, an identifier is allowed to start with a
-keyword. In that case, identifiers can be handled by rules like these:</p>
-
-<pre>start  if else for while  key
-start  a..z A..Z          id
-
-key    a..z A..Z 0..9     id
-key    \                  start KEY
-
-id     a..z A..Z 0..9     id
-id     \                  start ID
-</pre>
-
-<p>Suppose the keyword <code>for</code> appears next in the input. The scanner
-goes to the <code>key</code> state which gives the token the type
-<code>KEY</code>. Suppose instead that the identifier <code>form</code> appears
-next in the input. The prefix <code>for</code> is matched and the scanner goes
-into the <code>key</code> state. Then the <code>m</code> is matched, the
-scanner goes into the <code>id</code> state, and the token ends up being given
-the type <code>ID</code>.</p>
-
-<p>Where language constructs contain spaces or newlines and so need to be
-divided into mini-tokens, two states are often needed, one for the start of the
-mini-tokens, and one for after the start. For example, one-line comments, say
-starting with <code>//</code> and continuing to the end of the line, can be
-handled with rules of the form:</p>
-
-<pre>start    //     note NOTE
-
-note     !..~   note1
-note     \s     note
-note     \n     start
-
-note1    !..~   note1
-note1    \s \n  note NOTE
-</pre>
-
-<p>A comment line then consists of a sequence of tokens of type
-<code>NOTE</code>, separated by spaces.</p>
-
-<p>Multi-line comments, say starting with <code>/*</code> and ending with
-<code>*/</code> and not nesting, can be handled by:</p>
-
-<pre>start      /*         comment COMMENT
-
-comment    !..~       comment1
-comment    \s \n      comment
-comment    */         start COMMENT
-
-comment1   !..~       comment1
-comment1   \s \n \*/  comment COMMENT
-</pre>
-
-<p>Suppose a language description contained the following rules:</p>
-
-<pre>even \a..z odd
-odd  \a..z even
-</pre>
-
-<p>An error would be reported, because this could result in an infinite loop
-when scanning. A more subtle example of an error might be:</p>
-
-<pre>start . dot
-
-dot  0..9         number
-dot  \a..z \A..Z  prop SIGN
-dot  \            start SIGN
-
-prop  a..z A..Z 0..9  prop
-prop  \               start PROPERTY
-</pre>
-
-<p>The idea behind these rules is that if a dot is followed by an identifier,
-the identifier should be highlighted differently, as a <code>PROPERTY</code>.
-However, the <code>prop</code> state can occur at the start of a token because
-it follows the completion of a <code>SIGN</code> token in the second
-<code>dot</code> rule. On the other hand, it can also occur after the start of
-a token, because it is the target of its own first rule. This can be corrected
-by writing:</p>
-
-<pre>dot  0..9  number
-dot  \     prop SIGN
-
-prop  a..z A..Z  prop1
-prop  \          start
-
-prop1  a..z A..Z 0..9  prop1
-prop1  \               start PROPERTY
-</pre>
-
-<p>Now, <code>prop</code> can only occur at the start of tokens and matches the
-first letter, and <code>prop1</code> can only occur after the start and
-recognizes the rest of the token.</p>
-
 <h2>Tags</h2>
 
 <p>These are the available tags:</p>
@@ -354,16 +237,44 @@ recognizes the rest of the token.</p>
 <pre>KEYWORD, TYPE, MARK,               - kinds of keyword
 IDENTIFIER, FUNCTION, PROPERTY,    - kinds of identifier
 VALUE, QUOTE, DOCUMENT,            - literals
-BEGIN, END, LEFT, RIGHT,           - block and inline brackets
+BEGIN0...BEGIN7, END0...END7,      - block brackets
+LEFT0...LEFT7, RIGHT0...RIGHT7,    - inline brackets
+BEIN, END, LEFT, RIGHT,            - brackets not used in bracket matching
 NOTE, COMMENT,                     - one-line and multi-line comments
 OP, UNARY, SIGN, JOIN,             - operators and punctuation
 WRONG                              - malformed token
 </pre>
 
-<p>These can be shortened, e.g. <code>KEY</code> or <code>ID</code>, or
-abbreviated to a single letter. The scanning conventions and the tags are
-designed to help with reformatting, syntax highlighting, bracket matching,
-indenting, semicolon insertion, and incremental rescanning as follows.</p>
+<p>These can be shortened, e.g. <code>KEY</code>, <code>ID</code>, or even to
+one letter, e.g. <code>V</code>, <code>B0</code>. The scanning conventions and
+the tags are designed to help with bracket matching, reformatting, syntax
+highlighting, indenting, semicolon insertion, and incremental rescanning as
+follows.</p>
+
+<p><b>Bracket matching:</b> A stack of open bracket tags is maintained by the
+scanner. For example:</p>
+
+<pre>start { start BEGIN0
+start } start END0
+</pre>
+
+<p>When an open curly bracket is matched by the first rule, <code>BEGIN0</code>
+is pushed on the stack. When a close curly bracket is matched by the second
+rule, the stack is popped. If the two tags do not match, the brackets can be
+marked as mismatched. This bracket matching can be used to control the actions
+of the state machine. For example:</p>
+
+<pre>start } state1 END0
+start } state2 RIGHT1
+</pre>
+
+<p>In this case, suppose an open curly bracket can be tagged either as
+<code>BEGIN0</code> or as <code>LEFT1</code>, in two different states in the
+language definition. When a close curly bracket is matched in the
+<code>start</code> state, the relevant one of the two rules shown matches,
+causing a jump to one of two different states. If neither rule matches, the
+brackets are marked as mismatched and the scanner stays in the
+<code>start</code> state.</p>
 
 <p><b>Reformatting:</b> A multi-line comment or a sequence of one-line comments
 is reformatted by changing the line breaks so that the maximum number of tokens
@@ -376,11 +287,6 @@ movement.</p>
 
 <p><b>Syntax highlighting:</b> Each token type can be displayed differently,
 according to a style definition.</p>
-
-<p><b>Bracket matching:</b> A language definition must accurately tag comments
-and quotes, so that brackets inside them are not active. It must also give
-active begin and end brackets suitable types, so that the bracket matcher can
-recognise them.</p>
 
 <p><b>Indenting:</b> Snipe has a very simple and uniform rule for fully
 automatic indenting. The indent of a line is determined by the number of
@@ -423,7 +329,8 @@ bracket matcher can then adjust the tag of the end bracket to
 <code>RIGHT</code> to match, so that a semicolon is expected after it.</p>
 
 <p><b>Incremental rescanning:</b> A line of source text can be rescanned in
-isolation, using only a recorded start state for the line.</p>
+isolation, using only a recorded start state for the line, and the relevant
+stack of tags. The stack can be reconstructed where necessary.</p>
 
 <p>When a newline is matched with a <code>\n</code> lookahead pattern, the
 target state can be recorded as the starting state for the line following the
@@ -438,6 +345,173 @@ recorded start state of the next line, the next line may have to be rescanned
 as well, and there are occasional cases where a lot of rescanning might be
 required. The fact that lines can be rescanned in isolation makes it easy to
 interleave rescanning with user actions, to avoid long pauses.</p>
+
+<h2>Examples</h2>
+
+<p>In many programming languages, an identifier is allowed to start with a
+keyword. In that case, identifiers can be handled by rules like these:</p>
+
+<pre>start  if else for while  key
+start  a..z A..Z          id
+
+key    a..z A..Z 0..9     id
+key    \                  start KEY
+
+id     a..z A..Z 0..9     id
+id     \                  start ID
+</pre>
+
+<p>Suppose the keyword <code>for</code> appears next in the input. The scanner
+goes to the <code>key</code> state which gives the token the type
+<code>KEY</code>. Suppose instead that the identifier <code>form</code> appears
+next in the input. The prefix <code>for</code> is matched and the scanner goes
+into the <code>key</code> state. Then the <code>m</code> is matched, the
+scanner goes into the <code>id</code> state, and the token ends up being given
+the type <code>ID</code>.</p>
+
+<p>Where language constructs contain spaces or newlines and so need to be
+divided into mini-tokens, two states are often needed, one for the start of the
+mini-tokens, and one for continuing the mini-tokens. For example, one-line
+comments, say starting with <code>//</code> and continuing to the end of the
+line, can be handled with rules of the form:</p>
+
+<pre>start    //     note NOTE
+
+note     !..~   note1
+note     \s     note
+note     \n     start
+
+note1    !..~   note1
+note1    \s     note NOTE
+note1    \n     start NOTE
+</pre>
+
+<p>A comment line then consists of a sequence of tokens of type
+<code>NOTE</code>, separated by spaces.</p>
+
+<p>Multi-line comments, say starting with <code>/*</code> and ending with
+<code>*/</code> and not nesting, can be handled by:</p>
+
+<pre>start      /*         comment COMMENT
+
+comment    !..~       comment1
+comment    \s \n      comment
+comment    */         start COMMENT
+
+comment1   !..~       comment1
+comment1   \s \n      comment COMMENT
+comment1   */         start COMMENT
+</pre>
+
+<p>Languages in the C family often use curly brackets both for blocks and for
+structures. The semicolon insertion rules are different in the two cases, so it
+is desirable to tag them, say, as <code>BEGIN0</code>, <code>END0</code> in the
+first case, and as <code>LEFT0</code>, <code>RIGHT0</code> in the second case.
+One of the situations in which curly brackets are used for structures is;</p>
+
+<pre>obj = (...) { ... }
+</pre>
+
+<p>The round brackets can, in principle, contain an arbitrarily complex type
+expression, with brackets of its own. By giving these round brackets different
+tags from the usual ones, the scanner can match them up and so detect the
+following structure brackets. Suppose ordinary round brackets are tagged
+<code>LEFT1</code>, <code>RIGHT1</code> and the ones surrounding a type
+expression are tagged <code>LEFT2</code>, <code>RIGHT2</code>. Then the above
+situation can be handled with rules of the form:</p>
+
+<pre>start { start BEGIN0
+start ( start LEFT1
+start = eq OP
+
+start } start END0
+start } start RIGHT0
+start ) start RIGHT1
+start ) eqtype RIGHT2
+
+eq ( start LEFT2
+
+eqtype { LEFT0
+</pre>
+
+<p>After matching an equal sign, the <code>eq</code> state causes a
+<code>LEFT2</code> tag to be pushed on the stack. It then returns to the
+<code>start</code> state to process the type expression. When the
+<code>LEFT2</code> tag comes back to the top of the stack and the open round
+bracket is matched, the scanner jumps to the <code>eqtype</code> state to give
+the following curly bracket the alternative tag.</p>
+
+<p>Some languages support template strings, with embedded substitution
+expressions. for example:</p>
+
+<pre>`a = ${a} and b = ${b}`
+</pre>
+
+<p>An expression between <code>${</code> and <code>}</code> can be arbitrarily
+complicated, including its own curly brackets and template delimiters, so these
+brackets need to be matched in order to detect the return to the parent
+template. By treating <code>${</code> and <code>}</code> as brackets rather
+than as part of the surrounding template string, that can be done with rules of
+the form:</p>
+
+<pre>start ` template
+start } template RIGHT3
+
+template \${ template1 DOC
+template !..~ template1
+template \s \n template
+
+template1 ${ start LEFT3
+template1 !..~ template1
+template1 \s \n template DOC
+</pre>
+
+<p>The <code>template</code> state looks ahead for the opening <code>$
+{</code> and terminates the template string. The <code>template1</code> state
+tags <code>${</code> as <code>LEFT3</code> and goes to the <code>start</code>
+state to scan the inner expression. When the closing <code>}</code> is matched,
+the scanner returns to process more of the template string.</p>
+
+<p>Suppose a language description contained the following rules:</p>
+
+<pre>even \a..z odd
+odd  \a..z even
+</pre>
+
+<p>An error would be reported, because this could result in an infinite loop
+when scanning. A more subtle example of an error might be:</p>
+
+<pre>start . dot
+
+dot  0..9         number
+dot  \a..z \A..Z  prop SIGN
+dot  \            start SIGN
+
+prop  a..z A..Z 0..9  prop
+prop  \               start PROPERTY
+</pre>
+
+<p>The idea behind these rules is that if a dot is followed by an identifier,
+the identifier should be highlighted differently, as a <code>PROPERTY</code>.
+However, the <code>prop</code> state can occur at the start of a token because
+it follows the completion of a <code>SIGN</code> token in the second
+<code>dot</code> rule. On the other hand, it can also occur after the start of
+a token, because it is the target of its own first rule. This can be corrected
+by writing:</p>
+
+<pre>dot  0..9  number
+dot  \     prop SIGN
+
+prop  a..z A..Z  prop1
+prop  \          start
+
+prop1  a..z A..Z 0..9  prop1
+prop1  \               start PROPERTY
+</pre>
+
+<p>Now, <code>prop</code> can only occur at the start of tokens and matches the
+first letter, and <code>prop1</code> can only occur after the start and
+recognizes the rest of the token.</p>
 
 <h2>Tests</h2>
 
@@ -467,13 +541,13 @@ each language has its own peculiarities:</p>
 
 <p>In the C language, digraphs, trigraphs and line joiners are supposed to be
 handled by preprocessing. Digraphs and trigraphs are long-obsolete, and are not
-supported. An occasional line joiner( i.e. backslash before newline) is,
+supported. An occasional line joiner (i.e. backslash before newline) is,
 however, still found, particularly in <code>#define</code> directives, so it is
 supported, except in pathological cases such as in the middle of a
 keyword.</p>
 
-<p>Tokens which can be infix or unary are treated as infix, for semicolon
-insertion purposes. The most likely situation where this could cause confusion
+<p>For semicolon insertion purposes, operators which can be infix or unary are
+treated as infix. The most likely situation where this could cause confusion
 is:</p>
 
 <pre>n = 0
@@ -481,11 +555,46 @@ is:</p>
 </pre>
 
 <p>No automatic semicolon is inserted at the end of the first line, so an
-explicit manually inserted semicolon is needed.</p>
+explicit manually inserted semicolon is needed. Operators which are unary are
+treated as nonfix, on the assumption that they won't be separated by a newline
+from their operands.</p>
 
-<p>To indicate that a structure should be followed by a semicolon, the C
-language definition tags the open bracket of a structure as <code>LEFT</code>
-rather than <code>BEGIN</code> in these common cases:</p>
+<p>Open brackets are naturally regarded as prefix, and close brackets as
+postfix. This works for round and square brackets, and also for curly brackets
+when they are used as structure brackets. However, when curly brackets are used
+as block brackets, they behave unusually. Blocks are usually attached to the
+end of statements:</p>
+
+<pre>if (n &lt; 0)
+{
+    n = -n
+}
+</pre>
+
+<p>The line with the curly bracket is a continuation of the preceding statement.
+Thus an open block bracket does no expect a semicolon before or after it, and
+so an open block bracket, tagged with <code>BEGIN</code> instead of
+<code>LEFT</code>, is treated as infix. Block brackets can be compared with
+structure brackets:</p>
+
+<pre>if (...) { n = -n; }
+obj = { ... };
+</pre>
+
+<p>A close block bracket expects a semicolon before it but not after it, rather
+than after it but not before it. Thus a close block bracket, marked
+<code>END</code> rather than <code>RIGHT</code>, is treated as prefix instead
+of postfix. The C language allows standalone blocks:</p>
+
+<pre>int n = 1, m = 2
+{ int temp = n; n = m; m = temp; }
+</pre>
+
+<p>This situation is rare, and doesn't follow the normal rule, so an explicitly
+entered semicolon is required.</p>
+
+<p>The C language definition tags the open bracket of a structure as
+<code>BEGIN</code> by default, but <code>LEFT</code>in these common cases:</p>
 
 <pre>enum {...
 struct {...
@@ -497,7 +606,8 @@ struct ID {...
 </pre>
 
 <p>It is reasonable for a programmer to stick to these cases and avoid more
-obscure ones.</p>
+obscure ones. The Snipe bracket matcher changes the tag of the close bracket
+from <code>END</code> to <code>RIGHT</code>.</p>
 
 <h4>The JavaScript language</h4>
 

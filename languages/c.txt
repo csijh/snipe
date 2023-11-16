@@ -23,6 +23,12 @@ key     \                                                       start KEY
 key1    a..z A..Z 0..9 _ \\U \\u                                id
 key1    \                                                       decl KEY
 
+// Identifiers
+
+start   a..z A..Z _ \\U \\u        id
+id      a..z A..Z 0..9 _ \\U \\u   id
+id      \                          start ID
+
 // Operators and signs. A + or - is marked infix, and a ++ or -- is marked
 // nonfix, for semicolon insertion, on the assumption that when it has one
 // operand, it won't be separated by a newline from the operand.
@@ -32,13 +38,7 @@ start   != %= % && &= & *= * += + -= - /= / ?       start OP
 start   <<= << <= < == >= >>= >> > ^= ^ |= || |     start OP
 start   ...                                         start MARK
 start   ## , ; : ->                                 start SIGN
-start   =                                           init SIGN
-
-// Identifiers
-
-start   a..z A..Z _ \\U \\u        id
-id      a..z A..Z 0..9 _ \\U \\u   id
-id      \                          start ID
+start   =                                           init  OP
 
 // Brackets. By default { and } are block brackets. To help with semicolon
 // insertion, the opener { is marked as an inline bracket LEFT instead, by the
@@ -167,7 +167,8 @@ comment    \s \n      comment
 comment    */         start COMMENT
 comment1   !..~       comment1
 comment1   \\         comment2
-comment1   \s \n \*/  comment COMMENT
+comment1   \s \n      comment COMMENT
+comment1   */         start COMMENT
 comment2   \n \s      comment3 COMMENT
 comment2   \          comment1
 comment3   \n \       comment
@@ -235,7 +236,7 @@ start     \s \n   start
 
 // Structure and block brackets (left structure bracket marked L)
 > s={}; do{}
-< ISLES_K BE.
+< IOLES_K BE.
 
 // More left structure brackets
 > enum{  struct{  enum E{  struct S{
@@ -243,7 +244,7 @@ start     \s \n   start
 
 // More left structure brackets
 > ={ =(t){ =(struct t){
-< SL_SLIRL_SLK     _IRL.
+< OL_OLIRL_OLK     _IRL.
 
 // Dot as sign or as part of number
 > s.x 1.2 .2
@@ -271,19 +272,19 @@ start     \s \n   start
 
 // One line comment
 > n = 0; // note
-< I_S_VS_N _N   .
+< I_O_VS_N _N   .
 
 // One line comment with joiner.
 > n = 0; // note \
-< I_S_VS_N _N   _N.
+< I_O_VS_N _N   _N.
 > n = 1;
 < N_N_N .
 
 // Multi-line comment
 > n = 0; /* line one
-< I_S_VS_C _C   _C  .
+< I_O_VS_C _C   _C  .
 > line two */ n = 1;
-< C   _C  _C _I_S_VS.
+< C   _C  _C _I_O_VS.
 
 // Numbers
 > 42 1.2e+3 4.5E-6 0x7f 0x7F 0x7c.def 0xa.bcp+d 0xaU 0xaL 
@@ -312,10 +313,10 @@ start     \s \n   start
 // A few general tests
 
 > if (b) n = 1;
-< K _LIR_I_S_VS.
+< K _LIR_I_O_VS.
 
 > if (b) { n = 1; }
-< K _LIR_B_I_S_VS_E.
+< K _LIR_B_I_O_VS_E.
 
 > int n;
 < T  _IS.
@@ -327,22 +328,22 @@ start     \s \n   start
 < K   _I   _L_I   S_I      S_I    S_I    _ES.
 
 > int ns[] = { 1, 2, 34};
-< T  _I LR_S_L_VS_VS_V ES.
+< T  _I LR_O_L_VS_VS_V ES.
 
 > char *s = "a\nb\0c\04d";
-< T   _OI_S_Q            S.
+< T   _OI_O_Q            S.
 
 > char *s = "\037e\038f\xffg";
-< T   _OI_S_Q                S.
+< T   _OI_O_Q                S.
 
 > s = "*/"//"; /* abc "*/"//";
-< I_S_Q   N N _N _N  _N       .
+< I_O_Q   N N _N _N  _N       .
 
 > /*  "*/"//"; /* abc "*/"//";
-< C __CC Q   S_C _C  _CC Q   S.
+< C __C  Q   S_C _C  _C  Q   S.
 
 > obj.x, obj->x, f(x)
 < I  OIS_I  S IS_ILIR.
 
 > n = f   (x);
-< I_S_I___LIRS.
+< I_O_I___LIRS.
