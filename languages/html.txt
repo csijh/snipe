@@ -1,0 +1,5 @@
+// Issues for scanning HTML.
+// Maybe use BEGIN, END and TAG (=TYPE) for self-closing
+// Maybe push a single constant meaning 'tag-pair',
+//   with Snipe understanding how to match. (Bare + or - ?)
+// Then don't need 145 bracket types!

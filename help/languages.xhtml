@@ -31,14 +31,15 @@ on the current parsing context. On the other hand, the Snipe scanner:</p>
 <li>partitions the whole text into tokens, whether valid or not</li>
 <li>supports dynamic loading of language definitions</li>
 <li>supports incremental rescanning</li>
-<li>includes bracket matching, using a stack</li>
+<li>includes bracket matching</li>
 <li>aids indenting, semicolon insertion, and comment reformatting</li>
 </ul>
 
 <p>Languages for programming editors are often expressed using regular
 expressions. Languages for Snipe are instead expressed as string-matching state
 machine tables. These are easier to read and maintain, and only a little less
-compact.</p>
+compact. In addition, stack-based bracket matching is supported, which
+regular expressions can't handle.</p>
 
 <p>For example, the C language is described by the <code>c.txt</code> file in
 the directory <code>snipe/languages</code>. The commands <code>make
@@ -64,14 +65,13 @@ non-letter such as <code>#</code> or <code>/</code> is a comment line which is
 ignored, or a line used for testing. Otherwise, a line represents a
 string-matching rule.</p>
 
-<p>A rule has a base state name, a list of patterns to match, and a target
-state name, optionally followed by a tag, all separated by spaces. A state
-name is a lower case word, possibly including digits. A pattern is any
-sequence of non-space characters. A tag is an upper case word, possibly
-including digits. When the scanner is in the base state of a rule and one of
-the patterns appears next in the input, the scanner moves past the matched
-characters to include them in the token currently being scanned, and goes into
-the target state. For example:</p>
+<p>A rule has a base state name, a list of patterns to match, and a target state
+name, all separated by spaces. A state name is a lower case word, possibly
+including digits. A pattern is any sequence of non-space characters. When the
+scanner is in the base state of a rule and one of the patterns appears next in
+the input, the scanner moves past the matched characters to include them in the
+token currently being scanned, and goes into the target state. For
+example:</p>
 
 <pre>start " string
 </pre>
@@ -80,8 +80,10 @@ the target state. For example:</p>
 double quote character appears next in the input, the scanner moves past the
 character and goes into the <code>string</code> state.</p>
 
-<p>If a rule has a tag, the current token is ended, with the tag as its type.
-The tag should be one of those expected by Snipe. For example:</p>
+<p>A rule may have a tag after the target state. A tag is an upper case word. If
+a rule has a tag, the current token is ended, with the tag as its type. The tag
+should be one of those expected by Snipe, or an abbreviation for it. For
+example:</p>
 
 <pre>start == != start OP
 </pre>
@@ -90,6 +92,27 @@ The tag should be one of those expected by Snipe. For example:</p>
 operators <code>==</code> or <code>!=</code> appears next in the input, then
 the scanner moves past the operator, marks it as a token with type
 <code>OP</code>, and goes to the <code>start</code> state.</p>
+
+<p>A tag may be followed by a stack operation. This is a name beginning with a
+plus or minus sign, representing a type of bracket. A plus indicates a push
+operation. For example:</p>
+
+<pre>start ( start LEFT +round
+</pre>
+
+<p>When the bracket is tagged with <code>LEFT</code>, the scanner pushes the
+constant <code>round</code> onto its stack of currently open bracket types.
+Type names such as <code>round</code> can be chosen arbitrarily, and are
+treated as an enumerated type. A name beginning with a minus sign indicates a
+pop operation. For example:</p>
+
+<pre>start ) start RIGHT -round
+</pre>
+
+<p>For the rule to be obeyed, the close bracket must be next in the input, and
+also the top item on the stack must be the constant <code>round</code>. If so,
+the bracket is tagged <code>RIGHT</code> and the top item is popped off the
+stack.</p>
 
 <p>A pattern can consist of two dots with a character on either side. It
 represents a range of one-character patterns, e.g. <code>0..9</code> stands
@@ -114,10 +137,7 @@ to be matched without being included in the current token. For example:</p>
 if the next character in the source text is an open bracket, the current token
 is marked as a <code>FUNCTION</code> instead of the usual identifier type. That
 allows a function name to be highlighted differently when immediately followed
-by an open bracket, but the same approach can't be used to recognise <code>f
-(</code> because by the time the <code>(</code> is reached, it is too late to
-change the type of the token <code>f</code>. A lookahead pattern can also be a
-range:</p>
+by an open bracket. A lookahead pattern can also be a range:</p>
 
 <pre>dot \0..9 float
 </pre>
@@ -127,25 +147,37 @@ character, if a digit appears next in the source text, the scanner goes to the
 <code>float</code> state without moving past the digit.</p>
 
 <p>A lookahead pattern <code>\s</code> matches a space and <code>\n</code>
-matches a newline. When used in a rule with a tag, the effect is the same as for any other lookahead. For example:</p>
+matches a newline. For example:</p>
 
 <pre>id \s \n start ID
 </pre>
 
-<p>Here, while scanning an identifier, if a space is encountered next in the
-input, the identifier is given type <code>ID</code> and the scanner goes to the
-<code>start</code> state to deal with the space. The rule may have no tag. For
-example:</p>
+<p>Here, while scanning an identifier, if a space or newline is encountered next
+in the input, the identifier is given type <code>ID</code> and the scanner goes
+to the <code>start</code> state.</p>
+
+<p>Space and newlines cannot be included in tokens. Between tokens, spaces and
+newlines are automatically marked as separators and skipped.</p>
+
+<p>To avoid confusion, single-letter lookahead patterns other than
+<code>\s</code> or <code>\n</code> such as <code>\x</code> are treated as
+errors. A literal single letter <code>x</code> can be recognized as a lookahead
+using a range <code>\x..x</code>.</p>
+
+<p>If a lookahead pattern matches when the current token is empty, and the rule
+has a tag, the tag is ignored. For example:</p>
+
+<pre>start \s \n start SIGN
+</pre>
+
+<p>A rule containing <code>\s</code> or <code>\n</code> should normally have a
+tag, since spaces and newlines are always token separators, and so the current
+tag should be terminated. However, if a rule can only ever occur at the start
+of a token, no tag is needed, because it would always be ignored. For
+example, the above <code>SIGN</code> tag can be omitted:</p>
 
 <pre>start \s \n start
 </pre>
-
-<p>In this case, there is a side effect, which is that the space or newline is
-tagged as a separator and skipped before entering the target state. Neither a
-space nor a newline can be included in tokens. Other single-letter lookahead
-patterns such as <code>\x</code> are treated as errors. A literal single letter
-<code>x</code> can be recognized as a lookahead using a range
-<code>\x..x</code>.</p>
 
 <p>A pattern beginning with two backslashes such as <code>\\u</code> is a
 non-lookahead pattern matching a string such as <code>\u</code> starting with a
@@ -155,6 +187,19 @@ with a single backslash. A backslash anywhere else in a pattern stands for
 itself. A pattern <code>\</code> consisting of just a backslash is treated as
 an abbreviation for <code>\!..~ \s \n</code> matching any character as a
 lookahead.</p>
+
+<hr style="height:2px;background-color:red;"/>
+
+<p>TODO: (a) an attempt to tag an empty token is ignored (allows starter and
+continuer states) (can be implemented by doubling up a state).</p>
+
+<p>Given "note \s \n note NOTE", if the token is empty and tag ignored, need to
+skip space or newline.</p>
+
+<p>(b) a \s or \n is implicitly skipped following a tag as well as a non-tag
+(starter state). No tag only allowed in starter-only state, or use arbitrary
+tag, or allow \s \n not to be mentioned. (Can be implemented by adding one/two
+supplementary states.)</p>
 
 <h2>States</h2>
 
@@ -239,13 +284,12 @@ IDENTIFIER, FUNCTION, PROPERTY,    - kinds of identifier
 VALUE, QUOTE, DOCUMENT,            - literals
 BEGIN0...BEGIN7, END0...END7,      - block brackets
 LEFT0...LEFT7, RIGHT0...RIGHT7,    - inline brackets
-BEIN, END, LEFT, RIGHT,            - brackets not used in bracket matching
 NOTE, COMMENT,                     - one-line and multi-line comments
 OP, UNARY, SIGN, JOIN,             - operators and punctuation
 WRONG                              - malformed token
 </pre>
 
-<p>These can be shortened, e.g. <code>KEY</code>, <code>ID</code>, or even to
+<p>These can be shortened, e.g. <code>KEY</code>, <code>ID</code>, even to
 one letter, e.g. <code>V</code>, <code>B0</code>. The scanning conventions and
 the tags are designed to help with bracket matching, reformatting, syntax
 highlighting, indenting, semicolon insertion, and incremental rescanning as

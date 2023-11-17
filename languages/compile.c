@@ -14,38 +14,28 @@
 #include <ctype.h>
 #include <time.h>
 
-// TODO: get rid of WRONG. Consider QUOTE?
+// TODO: get rid of WRONG. Consider bracket matching for unclosed quotes.
 // TODO: ADD for added semicolon.
 
 // ---------- Tags -------------------------------------------------------------
-// These tags and their names must be kept the same as in other Snipe modules,
-// and kept to a maximum of 64 entries. For the first 26, the tag value is the
-// same as (ch-'A') where ch is the first letter. There are gaps for unused
-// letters. The tags GAP, NEWLINE, NONE can't be mentioned explicitly in
-// language definitions. The default if there is no tag is NONE meaning
-// continue the token.
+// These tags and their names must be kept the same as in other Snipe modules.
+// The first 26 are token types which can be used in language definition. GAP
+// and NEWLINE are used to tag spaces and newlines as separators, and NONE to
+// tag token characters after the first. The last three are stack operations
+// used during scanning.
 
 enum tag {
     A, BEGIN, COMMENT, DOCUMENT, END, FUNCTION, G, H, IDENTIFIER, JOIN, KEYWORD,
     LEFT, MARK, NOTE, OP, PROPERTY, QUOTE, RIGHT, SIGN, TYPE, UNARY, VALUE,
-    WRONG, X, Y, Z,
-    BEGIN0, END0, BEGIN1, END1, BEGIN2, END2, BEGIN3, END3,
-    BEGIN4, END4, BEGIN5, END5, BEGIN6, END6, BEGIN7, END7,
-    LEFT0, RIGHT0, LEFT1, RIGHT1, LEFT2, RIGHT2, LEFT3, RIGHT3,
-    LEFT4, RIGHT4, LEFT5, RIGHT5, LEFT6, RIGHT6, LEFT7, RIGHT7,
-    GAP, NEWLINE, NONE,
+    WRONG, X, Y, Z, GAP, NEWLINE, NONE, PUSH, POP, MISS
 };
 
 // The first character is used in tests.
-char *tagNames[64] = {
+char *tagNames[32] = {
     "?", "BEGIN", "COMMENT", "DOCUMENT", "END", "FUNCTION", "?", "?",
     "IDENTIFIER", "JOIN", "KEYWORD", "LEFT", "MARK", "NOTE", "OP", "PROPERTY",
     "QUOTE", "RIGHT", "SIGN", "TYPE", "UNARY", "VALUE", "WRONG", "?", "?", "?",
-    "BEGIN0", "END0", "BEGIN1", "END1", "BEGIN2", "END2", "BEGIN3", "END3",
-    "BEGIN4", "END4", "BEGIN5", "END5", "BEGIN6", "END6", "BEGIN7", "END7",
-    "LEFT0", "RIGHT0", "LEFT1", "RIGHT1","LEFT2", "RIGHT2", "LEFT3", "RIGHT3",
-    "LEFT4", "RIGHT4", "LEFT5", "RIGHT5", "LEFT6", "RIGHT6", "LEFT7", "RIGHT7",
-    "_", ".", " "
+    "_", ".", " ", "?", "?", "?"
 };
 
 void error(char *format, ...) {
@@ -66,34 +56,12 @@ bool prefix(char *s, char *t) {
 
 // Find a tag or abbreviation by name, other than NONE, GAP, NEWLINE.
 int findTag(char *name) {
-    for (int i = 0; i < 64; i++) {
+    for (int i = 0; i < 32; i++) {
         if (tagNames[i] == NULL) continue;
-        char *s = name, *t = tagNames[i];
-        int ns = strlen(s), nt = strlen(t);
-        if ('0' <= s[ns-1] && s[ns-1] <= '9') {
-            if (s[ns-1] != t[nt-1]) continue;
-            ns--;
-            nt--;
-        }
-        if (ns > nt) continue;
-        if (strncmp(s,t,ns) == 0) return i;
+        if (strcmp(name, tagNames[i]) == 0) return i;
+        if (prefix(name, tagNames[i])) return i;
     }
     return -1;
-}
-
-// Check if a tag is an open bracket.
-bool isOpen(int tag) {
-    return BEGIN0 <= tag && tag <= RIGHT7 && (tag & 0x01) == 0;
-}
-
-// Check if a tag is a close bracket.
-bool isOClose(int tag) {
-    return BEGIN0 <= tag && tag <= RIGHT7 && (tag & 0x01) != 0;
-}
-
-// Check if two bracket tags match.
-bool match(int open, int close) {
-    return (open + 1 == close);
 }
 
 // ---------- Arrays -----------------------------------------------------------
@@ -251,10 +219,10 @@ char *singles[128] = {
 struct pattern { char *original, *match; bool lookahead; int tag; int target; };
 typedef struct pattern pattern;
 
-// A state has a name, and an array of patterns. It has a flag to say whether it
+// A state has a name, and an array of patterns. It has flags to say whether it
 // occurs at or after the start of tokens. It has a visited flag used when
 // checking for infinite loops.
-struct state { char *name; pattern *patterns; bool starter, visited; };
+struct state { char *name; pattern *patterns; bool start, after, visited; };
 typedef struct state state;
 
 // Find an existing state by name, returning its index or -1.
@@ -272,7 +240,7 @@ void addState(state *states, char *name, int maxPatterns) {
     pattern *patterns = allocate(maxPatterns * sizeof(pattern));
     resize(states, n+1);
     states[n] = (state) {
-        .name=name, .patterns=patterns, .starter=false, .visited=false
+        .name=name, .patterns=patterns, .start=false, .visited=false
     };
 }
 
@@ -463,9 +431,10 @@ void sortAll(state *states) {
 }
 
 // ---------- Checks -----------------------------------------------------------
-// Check that a scanner handles every input unambiguously. Check that states are
-// unambiguously starters or continuers. Check that the scanner doesn't get
-// stuck in an infinite loop. Check that it doesn't produce empty tokens.
+// Check that a scanner handles every input unambiguously. Check whether states
+// occur at the start of tokens, or after the start, or both. Check that if
+// after, \s \n patterns have tags. Check that the scanner doesn't get stuck in
+// an infinite loop.
 
 // Check that a state has no duplicate patterns.
 void noDuplicates(state *base) {
@@ -498,16 +467,73 @@ void complete(state *base) {
     else error("state %s doesn't handle %c", base->name, ch);
 }
 
-// Set the starter flag for a state, if \s has no tag.
+// Set the start and after flags deduced from a state's patterns. Return true
+// if any changes were caused.
+bool deduce(state *base, state *states) {
+    bool changed = false;
+    for (int i = 0; i < size(base->patterns); i++) {
+        pattern *p = &base->patterns[i];
+        state *target = &states[p->target];
+        if (p->tag != NONE) {
+            if (! target->start) changed = true;
+            target->start = true;
+        }
+        if (p->tag == NONE && ! p->lookahead) {
+            if (! target->after) changed = true;
+            target->after = true;            
+        }
+        if (p->tag == NONE && p->lookahead && base->start) {
+            if (! target->start) changed = true;
+            target->start = true;
+        }
+        if (p->tag == NONE && p->lookahead && base->after) {
+            if (! target->after) changed = true;
+            target->after = true;
+        }
+    }
+    return changed;
+}
+
+// Set the start & after flags for all states. Continue until no changes.
+void deduceAll(state *states) {
+    states[0].start = true;
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (int i = 0; i < size(states); i++) {
+            changed = changed || deduce(&states[i], states); 
+        }
+    }
+}
+
+// Check, for a state with the after flag, that \s \n patterns have tags.
+void separates(state *base) {
+    if (! base->after) return;
+    for (int i = 0; i < size(base->patterns); i++) {
+        pattern *p = &base->patterns[i];
+        if (p->match[0] == ' ' || p->match[0] == '\n') {
+            if (p->tag == NONE) {
+                error(
+                    "state %s should terminate tokens on matching \\s or \\n",
+                    base->name
+                );
+            }
+        }
+    }
+}
+
+//==============================================================================
+
+// Set the start flag for a state, if \s has no tag.
 void classify(state *base) {
     for (int i = 0; i < size(base->patterns); i++) {
         pattern *p = &base->patterns[i];
         if (p->match[0] != ' ') continue;
-        base->starter = (p->tag == NONE);
+        base->start = (p->tag == NONE);
     }    
 }
 
-// Check that the target states reachable from a state have the right starter
+// Check that the target states reachable from a state have the right start
 // flag. Also check that the state can't create empty tokens.
 void look(state *base, state *states) {
     for (int i = 0; i < size(base->patterns); i++) {
@@ -515,14 +541,14 @@ void look(state *base, state *states) {
         state *target = &states[p->target];
         bool ok = true;
         if (p->tag != NONE) {
-            if (! target->starter) ok = false;
+            if (! target->start) ok = false;
         }
         else {
             if (! p->lookahead) {
-                if (target->starter) ok = false;
+                if (target->start) ok = false;
             }
             else {
-                if (target->starter != base->starter) ok = false;
+                if (target->start != base->start) ok = false;
             }
         }
         if (! ok) {
@@ -532,7 +558,7 @@ void look(state *base, state *states) {
                 p->original, base->name, target->name
             );
         }
-        if (base->starter && p->lookahead && p->tag != NONE) {
+        if (base->start && p->lookahead && p->tag != NONE) {
             error("state %s can create an empty token", base->name);
         }
     }
@@ -574,8 +600,10 @@ void checkAll(state *states) {
         complete(&states[i]);
         classify(&states[i]);
     }
+    deduceAll(states);
     for (int i = 0; i < size(states); i++) {
-        look(&states[i], states);
+//        look(&states[i], states);
+        separates(&states[i]);
         search(states, &states[i]);
     }
 }
@@ -594,30 +622,28 @@ void checkAll(state *states) {
 
 typedef unsigned char byte;
 
-// Use 0x7F to terminate a line, so that (ch - ' ') can be used as a column
-// index in the 96-column table.
-enum { EOL = 0x7F };
+// Flags added to the tag in an action. The LINK flag indicates that the action
+// is a link to the overflow area. The LOOK flag indicates a lookahead pattern.
+enum { LINK = 0x80, LOOK = 0x40 };
 
 // Fill in an action for a given pattern, as two bytes, one for the tag and one
-// for the target state. The top bit 0x80 of the tag byte is zero, to indicate
-// an action rather then a link. The top bit 0x80 of the target byte is one for
-// a for a lookahead action. For \s or \n with tag NONE, the tag is changed to
-// GAP or NEWLINE, and the lookahead bit is changed to zero.
+// for the target state. For \s or \n with tag NONE, the tag is changed to GAP
+// or NEWLINE, and the lookahead bit is changed to zero.
 void compileAction(byte *action, pattern *p) {
     int tag = p->tag;
     int target = p->target;
     bool look = p->lookahead;
     if (tag == NONE && p->match[0] == ' ') { tag = GAP; look = false; }
     if (tag == NONE && p->match[0] == '\n') { tag = NEWLINE; look = false; }
-    if (look) target += 0x80;
+    if (look) tag = LOOK | tag;
     action[0] = tag;
     action[1] = target; 
 }
 
 // When there is more than one pattern for a state starting with a character,
-// enter the given offset into the table in bigendian order with 0x80 set.
+// enter the given offset into the table in bigendian order with LINK flag set.
 void compileLink(byte *action, int offset) {
-    action[0] = ((offset >> 8) & 0xFF) + 0x80;
+    action[0] = LINK | ((offset >> 8) & 0x7F);
     action[1] = offset & 0xFF;
 }
 
@@ -682,48 +708,46 @@ void compile(state *states, byte *table) {
 // the states for names when tracing.
 int scan(byte *table, int st, char *in, byte *out, state *states, bool trace) {
     int n = strlen(in);
-    in[n] = EOL;
     for (int i = 0; i<=n; i++) out[i] = NONE;
     int at = 0, start = 0;
     while (at <= n) {
         char ch = in[at];
         if (trace) printf("%s ", states[st].name);
         int col = ch - ' ';
+        if (ch == '\0') col = 95;
         byte *action = &table[2 * (96 * st + col)];
-        bool immediate = (action[0] & 0x80) == 0;
-        int len;
-        if (immediate) len = 1;
-        else {
+        int len = 1;
+        if ((action[0] & LINK) != 0) {
             int offset = ((action[0] & 0x7F) << 8) + action[1];
             byte *p = table + offset;
-            while (true) {
+            bool match = false;
+            while (! match) {
+                match = true;
                 len = p[0];
-                int i;
-                for (i = 1; i < len; i++) {
-                    if (in[at + i] != p[i]) break;
+                for (int i = 1; i < len && match; i++) {
+                    if (in[at + i] != p[i]) match = false;
                 }
-                if (i == len) break;
+                if (match) break;
                 else p = p + len + 2;
             }
             action = p + len;
         }
-        bool lookahead = (action[1] & 0x80) != 0;
-        int tag = action[0] & 0x7F;
+        bool lookahead = (action[0] & LOOK) != 0;
+        int tag = action[0] & 0x3F;
         if (trace) {
             if (lookahead) printf("\\ ");
             if (in[at] == ' ') printf("SP");
-            else if (in[at] == EOL) printf("NL");
+            else if (in[at] == '\0') printf("NL");
             else for (int i = 0; i < len; i++) printf("%c", in[at+i]);
             printf(" %s\n", tagNames[tag]);
         }
         if (! lookahead) at = at + len;
-        if (tag != NONE) {
+        if (tag != NONE && start < at) {
             out[start] = tag;
             start = at;
         }
-        st = action[1] & 0x7F;
+        st = action[1];
     }
-    in[n] = '\0';
     return st;
 }
 
@@ -790,7 +814,12 @@ int main(int n, char *args[n]) {
     derangeAll(states);
     sortAll(states);
     checkAll(states);
+
 printf("#states %d\n", size(states));
+for (int i = 0; i < size(states); i++) {
+    printf("%s: %d %d\n", states[i].name, states[i].start, states[i].after);
+}
+
     byte *table = allocate(2*96*size(states) + 10000);
     resize(table, 2*96*size(states));
     compile(states, table);
