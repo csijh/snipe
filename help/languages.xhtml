@@ -93,9 +93,9 @@ operators <code>==</code> or <code>!=</code> appears next in the input, then
 the scanner moves past the operator, marks it as a token with type
 <code>OP</code>, and goes to the <code>start</code> state.</p>
 
-<p>A tag may be followed by a stack operation. This is a name beginning with a
-plus or minus sign, representing a type of bracket. A plus indicates a push
-operation. For example:</p>
+<p>A tag may be followed by a stack operation. This is a name preceded by a plus
+or minus sign (with no spaces), representing a type of bracket. A plus
+indicates a push operation. For example:</p>
 
 <pre>start ( start LEFT +round
 </pre>
@@ -103,15 +103,15 @@ operation. For example:</p>
 <p>When the bracket is tagged with <code>LEFT</code>, the scanner pushes the
 constant <code>round</code> onto its stack of currently open bracket types.
 Type names such as <code>round</code> can be chosen arbitrarily, and are
-treated as an enumerated type. A name beginning with a minus sign indicates a
-pop operation. For example:</p>
+treated like enumerated constants. A name beginning with a minus sign indicates
+a pop operation. For example:</p>
 
 <pre>start ) start RIGHT -round
 </pre>
 
 <p>For the rule to be obeyed, the close bracket must be next in the input, and
 also the top item on the stack must be the constant <code>round</code>. If so,
-the bracket is tagged <code>RIGHT</code> and the top item is popped off the
+the bracket is tagged <code>RIGHT</code> and the constant is popped off the
 stack.</p>
 
 <p>A pattern can consist of two dots with a character on either side. It
@@ -147,22 +147,20 @@ character, if a digit appears next in the source text, the scanner goes to the
 <code>float</code> state without moving past the digit.</p>
 
 <p>A lookahead pattern <code>\s</code> matches a space and <code>\n</code>
-matches a newline. For example:</p>
+matches a newline. To avoid confusion, single-letter lookahead patterns other
+than <code>\s</code> or <code>\n</code> such as <code>\x</code> are treated as
+errors. A literal single letter <code>x</code> can be recognized as a lookahead
+using a range <code>\x..x</code>. For example:</p>
 
 <pre>id \s \n start ID
 </pre>
 
 <p>Here, while scanning an identifier, if a space or newline is encountered next
 in the input, the identifier is given type <code>ID</code> and the scanner goes
-to the <code>start</code> state.</p>
-
-<p>Space and newlines cannot be included in tokens. Between tokens, spaces and
-newlines are automatically marked as separators and skipped.</p>
-
-<p>To avoid confusion, single-letter lookahead patterns other than
-<code>\s</code> or <code>\n</code> such as <code>\x</code> are treated as
-errors. A literal single letter <code>x</code> can be recognized as a lookahead
-using a range <code>\x..x</code>.</p>
+to the <code>start</code> state. Spaces and newlines cannot be included in
+tokens, but are handled automatically. Matching a <code>\s</code> or
+<code>\n</code> pattern has the side effect of marking the space or newline as
+a separator and moving past it.</p>
 
 <p>If a lookahead pattern matches when the current token is empty, and the rule
 has a tag, the tag is ignored. For example:</p>
@@ -171,10 +169,10 @@ has a tag, the tag is ignored. For example:</p>
 </pre>
 
 <p>A rule containing <code>\s</code> or <code>\n</code> should normally have a
-tag, since spaces and newlines are always token separators, and so the current
-tag should be terminated. However, if a rule can only ever occur at the start
-of a token, no tag is needed, because it would always be ignored. For
-example, the above <code>SIGN</code> tag can be omitted:</p>
+tag, to terminate any current token before a separator. However, if a rule like
+<code>start</code> can only ever occur at the start of a token, no tag is
+needed, because it would always be ignored. For example, the above
+<code>SIGN</code> tag can be omitted:</p>
 
 <pre>start \s \n start
 </pre>
@@ -188,28 +186,14 @@ itself. A pattern <code>\</code> consisting of just a backslash is treated as
 an abbreviation for <code>\!..~ \s \n</code> matching any character as a
 lookahead.</p>
 
-<hr style="height:2px;background-color:red;"/>
-
-<p>TODO: (a) an attempt to tag an empty token is ignored (allows starter and
-continuer states) (can be implemented by doubling up a state).</p>
-
-<p>Given "note \s \n note NOTE", if the token is empty and tag ignored, need to
-skip space or newline.</p>
-
-<p>(b) a \s or \n is implicitly skipped following a tag as well as a non-tag
-(starter state). No tag only allowed in starter-only state, or use arbitrary
-tag, or allow \s \n not to be mentioned. (Can be implemented by adding one/two
-supplementary states.)</p>
-
 <h2>States</h2>
 
 <p>A state is defined by the rules which have that state as their base state.
 The base state of the first rule in a language description is the starting
-state for the scanner when scanning of a source text begins.</p>
-
-<p>The rules defining a state can be in any order and need not necessarily be
-contiguous. If the input matches a pattern mentioned in any one of the rules
-for a state, that rule is applied. For example:</p>
+state for the scanner when scanning of a source text begins. The rules defining
+a state can be in any order and need not necessarily be contiguous. If the
+input matches a pattern mentioned in any one of the rules for a state, that
+rule is applied. For example:</p>
 
 <pre>start == != start OP
 start a..z A..Z id
@@ -228,7 +212,25 @@ start == != start OP
 
 <p>In this example, if there are two equal signs next in the input, the second
 rule applies, not the first. If there is only a single equal sign, the first
-rule applies. If a single character is matched directly by one pattern and as
+rule applies. A state should not have two pattern strings which are the same,
+even if one is a lookahead and the other is not. The only exception is when
+there are two or more possible bracket types that can be popped:</p>
+
+<pre>start } state1 END -block
+start } state2 RIGHT -struct
+</pre>
+
+<p>This might occur in a language where curly brackets are used both for blocks
+and for structures. It is desirable to tag them differently, because they
+affect semicolon insertion in different ways. An open curly bracket is tagged
+either as <code>BEGIN +block</code> or as <code>LEFT +struct</code>, in two
+different states in the language definition. When a close curly bracket is
+matched in the <code>start</code> state, the relevant one of the two rules
+shown matches, causing a jump to one of two different states. If neither rule
+matches, the default is that the brackets are marked as mismatched and the
+scanner stays in the <code>start</code> state.</p>
+
+<p>If a single character is matched directly by one pattern and as
 part of a range in another pattern, the direct pattern takes precedence:</p>
 
 <pre>string !..~ string
@@ -252,28 +254,15 @@ any other character appears, the second rule applies.</p>
 is an error.</p>
 
 <p>When a language description is processed, various checks are made to ensure
-that the scanner never fails, creates non-empty tokens, partitions the whole
-input into tokens and separators, handles all possible inputs, and terminates
-without getting stuck in a loop.</p>
+that the scanner never fails, partitions the whole input into tokens and
+separators, handles all possible inputs, and terminates without getting stuck
+in a loop.</p>
 
-<p>There is a check that every state has at least one rule, does not contain
-duplicate patterns, and handles all the single characters
-<code>!..~ \s \n</code> in some way. Where a lookahead pattern in a rule with
-no tag causes a jump between states without consuming input, there is a check
-that no infinite loop of jumps can occur.</p>
-
-<p>To prevent empty tokens, there is a check that each state is a starter or a
-continuer, i.e. always occurs at the start of tokens, or always occurs after
-the start. It is easy to tell the difference, because a starter state must not
-have a tag when <code>\s</code> or <code>\n</code> is matched, whereas a
-continuer state must have a tag when they are matched.</p>
-
-<p>If a rule has a tag, the target state must be a starter. If a rule has a
-non-lookahead pattern and no tag, the target state must be a continuer. If a
-rule has a lookahead pattern and no tag, the target state must be a starter or
-a continuer, according to whether the base tag is a starter or continuer.
-Finally, if a starter state has a rule containing a lookahead, the rule must
-not have a tag, because that would create an empty token.</p>
+<p>There is a check that every state handles all the single characters
+<code>!..~ \s \n</code> in some way. Where a lookahead pattern other than
+<code>\s</code> or <code>\n</code> in a rule with no tag causes a jump between
+states without making progress, there is a check that no infinite loop of jumps
+can occur.</p>
 
 <h2>Tags</h2>
 
@@ -282,43 +271,24 @@ not have a tag, because that would create an empty token.</p>
 <pre>KEYWORD, TYPE, MARK,               - kinds of keyword
 IDENTIFIER, FUNCTION, PROPERTY,    - kinds of identifier
 VALUE, QUOTE, DOCUMENT,            - literals
-BEGIN0...BEGIN7, END0...END7,      - block brackets
-LEFT0...LEFT7, RIGHT0...RIGHT7,    - inline brackets
+BEGIN, END, LEFT, RIGHT, TAG,      - block and inline brackets, and tags
 NOTE, COMMENT,                     - one-line and multi-line comments
 OP, UNARY, SIGN, JOIN,             - operators and punctuation
 WRONG                              - malformed token
 </pre>
 
-<p>These can be shortened, e.g. <code>KEY</code>, <code>ID</code>, even to
-one letter, e.g. <code>V</code>, <code>B0</code>. The scanning conventions and
-the tags are designed to help with bracket matching, reformatting, syntax
-highlighting, indenting, semicolon insertion, and incremental rescanning as
-follows.</p>
+<p>These can be shortened, e.g. <code>KEY</code>, <code>ID</code>, even to one
+letter, e.g. <code>V</code>, <code>B0</code>. The names <code>TYPE</code> and
+<code>TAG</code> are synonyms, on the assumption that tag-based languages like
+HTML and XML don't have types. The scanning conventions and the tags are
+designed to help with bracket matching, reformatting, syntax highlighting,
+indenting, semicolon insertion, and incremental rescanning as follows.</p>
 
 <p><b>Bracket matching:</b> A stack of open bracket tags is maintained by the
-scanner. For example:</p>
-
-<pre>start { start BEGIN0
-start } start END0
-</pre>
-
-<p>When an open curly bracket is matched by the first rule, <code>BEGIN0</code>
-is pushed on the stack. When a close curly bracket is matched by the second
-rule, the stack is popped. If the two tags do not match, the brackets can be
-marked as mismatched. This bracket matching can be used to control the actions
-of the state machine. For example:</p>
-
-<pre>start } state1 END0
-start } state2 RIGHT1
-</pre>
-
-<p>In this case, suppose an open curly bracket can be tagged either as
-<code>BEGIN0</code> or as <code>LEFT1</code>, in two different states in the
-language definition. When a close curly bracket is matched in the
-<code>start</code> state, the relevant one of the two rules shown matches,
-causing a jump to one of two different states. If neither rule matches, the
-brackets are marked as mismatched and the scanner stays in the
-<code>start</code> state.</p>
+scanner, and manipulated by the <code>+x</code> and <code>-x</code> push and
+pop conventions. If a pop succeeds, the two brackets are matched. If it fails,
+the brackets are marked as mismatched. This bracket matching can be used to
+control the actions of the state machine.</p>
 
 <p><b>Reformatting:</b> A multi-line comment or a sequence of one-line comments
 is reformatted by changing the line breaks so that the maximum number of tokens
@@ -334,10 +304,11 @@ according to a style definition.</p>
 
 <p><b>Indenting:</b> Snipe has a very simple and uniform rule for fully
 automatic indenting. The indent of a line is determined by the number of
-unmatched open brackets in the file, up to the end of the line. Lines belonging
-to multi-line constructs, i.e. lines starting with a <code>COMMENT</code> or
+unmatched open brackets in the source text. Lines belonging to multi-line
+constructs, i.e. lines starting with a <code>COMMENT</code> or
 <code>DOCUMENT</code> token, are not automatically indented, whereas lines
-starting with a <code>NOTE</code> or <code>QUOTE</code> are.</p>
+starting with a single-line equivalent, i.e. <code>NOTE</code> or
+<code>QUOTE</code>, are.</p>
 
 <p><b>Semicolon insertion:</b> Snipe inserts semicolons at the ends of lines
 where appropriate, using a simple and uniform rule. A line should have a final
@@ -348,13 +319,14 @@ immediately preceding token other than semicolon, as infix if it is both, and
 as nonfix if it is neither.</p>
 
 <p>Most token types are nonfix. The types <code>OP</code>, <code>SIGN</code> and
-<code>JOIN</code> (line joiner such as backslash) are infix. Signs
-(e.g. <code>...</code>) which are nonfix should be given a type such as
+<code>JOIN</code> (line joiner such as backslash) are infix. Signs(e.g. three
+dots <code>...</code>) which are nonfix should be given a type such as
 <code>MARK</code>. A <code>UNARY</code> operator (e.g. <code>++</code>) is
 regarded as nonfix, on the assumption that a newline never separates it from
 its operand. An operator such as minus which can be either prefix or infix
-should be given type <code>OP</code> so that it is treated as infix, on the
-assumption that a prefix version never appears at the start of a line.</p>
+should be given type <code>OP</code> and treated as infix, on the assumption
+that a prefix version of the operator rarely appears at the start of a
+line.</p>
 
 <p>Brackets of type <code>LEFT</code> or <code>RIGHT</code> are treated as
 prefix and postfix respectively. A <code>BEGIN</code> bracket is treated as
@@ -367,14 +339,15 @@ after it.</p>
 <p>Languages in the C family often use curly brackets <code>{}</code> both as
 block brackets and as structure brackets. In the latter case, a semicolon is
 required after the close bracket. To cope with this, the language definition
-should, at least approximately, tag the open bracket of a structure as
-<code>LEFT</code> rather than <code>BEGIN</code>, according to context. The
-bracket matcher can then adjust the tag of the end bracket to
-<code>RIGHT</code> to match, so that a semicolon is expected after it.</p>
+should attempt to tag the open bracket of a structure as <code>LEFT</code>
+rather than <code>BEGIN</code>, according to context, and use bracket matching
+to ensure that matching close bracket is tagged as <code>RIGHT</code> to match,
+so that a semicolon is expected after it.</p>
 
 <p><b>Incremental rescanning:</b> A line of source text can be rescanned in
 isolation, using only a recorded start state for the line, and the relevant
-stack of tags. The stack can be reconstructed where necessary.</p>
+stack of unmatched open brackets. The stack can be reconstructed where
+necessary.</p>
 
 <p>When a newline is matched with a <code>\n</code> lookahead pattern, the
 target state can be recorded as the starting state for the line following the
@@ -384,11 +357,8 @@ current scanning position, because of lookahead patterns. However, language
 rules cannot look ahead past a newline, so the start state for a line depends
 only on the previous lines.</p>
 
-<p>If the target state after rescanning a changed line is not the same as the
-recorded start state of the next line, the next line may have to be rescanned
-as well, and there are occasional cases where a lot of rescanning might be
-required. The fact that lines can be rescanned in isolation makes it easy to
-interleave rescanning with user actions, to avoid long pauses.</p>
+<p>The fact that lines can be rescanned in isolation makes it easy to interleave
+rescanning with user actions, to avoid long pauses.</p>
 
 <h2>Examples</h2>
 
@@ -413,77 +383,64 @@ into the <code>key</code> state. Then the <code>m</code> is matched, the
 scanner goes into the <code>id</code> state, and the token ends up being given
 the type <code>ID</code>.</p>
 
-<p>Where language constructs contain spaces or newlines and so need to be
-divided into mini-tokens, two states are often needed, one for the start of the
-mini-tokens, and one for continuing the mini-tokens. For example, one-line
-comments, say starting with <code>//</code> and continuing to the end of the
-line, can be handled with rules of the form:</p>
+<p>A language construct which contains spaces or newlines needs to be divided
+into mini-tokens. For example, one-line comments, say starting with
+<code>//</code> and continuing to the end of the line, can be handled with
+rules of the form:</p>
 
-<pre>start    //     note NOTE
+<pre>start    //     note
 
-note     !..~   note1
-note     \s     note
-note     \n     start
-
-note1    !..~   note1
-note1    \s     note NOTE
-note1    \n     start NOTE
+note     !..~   note
+note     \s     note NOTE
+note     \n     start NOTE
 </pre>
 
 <p>A comment line then consists of a sequence of tokens of type
-<code>NOTE</code>, separated by spaces.</p>
+<code>NOTE</code>, separated by spaces. This is one of the few situations where
+<code>\s</code> and <code>\n</code> need to be handled differently. Multi-line
+comments, say starting with <code>/*</code> and ending with <code>*/</code> and
+not nesting, can be handled by:</p>
 
-<p>Multi-line comments, say starting with <code>/*</code> and ending with
-<code>*/</code> and not nesting, can be handled by:</p>
+<pre>start      /*         comment
 
-<pre>start      /*         comment COMMENT
-
-comment    !..~       comment1
-comment    \s \n      comment
+comment    !..~       comment
+comment    \s \n      comment COMMENT
 comment    */         start COMMENT
-
-comment1   !..~       comment1
-comment1   \s \n      comment COMMENT
-comment1   */         start COMMENT
 </pre>
 
 <p>Languages in the C family often use curly brackets both for blocks and for
-structures. The semicolon insertion rules are different in the two cases, so it
-is desirable to tag them, say, as <code>BEGIN0</code>, <code>END0</code> in the
-first case, and as <code>LEFT0</code>, <code>RIGHT0</code> in the second case.
-One of the situations in which curly brackets are used for structures is;</p>
+structures. To tag them differently, the contexts in which structure brackets
+appear can be detected using bracket matching. For example, one context in C
+is the right hand sign of an assignment:</p>
 
-<pre>obj = (...) { ... }
+<pre>= (...) { ... }
 </pre>
 
 <p>The round brackets can, in principle, contain an arbitrarily complex type
 expression, with brackets of its own. By giving these round brackets different
 tags from the usual ones, the scanner can match them up and so detect the
-following structure brackets. Suppose ordinary round brackets are tagged
-<code>LEFT1</code>, <code>RIGHT1</code> and the ones surrounding a type
-expression are tagged <code>LEFT2</code>, <code>RIGHT2</code>. Then the above
-situation can be handled with rules of the form:</p>
+opening structure bracket which follows. For example, the relevant rules might
+be:</p>
 
-<pre>start { start BEGIN0
-start ( start LEFT1
+<pre>start { start BEGIN +block
+start ( start LEFT +expr
+start } start END -block
+start } start RIGHT -struct
+start ) start RIGHT -expr
+start ) eqtype RIGHT -type
 start = eq OP
 
-start } start END0
-start } start RIGHT0
-start ) start RIGHT1
-start ) eqtype RIGHT2
+eq ( start LEFT +type
 
-eq ( start LEFT2
-
-eqtype { LEFT0
+eqtype { LEFT +struct
 </pre>
 
-<p>After matching an equal sign, the <code>eq</code> state causes a
-<code>LEFT2</code> tag to be pushed on the stack. It then returns to the
+<p>After matching an equal sign, the <code>eq</code> state causes the
+<code>type</code> constant to be pushed on the stack. It then returns to the
 <code>start</code> state to process the type expression. When the
-<code>LEFT2</code> tag comes back to the top of the stack and the open round
-bracket is matched, the scanner jumps to the <code>eqtype</code> state to give
-the following curly bracket the alternative tag.</p>
+<code>type</code> constant comes back to the top of the stack and the open
+round bracket is matched, the scanner jumps to the <code>eqtype</code> state to
+handle the following open curly bracket.</p>
 
 <p>Some languages support template strings, with embedded substitution
 expressions. for example:</p>
@@ -494,68 +451,49 @@ expressions. for example:</p>
 <p>An expression between <code>${</code> and <code>}</code> can be arbitrarily
 complicated, including its own curly brackets and template delimiters, so these
 brackets need to be matched in order to detect the return to the parent
-template. By treating <code>${</code> and <code>}</code> as brackets rather
-than as part of the surrounding template string, that can be done with rules of
-the form:</p>
+template. That can be done with rules of the form:</p>
 
 <pre>start ` template
-start } template RIGHT3
+start } template DOC -insert
 
-template \${ template1 DOC
-template !..~ template1
-template \s \n template
-
-template1 ${ start LEFT3
-template1 !..~ template1
-template1 \s \n template DOC
+template  ${     start DOC +insert
+template  !..~   template
+template  \s \n  template DOC
+template  `      start DOC
 </pre>
 
-<p>The <code>template</code> state looks ahead for the opening <code>$
-{</code> and terminates the template string. The <code>template1</code> state
-tags <code>${</code> as <code>LEFT3</code> and goes to the <code>start</code>
-state to scan the inner expression. When the closing <code>}</code> is matched,
-the scanner returns to process more of the template string.</p>
+<p>The <code>template</code> state treats a fragment of the template string
+ending with <code>${</code> as a bracket, pushing the constant
+<code>insert</code> onto the stack. It then goes to the start state to handle
+whatever is within the brackets. The <code>start</code> state recognises the
+matching close curly bracket, marks it as a template fragment, and returns to
+the <code>template</code> state.</p>
 
-<p>Suppose a language description contained the following rules:</p>
+<p>A language definition for HTML needs to handle a large number of tags. It is
+tempting to write:</p>
 
-<pre>even \a..z odd
-odd  \a..z even
+<pre>start &lt;a> LEFT +a
+start &lt;b> LEFT +b
+...
 </pre>
 
-<p>An error would be reported, because this could result in an infinite loop
-when scanning. A more subtle example of an error might be:</p>
+<p>This could lead to a potentially serious inefficiency. The state machine
+effectively switches on the first character of patterns, but does a linear
+search through the patterns that start with the first character. So a better
+approach is:</p>
 
-<pre>start . dot
+<pre>start &lt; tag
 
-dot  0..9         number
-dot  \a..z \A..Z  prop SIGN
-dot  \            start SIGN
-
-prop  a..z A..Z 0..9  prop
-prop  \               start PROPERTY
+tag a> LEFT +a
+tag b> LEFT +b
+... 
 </pre>
 
-<p>The idea behind these rules is that if a dot is followed by an identifier,
-the identifier should be highlighted differently, as a <code>PROPERTY</code>.
-However, the <code>prop</code> state can occur at the start of a token because
-it follows the completion of a <code>SIGN</code> token in the second
-<code>dot</code> rule. On the other hand, it can also occur after the start of
-a token, because it is the target of its own first rule. This can be corrected
-by writing:</p>
+<p>There is a limit of around 255 on the number of bracket types, but HTML has
+less than 150, so all is well.</p>
 
-<pre>dot  0..9  number
-dot  \     prop SIGN
+<hr style="height:2px;background-color:red;"/>
 
-prop  a..z A..Z  prop1
-prop  \          start
-
-prop1  a..z A..Z 0..9  prop1
-prop1  \               start PROPERTY
-</pre>
-
-<p>Now, <code>prop</code> can only occur at the start of tokens and matches the
-first letter, and <code>prop1</code> can only occur after the start and
-recognizes the rest of the token.</p>
 
 <h2>Tests</h2>
 

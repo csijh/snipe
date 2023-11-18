@@ -100,46 +100,32 @@ dot     \      start OP
 
 // Character literals. Allow joiners
 
-start   '      char1
-char    !..~   char1
+start   '      char
+char    !..~   char
 char    \\     char2
-char    \s     char
+char    \s     char QUOTE
 char    '      start QUOTE
-char    \n     start
-
-// After '
-char1   !..~   char1
-char1   \\     char2
-char1   \s     char QUOTE
-char1   '      start QUOTE
-char1   \n     start WRONG
+char    \n     start WRONG
 
 // After '...\
 char2   \n \s  char3 QUOTE
-char2   ' \    char1
+char2   ' \    char
 
 // After '...\ with a newline next
 char3   \n \   char
 
 // String literals. Allow joiners
 
-start     "      string1
-string    !..~   string1
+start     "      string
+string    !..~   string
 string    \\     string2
-string    \s     string
+string    \s     string QUOTE
 string    "      start QUOTE
-string    \n     start
-
-// After "
-string1   !..~   string1
-string1   \\     string2
-string1   \s     string QUOTE
-string1   "      start QUOTE
-string1   \n     start WRONG
+string    \n     start WRONG
 
 // After "...\
 string2   \n \s  string3 QUOTE
-string2   " \    string1
+string2   " \    string
 
 // After "...\ with a newline next
 string3   \n \   string
@@ -147,30 +133,25 @@ string3   \n \   string
 // One-line comment. Allow joiner.
 
 start    //     note NOTE
-note     !..~   note1
+note     !..~   note
 note     \\     note2
-note     \s     note
-note     \n     start
-note1    !..~   note1
-note1    \\     note2
-note1    \s \n  note NOTE
+note     \s     note NOTE
+note     \n     start NOTE
+
 note2    \n \s  note3 NOTE
-note2    \      note1
+note2    \      note
 note3    \n \   note
 
 // Multi-line comment. Allow joiner.
 
 start      /*         comment COMMENT
-comment    !..~       comment1
+comment    !..~       comment
 comment    \\         comment2
-comment    \s \n      comment
+comment    \s \n      comment COMMENT
 comment    */         start COMMENT
-comment1   !..~       comment1
-comment1   \\         comment2
-comment1   \s \n      comment COMMENT
-comment1   */         start COMMENT
+
 comment2   \n \s      comment3 COMMENT
-comment2   \          comment1
+comment2   \          comment
 comment3   \n \       comment
 
 // Numbers. There is no attempt to detect malformed numbers.
@@ -196,20 +177,16 @@ hash      define elif else endif error if   start MARK
 hash      ifdef ifndef line pragma undef    start MARK
 hash      \                                 start
 
-include   <                                 filename0 QUOTE
+include   <                                 filename
 include   \s                                include
 include   \                                 start
 
-filename0  !..~                             filename1
-filename0  >                                start QUOTE
-filename0  \s                               filename0
-filename0  \n                               start
+filename  !..~                              filename
+filename  >                                 start QUOTE
+filename  \s                                filename QUOTE
+filename  \n                                start WRONG
 
-filename1  !..~                             filename1
-filename1  \> \s                            filename0 QUOTE
-filename1  \n                               start WRONG
-
-// Backslash newline is only supported between tokens (only needed for #define)
+// Backslash newline, e.g. in #define
 
 start \\ start JOIN
 
@@ -224,126 +201,126 @@ start     \s \n   start
 
 // A few tokens
 > (count+1)
-< LI    OVR.
+< LI----OVR.
 
 // An id can start with a type or keyword
 > char chart for form
-< T   _I    _K  _I   .
+< T--- I---- K-- I---.
 
 // Operators and signs of different fixities
 > ++!<<=...->
-< U UO  M  S .
+< U-UO--M--S-.
 
 // Structure and block brackets (left structure bracket marked L)
 > s={}; do{}
-< IOLES_K BE.
+< IOLES K-BE.
 
 // More left structure brackets
 > enum{  struct{  enum E{  struct S{
-< K   L__K     L__K   _IL__K     _IL.
+< K---L  K-----L  K--- IL  K----- IL.
 
 // More left structure brackets
 > ={ =(t){ =(struct t){
-< OL_OLIRL_OLK     _IRL.
+< OL OLIRL OLK----- IRL.
 
 // Dot as sign or as part of number
 > s.x 1.2 .2
-< IOI_V  _V .
+< IOI V-- V-.
 
 // Character literals, including unclosed at end of line
 > 'x' '\'' 'x
-< Q  _Q   _W .
+< Q-- Q--- W-.
 
 // Character literal, with joiner (unlikely)
 > '\
-< Q .
+< Q-.
 > x'
-< Q .
+< Q-.
 
 // String literals, including unclosed
 > "hello world" "a\"b" "unclosed
-< Q     _Q     _Q     _W        .
+< Q----- Q----- Q----- W--------.
 
 // String literal with joiner
 > "hello \
-< Q     _Q.
+< Q----- Q.
 > world"
-< Q     .
+< Q-----.
 
 // One line comment
 > n = 0; // note
-< I_O_VS_N _N   .
+< I O VS N- N---.
 
 // One line comment with joiner.
 > n = 0; // note \
-< I_O_VS_N _N   _N.
+< I O VS N- N--- N.
 > n = 1;
-< N_N_N .
+< N N N-.
 
 // Multi-line comment
 > n = 0; /* line one
-< I_O_VS_C _C   _C  .
+< I O VS C- C--- C--.
 > line two */ n = 1;
-< C   _C  _C _I_O_VS.
+< C--- C-- C- I O VS.
 
 // Numbers
 > 42 1.2e+3 4.5E-6 0x7f 0x7F 0x7c.def 0xa.bcp+d 0xaU 0xaL 
-< V _V     _V     _V   _V   _V       _V        _V   _V   .
+< V- V----- V----- V--- V--- V------- V-------- V--- V---.
 
 // Reserved words (there can be spaces between # and a reserved word)
 > #if # else #define #include
-< MM _M_M   _MM     _MM      .
+< MM- M M--- MM----- MM------.
 
 // Include filename
 > #include <f> #include <one two.ext>
-< MM      _QQQ_MM      _QQ  _Q      Q.
+< MM------ Q-- MM------ Q--- Q-------.
 
 // Joiner
 > #define f(x) \
-< MM     _ILIR_J.
+< MM----- ILIR J.
 
 // Illegal characters
 > $ @ `
-< W_W_W.
+< W W W.
 
 // Leading spaces
 >    x
-< ___I.
+<    I.
 
 // A few general tests
 
 > if (b) n = 1;
-< K _LIR_I_O_VS.
+< K- LIR I O VS.
 
 > if (b) { n = 1; }
-< K _LIR_B_I_O_VS_E.
+< K- LIR B I O VS E.
 
 > int n;
-< T  _IS.
+< T-- IS.
 
 > string s;
-< I     _IS.
+< I----- IS.
 
 > enum suit { Club, Diamond, Heart, Spade };
-< K   _I   _L_I   S_I      S_I    S_I    _ES.
+< K--- I--- L I---S I------S I----S I---- ES.
 
 > int ns[] = { 1, 2, 34};
-< T  _I LR_O_L_VS_VS_V ES.
+< T-- I-LR O L VS VS V-ES.
 
 > char *s = "a\nb\0c\04d";
-< T   _OI_O_Q            S.
+< T--- OI O Q------------S.
 
 > char *s = "\037e\038f\xffg";
-< T   _OI_O_Q                S.
+< T--- OI O Q----------------S.
 
 > s = "*/"//"; /* abc "*/"//";
-< I_O_Q   N N _N _N  _N       .
+< I O Q---N-N- N- N-- N-------.
 
 > /*  "*/"//"; /* abc "*/"//";
-< C __C  Q   S_C _C  _C  Q   S.
+< C-  C--Q---S C- C-- C--Q---S.
 
 > obj.x, obj->x, f(x)
-< I  OIS_I  S IS_ILIR.
+< I--OIS I--S-IS ILIR.
 
 > n = f   (x);
-< I_O_I___LIRS.
+< I O I   LIRS.
