@@ -271,18 +271,17 @@ can occur.</p>
 <pre>KEYWORD, TYPE, MARK,               - kinds of keyword
 IDENTIFIER, FUNCTION, PROPERTY,    - kinds of identifier
 VALUE, QUOTE, DOCUMENT,            - literals
-BEGIN, END, LEFT, RIGHT, TAG,      - block and inline brackets, and tags
+BEGIN, END, LEFT, RIGHT,           - block and inline brackets
 NOTE, COMMENT,                     - one-line and multi-line comments
-OP, UNARY, SIGN, JOIN,             - operators and punctuation
-WRONG                              - malformed token
+OPERATOR, UNARY, SIGN, JOIN,       - operators and punctuation
+WRONG                              - illegal character
 </pre>
 
-<p>These can be shortened, e.g. <code>KEY</code>, <code>ID</code>, even to one
-letter, e.g. <code>V</code>, <code>B0</code>. The names <code>TYPE</code> and
-<code>TAG</code> are synonyms, on the assumption that tag-based languages like
-HTML and XML don't have types. The scanning conventions and the tags are
-designed to help with bracket matching, reformatting, syntax highlighting,
-indenting, semicolon insertion, and incremental rescanning as follows.</p>
+<p>These can be shortened, e.g. <code>KEY</code>, <code>ID</code>,
+<code>OP</code>, and in fact even the first letter is sufficient. The scanning
+conventions and the tags are designed to help with bracket matching,
+reformatting, syntax highlighting, indenting, semicolon insertion, and
+incremental rescanning as follows.</p>
 
 <p><b>Bracket matching:</b> A stack of open bracket tags is maintained by the
 scanner, and manipulated by the <code>+x</code> and <code>-x</code> push and

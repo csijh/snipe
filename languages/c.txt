@@ -105,7 +105,7 @@ char    !..~   char
 char    \\     char2
 char    \s     char QUOTE
 char    '      start QUOTE
-char    \n     start WRONG
+char    \n     start QUOTE
 
 // After '...\
 char2   \n \s  char3 QUOTE
@@ -121,7 +121,7 @@ string    !..~   string
 string    \\     string2
 string    \s     string QUOTE
 string    "      start QUOTE
-string    \n     start WRONG
+string    \n     start QUOTE
 
 // After "...\
 string2   \n \s  string3 QUOTE
@@ -184,7 +184,7 @@ include   \                                 start
 filename  !..~                              filename
 filename  >                                 start QUOTE
 filename  \s                                filename QUOTE
-filename  \n                                start WRONG
+filename  \n                                start QUOTE
 
 // Backslash newline, e.g. in #define
 
