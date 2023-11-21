@@ -41,14 +41,17 @@ char *tagNames[64] = {
     "?", "?", "?", " ", ".", "-", "?", "?"
 };
 
-// Check if s is a prefix or equal to t.
+bool equal(char *s, char *t) {
+    return strcmp(s, t) == 0;
+}
+
 bool prefix(char *s, char *t) {
     if (strlen(s) > strlen(t)) return false;
     if (strncmp(s, t, strlen(s)) == 0) return true;
     return false;
 }
 
-// Find a user-visible tag or abbreviation by name.
+// Find a user-visible tag, or an abbreviation for it.
 int findTag(char *name) {
     for (int i = A; i <= Z; i++) {
         if (tagNames[i][0] == '?') continue;
@@ -112,6 +115,10 @@ void releasep(void *a) {
 // ---------- Lines ------------------------------------------------------------
 // Read in a language description as a character array, normalize, and split the
 // text into lines, in place.
+
+// TODO: avoid hidden prefix.
+struct lines { int length; char *a[]; };
+typedef struct lines Lines;
 
 // Read file as string, ignore I/O errors, add final newline if necessary.
 char *readFile(char *path) {
@@ -192,6 +199,8 @@ char **splitStrings(char *line) {
 }
 
 // Make a rule from an array of strings.
+// TODO: two pushes/pops or two tags is an error.
+// TODO: allow push/pop before tag.
 Rule *makeRule(int row, char **strings) {
     Rule *rule = malloc(sizeof(Rule));
     rule->row = row;
@@ -200,10 +209,13 @@ Rule *makeRule(int row, char **strings) {
     rule->base = strings[0];
     for (int i = 1; i < n; i++) strings[i-1] = strings[i];
     n = adjust(strings, -1);
-    char *t = strings[n-1], *t2 = strings[n-2];
+    char *t = strings[n-1];
     if (t[0] == '+' || t[0] == '-') {
-        if (! isupper(t2[0])) {
-            error("push or pop should follow tag on line %d", row);
+        int n = strlen(t);
+        for (int i = 1; i < n; t++) {
+            if (! isupper(t[i])) {
+                error("push or pop name should be upper case, on line %d", row);
+            }
         }
         rule->op = t;
         n = adjust(strings, -1);
@@ -322,8 +334,7 @@ int findCode(char *op, char **ops) {
     return sign * (n-1);
 }
 
-// Fill a pattern from a string, target, tag and stack op. Normalise a lookahead
-// string:
+// Fill a pattern from a string, target, tag and stack op. Normalise lookaheads:
 //    \\\... -> look \...
 //    \\...  -> \...
 //    \x     -> error except \s \n
@@ -385,22 +396,6 @@ void fillStates(Rule **rules, State **states) {
     char **ops = array(255, sizeof(char *));
     for (int i = 0; i < length(rules); i++) fillState(rules[i], states, ops);
     release(ops);
-}
-
-int main() {
-    char *text = readFile("c.txt");
-    normalize(text);
-    char **lines = splitLines(text);
-    Rule **rules = getRules(lines);
-    State **states = makeStates(rules);
-    fillStates(rules, states);
-
-    for (int i = 0; i < length(states); i++) releasep(states[i]->patterns);
-    releasep(states);
-    for (int i = 0; i < length(rules); i++) release(rules[i]->strings);
-    releasep(rules);
-    release(lines);
-    release(text);
 }
 
 // ---------- Ranges -----------------------------------------------------------
@@ -485,6 +480,23 @@ void derangeAll(State **states) {
         bool found = true;
         while (found) found = derangeState(states[i]);
     }
+}
+
+int main() {
+    char *text = readFile("c.txt");
+    normalize(text);
+    char **lines = splitLines(text);
+    Rule **rules = getRules(lines);
+    State **states = makeStates(rules);
+    fillStates(rules, states);
+    derangeAll(states);
+
+    for (int i = 0; i < length(states); i++) releasep(states[i]->patterns);
+    releasep(states);
+    for (int i = 0; i < length(rules); i++) release(rules[i]->strings);
+    releasep(rules);
+    release(lines);
+    release(text);
 }
 
 // ---------- Sorting ----------------------------------------------------------
@@ -687,6 +699,15 @@ void compileAction(byte *action, Pattern *p) {
 void compileLink(byte *action, int offset) {
     action[0] = LINK | ((offset >> 8) & 0x7F);
     action[1] = offset & 0xFF;
+}
+
+// Fill in a stack op. For example, "s body t T -body" (in HTML) becomes
+// [POP, body, 2, 0, T, t]. If the input is "b" but not "body" the [2, 0] is a
+// guaranteed mismatch to skip [T, t]. The POP action jumps to [T,t] if
+// successful, or past it if not. After a POP or a sequence of POPs for the
+// same pattern string, add a similar MISS op.
+void compileOp(byte *b, Pattern *p) {
+
 }
 
 /*

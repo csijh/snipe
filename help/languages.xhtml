@@ -22,12 +22,11 @@
 <!-- TODO C++, Java, Python, Haskell, HTML -->
 
 <p><mark>Snipe</mark> has a scanner, which is implemented as a string-matching
-state machine. It divides a source text into
-tokens, and gives each token a type. The result may be approximate, compared to
-a scanner in a compiler, especially if a language has token rules which depend
-on the current parsing context. On the other hand, the Snipe scanner:</p>
+state machine, with stack-based bracket matching. It divides a source text into
+tokens, and gives each token a type. It:</p>
 
 <ul>
+<li>may be approximate compared to a compiler</li>
 <li>partitions the whole text into tokens, whether valid or not</li>
 <li>supports dynamic loading of language definitions</li>
 <li>supports incremental rescanning</li>
@@ -36,10 +35,10 @@ on the current parsing context. On the other hand, the Snipe scanner:</p>
 </ul>
 
 <p>Languages for programming editors are often expressed using regular
-expressions. Languages for Snipe are instead expressed as string-matching state
-machine tables. These are easier to read and maintain, and only a little less
-compact. In addition, stack-based bracket matching is supported, which
-regular expressions can't handle.</p>
+expressions. Languages for Snipe are instead expressed as state machine tables.
+These are easier to read and maintain, and only a little less compact. In
+addition, stack-based bracket matching is supported, which regular expressions
+can't handle.</p>
 
 <p>For example, the C language is described by the <code>c.txt</code> file in
 the directory <code>snipe/languages</code>. The commands <code>make
@@ -93,38 +92,49 @@ operators <code>==</code> or <code>!=</code> appears next in the input, then
 the scanner moves past the operator, marks it as a token with type
 <code>OP</code>, and goes to the <code>start</code> state.</p>
 
-<p>A tag may be followed by a stack operation. This is a name preceded by a plus
-or minus sign (with no spaces), representing a type of bracket. A plus
-indicates a push operation. For example:</p>
+<p>A rule may have a stack operation as well as or instead of a tag. A stack
+operation is a tag name representing a type of bracket, preceded by a plus or
+minus sign (with no spaces). A plus indicates a push operation. For
+example:</p>
 
-<pre>start ( start LEFT +round
+<pre>start ( start LEFT +ROUND
 </pre>
 
-<p>When the bracket is tagged with <code>LEFT</code>, the scanner pushes the
-constant <code>round</code> onto its stack of currently open bracket types.
-Type names such as <code>round</code> can be chosen arbitrarily, and are
-treated like enumerated constants. A name beginning with a minus sign indicates
-a pop operation. For example:</p>
+<p>When the rule is obeyed, the scanner pushes the constant <code>ROUND</code>
+onto its stack of currently open bracket tags. This indicates that the current
+token (under construction or completed by the rule) is an open bracket of this
+type. Bracket tag names can be chosen arbitrarily, and are treated like
+enumerated constants. A name beginning with a minus sign indicates a pop
+operation. For example:</p>
 
-<pre>start ) start RIGHT -round
+<pre>start ) start RIGHT -ROUND
 </pre>
 
-<p>For the rule to be obeyed, the close bracket must be next in the input, and
-also the top item on the stack must be the constant <code>round</code>. If so,
-the bracket is tagged <code>RIGHT</code> and the constant is popped off the
-stack.</p>
+<p>For the rule to be obeyed, as well as the close bracket being next in the
+input, the top item on the stack must be the constant <code>ROUND</code>. If
+so, as well as the token being tagged <code>RIGHT</code>, the constant is
+popped off the stack. The two brackets can be marked as matching. The default,
+if there is no other rule that applies, is that the two brackets are marked as
+a mismatch. The close bracket is also marked as a mismatch if the stack is
+empty.</p>
 
-<p>A pattern can consist of two dots with a character on either side. It
-represents a range of one-character patterns, e.g. <code>0..9</code> stands
-for <code>0 1 2 3 4 5 6 7 8 9</code>. For example:</p>
+<p>A pattern can consist of two dots with a character on either side:</p>
 
 <pre>start 0..9 number
 </pre>
 
-<p>This rule says that if the scanner is in the <code>start</code> state, and
-a digit appears next in the input, the scanner matches the digit and goes into
-the <code>number</code> state. The pattern <code>!..~</code> can be used to
-match any character other than space or newline.</p>
+<p>The pattern represents a range of one-character patterns, so the rule is
+equivalent to:</p>
+
+<pre>start 0 1 2 3 4 5 6 7 8 9 number
+</pre>
+
+<p>If the scanner is in the <code>start</code> state, and a digit appears next
+in the input, the scanner matches the digit and goes into the
+<code>number</code> state.</p>
+
+<p>The pattern <code>!..~</code> can be used to match any character other than
+space or newline.</p>
 
 <p>A limited form of lookahead is provided. A pattern which starts with a
 single backslash <code>\</code> is a lookahead pattern. It indicates a string
@@ -216,19 +226,19 @@ rule applies. A state should not have two pattern strings which are the same,
 even if one is a lookahead and the other is not. The only exception is when
 there are two or more possible bracket types that can be popped:</p>
 
-<pre>start } state1 END -block
-start } state2 RIGHT -struct
+<pre>start } state1 END -BLOCK
+start } state2 RIGHT -STRUCT
 </pre>
 
 <p>This might occur in a language where curly brackets are used both for blocks
 and for structures. It is desirable to tag them differently, because they
-affect semicolon insertion in different ways. An open curly bracket is tagged
-either as <code>BEGIN +block</code> or as <code>LEFT +struct</code>, in two
-different states in the language definition. When a close curly bracket is
-matched in the <code>start</code> state, the relevant one of the two rules
-shown matches, causing a jump to one of two different states. If neither rule
-matches, the default is that the brackets are marked as mismatched and the
-scanner stays in the <code>start</code> state.</p>
+affect semicolon insertion in different ways. An open curly bracket must have
+been pushed on the stack either as <code>+BLOCK</code> or as
+<code>+STRUCT</code>, in two different places in the language definition. When
+a close curly bracket is matched in the <code>start</code> state, the relevant
+one of the two rules shown matches, causing a jump to one of two different
+states. If neither rule matches, the default is that the brackets are marked as
+mismatched and the scanner stays in the <code>start</code> state.</p>
 
 <p>If a single character is matched directly by one pattern and as
 part of a range in another pattern, the direct pattern takes precedence:</p>
@@ -284,7 +294,7 @@ reformatting, syntax highlighting, indenting, semicolon insertion, and
 incremental rescanning as follows.</p>
 
 <p><b>Bracket matching:</b> A stack of open bracket tags is maintained by the
-scanner, and manipulated by the <code>+x</code> and <code>-x</code> push and
+scanner, and manipulated by the <code>+X</code> and <code>-X</code> push and
 pop conventions. If a pop succeeds, the two brackets are matched. If it fails,
 the brackets are marked as mismatched. This bracket matching can be used to
 control the actions of the state machine.</p>
@@ -421,23 +431,23 @@ tags from the usual ones, the scanner can match them up and so detect the
 opening structure bracket which follows. For example, the relevant rules might
 be:</p>
 
-<pre>start { start BEGIN +block
-start ( start LEFT +expr
-start } start END -block
-start } start RIGHT -struct
-start ) start RIGHT -expr
-start ) eqtype RIGHT -type
+<pre>start { start BEGIN +BLOCK
+start ( start LEFT +EXPR
+start } start END -BLOCK
+start } start RIGHT -STRUCT
+start ) start RIGHT -EXPR
+start ) eqtype RIGHT -TYPE
 start = eq OP
 
-eq ( start LEFT +type
+eq ( start LEFT +TYPE
 
-eqtype { LEFT +struct
+eqtype { LEFT +STRUCT
 </pre>
 
 <p>After matching an equal sign, the <code>eq</code> state causes the
-<code>type</code> constant to be pushed on the stack. It then returns to the
+<code>TYPE</code> constant to be pushed on the stack. It then returns to the
 <code>start</code> state to process the type expression. When the
-<code>type</code> constant comes back to the top of the stack and the open
+<code>TYPE</code> constant comes back to the top of the stack and the open
 round bracket is matched, the scanner jumps to the <code>eqtype</code> state to
 handle the following open curly bracket.</p>
 
@@ -453,9 +463,9 @@ brackets need to be matched in order to detect the return to the parent
 template. That can be done with rules of the form:</p>
 
 <pre>start ` template
-start } template DOC -insert
+start } template DOC -INSERT
 
-template  ${     start DOC +insert
+template  ${     start DOC +INSERT
 template  !..~   template
 template  \s \n  template DOC
 template  `      start DOC
@@ -463,36 +473,41 @@ template  `      start DOC
 
 <p>The <code>template</code> state treats a fragment of the template string
 ending with <code>${</code> as a bracket, pushing the constant
-<code>insert</code> onto the stack. It then goes to the start state to handle
+<code>INSERT</code> onto the stack. It then goes to the start state to handle
 whatever is within the brackets. The <code>start</code> state recognises the
 matching close curly bracket, marks it as a template fragment, and returns to
-the <code>template</code> state.</p>
+the <code>template</code> state.</p >
 
-<p>A language definition for HTML needs to handle a large number of tags. It is
-tempting to write:</p>
+<p>In a language definition for a tag-based language like HTML, open and close
+tags should be treated as brackets, in order to match them up. It is tempting
+to write rules like this:</p>
 
-<pre>start &lt;a> LEFT +a
-start &lt;b> LEFT +b
+<pre>start &lt;a attributes LEFT +A
+start &lt;b attributes LEFT +B
+...
+start &lt;/a> start RIGHT -A
+start &lt;/b> start RIGHT -B
 ...
 </pre>
 
-<p>This could lead to a potentially serious inefficiency. The state machine
-effectively switches on the first character of patterns, but does a linear
-search through the patterns that start with the first character. So a better
-approach is:</p>
+<p>This is unnecessarily efficient if there is a large number of tag names. The
+state machine effectively switches on the first character of patterns, but does
+a linear search through the patterns that start with the same first character.
+So a better approach is:</p>
 
-<pre>start &lt; tag
+<pre>start &lt; open
+start &lt;/ close
 
-tag a> LEFT +a
-tag b> LEFT +b
-... 
+open a attributes LEFT +A
+open b attributes LEFT +B
+...
+close a> start RIGHT -A
+close b> start RIGHT -B
+...
 </pre>
 
 <p>There is a limit of around 255 on the number of bracket types, but HTML has
 less than 150, so all is well.</p>
-
-<hr style="height:2px;background-color:red;"/>
-
 
 <h2>Tests</h2>
 
@@ -502,13 +517,23 @@ represents a line of source text. An immediately following line starting with
 <code>&lt;</code> represents the output from the scanner. For example:</p>
 
 <pre>&gt; (count + 1)
-&lt; LI    _O_VR.
+&lt; LI---- O VR.
 </pre>
 
 <p>The output has the one-letter abbreviation for the type of each token, placed
-under its first character. A space is marked as an underline and a newline is
-marked as a dot. The scanner state after scanning the input line is used as the
-start state for the next test, which allows for extended examples.</p>
+under its first character. Characters of a token after the first are marked
+with a minus sign. A space is marked as a space, and a newline is marked as a
+dot. The scanner state after scanning the input line is used as the start state
+for the next test, which allows for extended examples.</p>
+
+<p>Bracket matching results in bracket tokens being marked with lower case
+letters if they are mismatched:</p>
+
+<pre>&gt; (count + 1]
+&lt; lI---- O Vr.
+</pre>
+
+<hr style="height:2px;background-color:red;"/>
 
 <h2>Specific languages</h2>
 
@@ -679,11 +704,15 @@ and delimiters. Some aims of the Snipe approach are to:</p>
 </ul>
 
 <p>If brackets don't match, there is an ambiguity about which brackets to mark
-as unmatched. For example, the sequence <code>(()</code> can be treated in
-either of these two ways:</p>
+as unmatched. For example, the sequence:</p>
 
-<pre class="match">(<b>(</b>)
-<b>(</b>()
+<pre>(...(...)
+</pre>
+
+<p>can be treated in either of these two ways:</p>
+
+<pre class="match">(...<b>(</b>...)
+<b>(</b>...(...)
 </pre>
 
 <p>In the first case, the outer brackets are matched and the inner one is
@@ -699,7 +728,7 @@ reopen files, and it could easily become counter-intuitive.</p>
 together with the user's current cursor position. Brackets are matched forwards
 from the start of the text up to the cursor, and backwards from the end of the
 text to the cursor. Surplus brackets on either side of the cursor are then
-matched up from outermost to innermost. Using three dots to mark the cursor
+matched up from outermost to innermost. Using <code>|</code> to mark the cursor
 position, the three brackets above are handled like this:</p>
 
 <style>
@@ -709,13 +738,11 @@ pre.match b { color: red; }
 pre.match u { color: green; text-decoration: none; }
 </style>
 
-<pre class="match">(<b>(</b><u>...</u>)
-<b>(</b><u>...</u>()
+<pre class="match">(...<b>(</b>.<u>|</u>.)
+<b>(</b>.<u>|</u>.(...)
 </pre>
 
-<p>In the first case, there are two surplus brackets before the cursor and one
-after, and the outermost two are matched. In the second case, there are no
-surplus brackets after the cursor, so the leftmost bracket is mismatched.</p>
+<p>In both cases, the surplus bracket closest to the cursor is mismatched.</p>
 
 <p>The situation is complicated by multiline comments. Let's suppose that they
 are delimited by <code>/*</code> and <code>*/</code> and that these don't nest,
@@ -731,8 +758,8 @@ as illegal inside comments (as <code>*/</code> already is) and, as with
 brackets, use both forward and backward matching. In addition, the effect of an
 unmatched comment delimiter only extends as far as the cursor. For example:</p>
 
-<pre class="match"><i>/*...<b>/*</b>...*/</i>...<b>*/</b>
-<b>/*</b>...<i>/*...<b>*/</b>...*/</i>
+<pre class="match">   <i>/*...<b>/*</b>...*/</i>...<b>*/</b>..<u>|</u>
+<u>|</u>..<b>/*</b>...<i>/*...<b>*/</b>...*/</i>
 </pre>
 
 <p>In the first case, the cursor is beyond the text fragment. The first and
@@ -751,14 +778,14 @@ need for correction is clearly indicated.</p>
 which an attempt is made to comment out some text which already contains a
 comment:</p>
 
-<pre class="match"><u>:</u>...<i>/*...*/</i>...
-<i><b>/*</b></i><u>:</u>...<i>/*...*/</i>...
-<i><b>/*</b>...</i><u>:</u><i>/*...*/</i>...
-<i>/*...<b>/*</b></i><u>:</u><i>...*/</i>...
-<i>/*...<b>/*</b>...</i><u>:</u><i>*/</i>...
-<i>/*...<b>/*</b>...</i><i>*/</i><u>:</u>...
-<i>/*...<b>/*</b>...</i><i>*/</i>...<u>:</u>
-<i>/*...<b>/*</b>...</i><i>*/</i>...<b>*/</b><u>:</u>
+<pre class="match"><u>|</u>..<i>/*...*/</i>...
+<i><b>/*</b></i><u>|</u>..<i>/*...*/</i>...
+<i><b>/*</b>...</i><u>|</u><i>/*...*/</i>...
+<i>/*...<b>/*</b></i><u>|</u><i>...*/</i>...
+<i>/*...<b>/*</b>...</i><u>|</u><i>*/</i>...
+<i>/*...<b>/*</b>...</i><i>*/</i><u>|</u>...
+<i>/*...<b>/*</b>...</i><i>*/</i>...<u>|</u>
+<i>/*...<b>/*</b>...</i><i>*/</i>...<b>*/</b><u>|</u>
 </pre>
 
 <p>At the first step, an opening delimiter is typed. At the second, the cursor
