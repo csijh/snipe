@@ -92,31 +92,47 @@ operators <code>==</code> or <code>!=</code> appears next in the input, then
 the scanner moves past the operator, marks it as a token with type
 <code>OP</code>, and goes to the <code>start</code> state.</p>
 
-<p>A rule may have a stack operation as well as or instead of a tag. A stack
-operation is a tag name representing a type of bracket, preceded by a plus or
-minus sign (with no spaces). A plus indicates a push operation. For
-example:</p>
+<p>A tag which represents a bracket may have a suffix to indicate a stack
+operation. The suffix consists of an optional digit from <code>0</code> to
+<code>3</code> followed by a plus or minus sign. A digit represents a variant,
+where a bracket can have more than one meaning, with default <code>0</code>. A
+plus sign indicates pushing an open bracket onto the stack, and a minus sign
+indicates matching a bracket popped from the stack with a corresponding close
+bracket. For example:</p>
 
-<pre>start ( start LEFT +ROUND
+<pre>start [ start LEFT1+
+
+start ( start LEFT2+
 </pre>
 
-<p>When the rule is obeyed, the scanner pushes the constant <code>ROUND</code>
-onto its stack of currently open bracket tags. This indicates that the current
-token (under construction or completed by the rule) is an open bracket of this
-type. Bracket tag names can be chosen arbitrarily, and are treated like
-enumerated constants. A name beginning with a minus sign indicates a pop
-operation. For example:</p>
+<p>When one of these rules is obeyed, the scanner pushes <code>LEFT1</code> or
+<code>LEFT2</code> onto the stack, representing an open square or round
+bracket. An example of a pop operation is:</p>
 
-<pre>start ) start RIGHT -ROUND
+<pre>start ] start RIGHT1-
 </pre>
 
-<p>For the rule to be obeyed, as well as the close bracket being next in the
-input, the top item on the stack must be the constant <code>ROUND</code>. If
-so, as well as the token being tagged <code>RIGHT</code>, the constant is
-popped off the stack. The two brackets can be marked as matching. The default,
-if there is no other rule that applies, is that the two brackets are marked as
-a mismatch. The close bracket is also marked as a mismatch if the stack is
-empty.</p>
+<p>For this rule to be obeyed, as well as the close bracket being next in the
+input, the top item on the stack must be <code>LEFT1</code>. If so, the stack
+is popped and the close bracket is tagged <code>RIGHT1</code>. The two brackets
+are marked as matching. The default, if there is no other rule that applies, is
+that the two brackets are marked as mismatching. The close bracket is also
+marked as a mismatch if the stack is empty.</p>
+
+<p>For a language such as HTML or XML which has named brackets, the names are
+automatically compared to determine a match. For example:</p>
+
+<pre>start &lt;html> start LEFT+
+</pre>
+
+<p>The close bracket can be handled with this rule:</p>
+
+<pre>start &lt;/html> start RIGHT-
+</pre>
+
+<p>For this rule to apply, the close bracket must be next in the input, the tag
+<code>LEFT0</code> must be at the top of the stack, and the open bracket must
+have the name <code>html</code>.</p>
 
 <p>A pattern can consist of two dots with a character on either side:</p>
 
@@ -187,14 +203,25 @@ needed, because it would always be ignored. For example, the above
 <pre>start \s \n start
 </pre>
 
+<p>If a lookahead pattern matches when the current token is empty, and the rule
+has a tag representing a pop operation, a corresponding open bracket is marked
+as mismatched. For example:</p>
+
+<pre>string \n start QUOTE-
+</pre>
+
+<p>Here, string quotes are being treated as brackets. If this rule is obeyed
+when all previous text on a line has been tagged as tokens, the opening string
+quote is marked as mismatched.</p>
+
 <p>A pattern beginning with two backslashes such as <code>\\u</code> is a
 non-lookahead pattern matching a string such as <code>\u</code> starting with a
 single backslash. A pattern beginning with three backslashes such as
 <code>\\\u</code> is a lookahead for a string such as <code>\u</code> starting
 with a single backslash. A backslash anywhere else in a pattern stands for
 itself. A pattern <code>\</code> consisting of just a backslash is treated as
-an abbreviation for <code>\!..~ \s \n</code> matching any character as a
-lookahead.</p>
+an abbreviation for a range, effectively <code>\n \s \!..~</code>, matching any
+character as a lookahead.</p>
 
 <h2>States</h2>
 
@@ -222,20 +249,22 @@ start == != start OP
 
 <p>In this example, if there are two equal signs next in the input, the second
 rule applies, not the first. If there is only a single equal sign, the first
-rule applies. A state should not have two pattern strings which are the same,
+rule applies.</p>
+
+<p>A state should not have two pattern strings which are the same,
 even if one is a lookahead and the other is not. The only exception is when
 there are two or more possible bracket types that can be popped:</p>
 
-<pre>start } state1 END -BLOCK
-start } state2 RIGHT -STRUCT
+<pre>start } state1 END-
+start } state2 RIGHT-
 </pre>
 
 <p>This might occur in a language where curly brackets are used both for blocks
 and for structures. It is desirable to tag them differently, because they
 affect semicolon insertion in different ways. An open curly bracket must have
-been pushed on the stack either as <code>+BLOCK</code> or as
-<code>+STRUCT</code>, in two different places in the language definition. When
-a close curly bracket is matched in the <code>start</code> state, the relevant
+been pushed on the stack either as <code>BEGIN+</code> or as
+<code>LEFT+</code>, in two different places in the language definition. When a
+close curly bracket is matched in the <code>start</code> state, the relevant
 one of the two rules shown matches, causing a jump to one of two different
 states. If neither rule matches, the default is that the brackets are marked as
 mismatched and the scanner stays in the <code>start</code> state.</p>
@@ -276,7 +305,7 @@ can occur.</p>
 
 <h2>Tags</h2>
 
-<p>These are the available tags:</p>
+<p>These are the available tags, and their intended meanings:</p>
 
 <pre>KEYWORD, TYPE, MARK,               - kinds of keyword
 IDENTIFIER, FUNCTION, PROPERTY,    - kinds of identifier
@@ -287,17 +316,20 @@ OPERATOR, UNARY, SIGN, JOIN,       - operators and punctuation
 WRONG                              - illegal character
 </pre>
 
-<p>These can be shortened, e.g. <code>KEY</code>, <code>ID</code>,
-<code>OP</code>, and in fact even the first letter is sufficient. The scanning
-conventions and the tags are designed to help with bracket matching,
-reformatting, syntax highlighting, indenting, semicolon insertion, and
-incremental rescanning as follows.</p>
+<p>These can be shortened to any abbreviation, e.g. <code>KEY</code>,
+<code>ID</code>, <code>OP</code>, and in fact even the first letter is
+sufficient. A stack operation suffix can be applied only to the tags
+<code>BEGIN</code>, <code>END</code>, <code>LEFT</code>, <code>RIGHT</code>,
+<code>QUOTE</code>, <code>DOCUMENT</code> and <code>COMMENT</code>. For
+<code>BEGIN</code> and <code>LEFT</code>, the sign can only be a plus, and for
+<code>END</code>, <code>RIGHT</code>, the sign can only be a minus.</p>
 
-<p><b>Bracket matching:</b> A stack of open bracket tags is maintained by the
-scanner, and manipulated by the <code>+X</code> and <code>-X</code> push and
-pop conventions. If a pop succeeds, the two brackets are matched. If it fails,
-the brackets are marked as mismatched. This bracket matching can be used to
-control the actions of the state machine.</p>
+<p>The scanning conventions and the tags are designed to help with syntax
+highlighting, reformatting, bracket matching, indenting, semicolon insertion,
+and incremental rescanning as follows.</p>
+
+<p><b>Syntax highlighting:</b> Each token type can be displayed differently,
+according to a style definition.</p>
 
 <p><b>Reformatting:</b> A multi-line comment or a sequence of one-line comments
 is reformatted by changing the line breaks so that the maximum number of tokens
@@ -308,8 +340,11 @@ space, and one-line comments with two or more spaces after the initial symbol,
 are not reformatted. The small tokens also help with word-based cursor
 movement.</p>
 
-<p><b>Syntax highlighting:</b> Each token type can be displayed differently,
-according to a style definition.</p>
+<p><b>Bracket matching:</b> A stack of open brackets is maintained by the
+scanner, and manipulated by the push and pop conventions. If a pop succeeds,
+the two brackets are matched. If it fails, the brackets are marked as
+mismatched. This bracket matching can also be used to control the actions of
+the state machine.</p>
 
 <p><b>Indenting:</b> Snipe has a very simple and uniform rule for fully
 automatic indenting. The indent of a line is determined by the number of
@@ -328,16 +363,16 @@ immediately preceding token other than semicolon, as infix if it is both, and
 as nonfix if it is neither.</p>
 
 <p>Most token types are nonfix. The types <code>OP</code>, <code>SIGN</code> and
-<code>JOIN</code> (line joiner such as backslash) are infix. Signs(e.g. three
+<code>JOIN</code> (line joiner such as backslash) are infix. Signs (e.g. three
 dots <code>...</code>) which are nonfix should be given a type such as
 <code>MARK</code>. A <code>UNARY</code> operator (e.g. <code>++</code>) is
-regarded as nonfix, on the assumption that a newline never separates it from
-its operand. An operator such as minus which can be either prefix or infix
+regarded as nonfix, on the assumption that a newline need never separate it
+from its operand. An operator such as minus which can be either prefix or infix
 should be given type <code>OP</code> and treated as infix, on the assumption
-that a prefix version of the operator rarely appears at the start of a
+that a prefix version of the operator is never essential at the start of a
 line.</p>
 
-<p>Brackets of type <code>LEFT</code> or <code>RIGHT</code> are treated as
+<p>Brackets of type <code>LEFT</code> and <code>RIGHT</code> are treated as
 prefix and postfix respectively. A <code>BEGIN</code> bracket is treated as
 infix rather than prefix, on the assumption that it is the start of a block
 which is attached to the end of a statement so shouldn't be preceded by a
@@ -348,15 +383,15 @@ after it.</p>
 <p>Languages in the C family often use curly brackets <code>{}</code> both as
 block brackets and as structure brackets. In the latter case, a semicolon is
 required after the close bracket. To cope with this, the language definition
-should attempt to tag the open bracket of a structure as <code>LEFT</code>
-rather than <code>BEGIN</code>, according to context, and use bracket matching
-to ensure that matching close bracket is tagged as <code>RIGHT</code> to match,
-so that a semicolon is expected after it.</p>
+can tag the open bracket of a structure as <code>LEFT</code> rather than
+<code>BEGIN</code>, according to context, and use bracket matching to ensure
+that the matching close bracket is tagged as <code>RIGHT</code> to match, so
+that a semicolon is expected after it.</p>
 
 <p><b>Incremental rescanning:</b> A line of source text can be rescanned in
 isolation, using only a recorded start state for the line, and the relevant
-stack of unmatched open brackets. The stack can be reconstructed where
-necessary.</p>
+stack of preceding unmatched open brackets. The stack can be maintained or
+reconstructed as necessary.</p>
 
 <p>When a newline is matched with a <code>\n</code> lookahead pattern, the
 target state can be recorded as the starting state for the line following the
@@ -383,6 +418,8 @@ key    \                  start KEY
 id     a..z A..Z 0..9     id
 id     \                  start ID
 </pre>
+
+<hr style="height:2px;background-color:red;"/>
 
 <p>Suppose the keyword <code>for</code> appears next in the input. The scanner
 goes to the <code>key</code> state which gives the token the type
