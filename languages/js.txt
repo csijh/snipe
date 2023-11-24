@@ -1,4 +1,25 @@
-// JavaScript language definition, based on the ES2023 standard
+// JavaScript language definition, based on the ES2023 standard.
+
+// There is an ambiguity between / used as a division operator and / as the
+// first character of a regular expression pattern such as /[a-z]+/.
+// The language standard disambiguates by parsing context. A simple
+// approximation is used here. When preceded by a prefix or infix token such as
+// an open bracket or operator, a regular expression pattern is expected,
+// otherwise a division operator is expected. So, in rare cases such as after a
+// close bracket or certain keywords, a regular expression pattern needs to be
+// bracketed to be recognised correctly.
+
+// JavaScript has its own semicolon insertion rules, so a user may or may not
+// want to enable semicolon insertion based on these rules. In any case,
+// these rules do not try to distinguish curly brackets used for structures,
+// so no semicolon is inserted after  obj = { x:1 }  and JavaScript's own
+// rules are relied on in that case.
+
+// JavaScript has a few extra conventions which come into play when it is
+// embedded in a script element in an HTML page. Those conventions are not
+// covered here.
+
+// -----------------------------------------------------------------------------
 
 // At the start of a file only, recognise a hashbang comment. To distinguish
 // between / as divison and / as start of regex, check for regex at the start

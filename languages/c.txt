@@ -1,5 +1,12 @@
 // C language definition, based on the C11 standard.
 
+// It is assumed that there are no digraphs or trigraphs (or that they are
+// handled by some form of preprocessing). Line joiners (i.e. backslash before
+// newline) are assumed never to occur in pathological situations such as in
+// the middle of keywords.
+
+// -----------------------------------------------------------------------------
+
 // Keywords which are types or related to types. Include bool from <stdbool.h>.
 // The type state checks for added characters which make the token an id.
 
