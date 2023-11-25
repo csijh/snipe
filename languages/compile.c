@@ -13,50 +13,54 @@
 #include <ctype.h>
 #include <time.h>
 
-// TODO: ban X+, X- after lookahead pattern (or ensure non-empty token)
-// TODO Remove comment and quote brackets. Just scan forward normally.
-// TODO remove COMMENTED, DOCUMENTED. Leave BAD.
+// TODO: maybe QUOTE+ QUOTE- with \n QUOTE- doing permanent mismatch and nothing
+// TODO: double up every state (no empty tokens, explicit sp nl handling, eol)
+
 
 // ---------- types -------------------------------------------------------------
-// These types and their names must be kept the same as in other Snipe modules. A
-// type is used to mark a text character, to represent the result of scanning.
-// NONE is the default when there is no explicit type, and marks token
-// characters after the first. GAP and NEWLINE are used internally to mark a
-// space or newline as a separator. For bracket types, the version with no
-// suffix is used when when there is no request to match a bracket, or after
-// matching a bracket within a line. The versions with a suffix are for longer
-// distance matching. BAD is a flag which can be added and removed by bracket
-// matching. WRONG automatically has BAD added.
+// These types and their names must be kept the same as in other Snipe modules.
+// A type is used to mark a text character, to represent the result of
+// scanning. The bracket types come in matching pairs, with a B or E suffix.
+// A few types and flags are used internally:
+//   NONE (no explicit type) marks token characters after the first.
+//   GAP and NEWLINE mark a space or newline as a separator.
+//   MISS is used as a close bracket which forces a mismatch.
+//   COMMENTED and BAD are flags which can be added and removed.
+// X+COMMENTED -> NOTE, and X+BAD -> WRONG, for display.
 
 enum type {
-    NONE, GAP, NEWLINE, BEGIN, COMMENT, DOCUMENT, END, FUNCTION, IDENTIFIER,
-    JOIN, KEYWORD, LEFT, MARK, NOTE, OPERATOR, PROPERTY, QUOTE, RIGHT, SIGN,
-    TYPE, UNARY, VALUE, WRONG,
-    BEGIN0,   BEGIN1,   BEGIN2,   BEGIN3,   BEGIN4,
-    LEFT0,    LEFT1,    LEFT2,    LEFT3,    LEFT4,
-    END0,     END1,     END2,     END3,     END4,
-    RIGHT0,   RIGHT1,   RIGHT2,   RIGHT3,   RIGHT4,
-    BAD = 64,
+    NONE, GAP, NEWLINE, MISS, ALTERNATIVE, DECLARATION, FUNCTION,
+    IDENTIFIER, JOIN, KEYWORD, LONG, MARK, NOTE, OPERATOR, PROPERTY, QUOTE,
+    TAG, UNARY, VALUE, WRONG,
+
+    QUOTEB, LONGB, NOTEB, COMMENTB, COMMENTNB, TAGB, ROUNDB, ROUND2B,
+    SQUAREB, SQUARE2B, GROUPB, GROUP2B, BLOCKB, BLOCK2B,
+
+    QUOTEE, LONGE, NOTEE, COMMENTE, COMMENTNE, TAGE, ROUNDE, ROUND2E,
+    SQUAREE, SQUARE2E, GROUPE, GROUP2E, BLOCKE, BLOCK2E,
+
+    COMMENTED = 64, BAD = 128,
 };
 
-// The full names of the types, with first character used in tests.
+// The full names of the types. The first character is used in tests.
 char *typeNames[64] = {
-    " ", ".", "-", "BEGIN", "COMMENT", "DOCUMENT", "END", "FUNCTION",
-    "IDENTIFIER", "JOIN", "KEYWORD", "LEFT", "MARK", "NOTE", "OPERATOR",
-    "PROPERTY", "QUOTE", "RIGHT", "SIGN", "TYPE", "UNARY", "VALUE", "WRONG",
+    " ", ".", "-", "?", "Alternative", "Declaration", "Function",
+    "Identifier", "Join", "Keyword", "Long", "Mark", "Note", "Operator",
+    "Property", "Quote", "Tag", "Unary", "Value", "Wrong",
 
-    "BEGIN0", "BEGIN1", "BEGIN2", "BEGIN3", "BEGIN4",
-    "LEFT0", "LEFT1", "LEFT2", "LEFT3", "LEFT4",
-    "END0", "END1", "END2", "END3", "END4",
-    "RIGHT0", "RIGHT1", "RIGHT2", "RIGHT3", "RIGHT4"
+    "QuoteB", "LongB", "NoteB", "CommentB", "CommentNB", "TagB", "RoundB",
+    "Round2B", "SquareB", "Square2B", "GroupB", "Group2B", "BlockB", "Block2B",
+
+    "QuoteE", "LongE", "NoteE", "CommentE", "CommentNE", "TagE", "RoundE",
+    "Round2E", "SquareE", "Square2E", "GroupE", "Group2E", "BlockE", "Block2E",
 };
 
-bool pushtype(int type) {
-    return BEGIN0 <= type && type <= LEFT4;
+bool pushType(int type) {
+    return QUOTEB <= type && type <= BLOCK2B;
 }
 
-bool poptype(int type) {
-    return END0 <= type && type <= RIGHT4;
+bool popType(int type) {
+    return QUOTEE <= type && type <= BLOCK2E;
 }
 
 bool equal(char *s, char *t) {
@@ -79,61 +83,17 @@ void error(char *format, ...) {
     exit(1);
 }
 
-// Convert a base type, with a variant and sign suffix, into an operation type.
-int optype(int type, int variant, int sign) {
-    if (sign > 0) {
-        switch (type) {
-        case BEGIN: type = BEGIN0 + variant; break;
-        case END: error("END should have - sign"); break;
-        case LEFT: type = LEFT0 + variant; break;
-        case RIGHT: error("RIGHT should have - sign"); break;
-        case QUOTE: type = QUOTE0L + variant; break;
-        case COMMENT: type = COMMENT0L + variant; break;
-        case DOCUMENT: type = DOCUMENT0L + variant; break;
-        default: error("type %s should not have + or - sign", typeNames[type]);
-        }
-    }
-    if (sign < 0) {
-        switch (type) {
-        case BEGIN: error("BEGIN should have + sign"); break;
-        case END: type = END0 + variant; break;
-        case LEFT: error("LEFT should have + sign"); break;
-        case RIGHT: type = RIGHT0 + variant; break;
-        case QUOTE: type = QUOTE0R + variant; break;
-        case COMMENT: type = COMMENT0R + variant; break;
-        case DOCUMENT: type = DOCUMENT0R + variant; break;
-        default: error("type %s should not have + or - sign", typeNames[type]);
-        }
-    }
-    return type;
-}
-
-// Convert a string to a type. Handle suffixes and abbreviations and WRONG.
+// Convert a string to a type. Handle suffixes and abbreviations.
 int findtype(char *s, int row) {
     if (s == NULL) return NONE;
-    char name[16];
-    strcpy(name, s);
-    int sign = 0, variant = 0, type = -1;
-    int n = strlen(name);
-    if ('0' <= name[n-1] && name[n-1] <= '3') {
-        error("type %s on line %d has digit suffix without sign", s, row);
+    for (int i = ALTERNATIVE; i <= BLOCK2E; i++) {
+        char *name = typeNames[i];
+        if (strcmp(s, name) == 0) return i;
+        if (! islower(name[strlen(name)-1])) continue;
+        if (prefix(s, name)) return i;
     }
-    if (name[n-1] == '+' || name[n-1] == '-') {
-        if (name[n-1] == '+') sign = +1;
-        else if (name[n-1] == '-') sign = -1;
-        name[--n] = '\0';
-        if ('0' <= name[n-1] && name[n-1] <= '3') {
-            variant = name[n-1] - '0';
-            name[--n] = '\0';
-        }
-    }
-    for (int i = BEGIN; i <= WRONG; i++) {
-        if (prefix(name, typeNames[i])) type = i;
-    }
-    if (type < 0) error ("unrecognised type %s on line %d", s, row);
-    type = optype(type, variant, sign);
-    if (type == WRONG) type += BAD;
-    return type;
+    error("unknown type %s on line %d", s, row);
+    return -1;
 }
 
 // ---------- Arrays ------------------------------------------------------------
@@ -307,8 +267,13 @@ typedef struct pattern Pattern;
 
 // A state has a name, and an array of patterns. It has flags to say whether it
 // occurs at or after the start of tokens. It has a visited flag used when
-// checking for infinite loops.
-struct state { char *name; Pattern **patterns; bool start, after, visited; };
+// checking for infinite loops. It has a partner state if it is one of a pair
+// s', s" resulting from splitting s with both start and after flags set.
+struct state {
+    char *name; Pattern **patterns;
+    bool start, after, visited;
+    int partner;
+};
 typedef struct state State;
 
 // Single character strings covering \n \s !..~ for expanding ranges etc.
@@ -336,8 +301,9 @@ void addState(State **states, char *name, int maxPatterns) {
     int n = adjust(states, +1);
     Pattern **ps = arrayP(maxPatterns, sizeof(Pattern));
     *states[n] = (State) {
-        .name=name, .patterns=ps,
-        .start=false, .after=false, .visited=false
+        .name = name, .patterns = ps,
+        .start = false, .after = false, .visited = false,
+        .partner = -1
     };
 }
 
@@ -416,18 +382,63 @@ void fillStates(Rule **rules, State **states) {
     }
 }
 
-// Print out a state in original form, as lots of one-pattern rules.
+// Print a state name. When s has been split into s' and s", add the suffix.
+void printName(State *s) {
+    char *suffix = "";
+    if (s->partner >= 0 && s->start) suffix = "'";
+    if (s->partner >= 0 && s->after) suffix = "\"";
+    printf("%s%s", s->name, suffix);
+}
+
+// Print a pattern string with a space on either side. Convert back to the
+// original format, with backslash for lookahead, and double backslash for
+// explicit backslash. For a non-lookahead pattern for space or newline, which
+// isn't legal on the original format, just print SP or NL.
+void printPattern(Pattern *p) {
+    printf(" ");
+    if (p->look) printf("\\");
+    if (p->string[0] == '\\') printf("\\");
+    if (! p->look && p->string[0] == '\n') printf("NL");
+    else if (p->string[0] == '\n') printf("n");
+    else if (! p->look && p->string[0] == ' ') printf("SP");
+    else if (p->string[0] == ' ') printf("s");
+    else printf("%s", p->string);
+    printf(" ");
+}
+
+// Print out a state as lots of one-pattern rules. Compress one-character
+// patterns into ranges where possible.
 void printState(State *state, State **states) {
+    char range[5] = "?..?";
+    bool combined = false;
     for (int i = 0; i < length(state->patterns); i++) {
+        Pattern **ps = state->patterns;
         Pattern *p = state->patterns[i];
-        printf("%s ", state->name);
-        if (p->look) printf("\\");
-        if (p->string[0] == '\\') printf("\\");
-        if (p->string[0] == '\n') printf("n");
-        else if (p->string[0] == ' ') printf("s");
-        else printf("%s", p->string);
-        printf(" %s", states[p->target]->name);
-        if (p->type != NONE) printf(" %s", typeNames[p->type & 0x1F]);
+        bool combineWithNext = true;
+        if (i == length(state->patterns) - 1) combineWithNext = false;
+        else if (strlen(p->string) != 1) combineWithNext = false;
+        else if (p->string[0] == ' ') combineWithNext = false;
+        else if (p->string[0] == '\n') combineWithNext = false;
+        else if (strlen(ps[i+1]->string) != 1) combineWithNext = false;
+        else if (ps[i+1]->string[0] == ' ') combineWithNext = false;
+        else if (ps[i+1]->string[0] == '\n') combineWithNext = false;
+        else if (p->look != ps[i+1]->look) combineWithNext = false;
+        else if (p->target != ps[i+1]->target) combineWithNext = false;
+        else if (p->type != ps[i+1]->type) combineWithNext = false;
+        if (combineWithNext) {
+            if (! combined) range[0] = p->string[0];
+            combined = true;
+            continue;
+        }
+        printName(state);
+        if (combined) {
+            range[3] = p->string[0];
+            printf(" %s ", range);
+            combined = false;
+        }
+        else printPattern(p);
+        printName(states[p->target]);
+        if (p->type != NONE) printf(" %s", typeNames[p->type]);
         printf("\n");
     }
 }
@@ -561,7 +572,9 @@ void noDuplicates(State *base) {
             Pattern *q = list[j];
             char *t = q->string;
             if (strcmp(s,t) != 0) continue;
-            if (poptype(p->type) && poptype(q->type) && p->type != q->type) continue;
+            if (popType(p->type) && popType(q->type) && p->type != q->type) {
+                continue;
+            }
             error("state %s has pattern for %s twice", base->name, s);
         }
     }
@@ -582,6 +595,16 @@ void complete(State *base) {
     if (ch == ' ') error("state %s doesn't handle \\s", base->name);
     else if (ch == '\n') error("state %s doesn't handle \\n", base->name);
     else error("state %s doesn't handle %c", base->name, ch);
+}
+
+// Check that bracket types are not associated with lookaheads.
+void checkBrackets(State *base) {
+    for (int i = 0; i < length(base->patterns); i++) {
+        Pattern *p = base->patterns[i];
+        if (! p->look) continue;
+        if (! pushType(p->type) && ! popType(p->type)) continue;
+        error("bracket type with lookahead on line %d", p->row);
+    }
 }
 
 // Set the start and after flags deduced from a state's patterns. Return true
@@ -674,6 +697,7 @@ void checkAll(State **states) {
     for (int i = 0; i < length(states); i++) {
         noDuplicates(states[i]);
         complete(states[i]);
+        checkBrackets(states[i]);
     }
     deduceAll(states);
     for (int i = 0; i < length(states); i++) {
@@ -682,25 +706,83 @@ void checkAll(State **states) {
     }
 }
 
-int main() {
-    char *text = readFile("c.txt");
-    normalize(text);
-    char **lines = splitLines(text);
-    Rule **rules = getRules(lines);
-    State **states = makeStates(rules);
-    fillStates(rules, states);
-    derangeAll(states);
-    sortAll(states);
-//    printState(&states->a[0], states);
-    checkAll(states);
+// ---------- Transforms -------------------------------------------------------
+// Transform the rules before compiling. For each state s which has both the
+// start and after flags set, convert it into two states, s' and s" where s
+// only occurs at the start of tokens, and s' occurs only after the start. This
+// helps to solve several problems, avoiding having to make special cases of
+// any of them in the scanner itself.
 
+// If a state has both start and after set, create a new partner state with the
+// same name. If the name is s, the pair can be printed as s' and s". Copy the
+// patterns to the partner state, set one flag in each, and set the partner
+// fields to refer to each other.
+void splitState(State **states, int s) {
+    State *base = states[s];
+    if (! base->start || ! base->after) return;
+    int partner = length(states);
+    addState(states, base->name, length(base->patterns));
+    State *other = states[partner];
+    adjust(other->patterns, length(base->patterns));
+    for (int i = 0; i < length(base->patterns); i++) {
+        *other->patterns[i] = *base->patterns[i];
+    }
+    base->after = false;
+    other->after = true;
+    base->partner = partner;
+    other->partner = s;
+}
 
-    for (int i = 0; i < length(states); i++) release(states[i]->patterns);
-    release(states);
-    for (int i = 0; i < length(rules); i++) release(rules[i]->strings);
-    release(rules);
-    release(lines);
-    release(text);
+// Set the target t of every pattern in a state to t' or t", as appropriate. For
+// a \s or \n rule in an s", change the target to s' so that s" deals with the
+// final token before the separator, and s' deals with the separator.
+void retarget(State **states, int i) {
+    State *s = states[i];
+    for (int i = 0; i < length(s->patterns); i++) {
+        Pattern *p = s->patterns[i];
+        State *t = states[p->target];
+        if (s->partner >= 0 && s->after) {
+            if (p->string[0] == ' ' || p->string[0] == '\n') {
+                p->target = s->partner;
+                continue;
+            }
+        }
+        bool change = false;
+        if (p->type != NONE && ! t->start) change = true;
+        if (p->type == NONE && ! p->look && ! t->after) change = true;
+        if (p->type == NONE && p->look && t->start != s->start) change = true;
+        if (change) p->target = t->partner;
+    }
+}
+
+// In a state with start flag set, convert \s and \n patterns into non-lookahead
+// SP, NL patterns. Change the corresponding type on \n from QUOTE or NOTE to
+// NOTEE, and everything else to NONE. That ensures that unclosed quotes get
+// treated as mismatched, and unclosed one-line comments get treated as
+// matched, and no attempts are made to create empty tokens.
+void transform(State *s) {
+    if (! s->start) return;
+    for (int i = 0; i < length(s->patterns); i++) {
+        Pattern *p = s->patterns[i];
+        if (p->string[0] != ' ' && p->string[0] != '\n') continue;
+        p->look = false;
+        if (p->string[0] == ' ') p->type = NONE;
+        else if (p->type == QUOTE) p->type = NOTEE;
+        else if (p->type == NOTE) p->type = NOTEE;
+        else p->type = NONE;
+    }
+}
+
+// Split all the old states (but not any newly created ones). Then carry out
+// all the transformations on old and new states.
+void transformAll(State **states) {
+    int n = length(states);
+    for (int i = 0; i < n; i++) splitState(states, i);
+    n = length(states);
+    for (int i = 0; i < n; i++) {
+        retarget(states, i);
+        transform(states[i]);
+    }
 }
 
 // ---------- Compiling --------------------------------------------------------
@@ -730,7 +812,7 @@ void compileAction(byte *action, Pattern *p) {
 }
 
 // When there is more than one pattern for a state starting with a character,
-// enter [LINK+hi, lo] where hi,lo is the offset to the overflow area.
+// enter [LINK+hi, lo] where [hi,lo] is the offset to the overflow area.
 void compileLink(byte *action, int offset) {
     action[0] = LINK | ((offset >> 8) & 0x7F);
     action[1] = offset & 0xFF;
@@ -746,6 +828,29 @@ void compileExtra(Pattern *p, byte *table) {
     entry[0] = len;
     strncpy((char *)&entry[1], p->string + 1, len - 1);
     compileAction(&entry[len], p);
+}
+
+int main() {
+    char *text = readFile("c.txt");
+    normalize(text);
+    char **lines = splitLines(text);
+    Rule **rules = getRules(lines);
+    State **states = makeStates(rules);
+    fillStates(rules, states);
+    derangeAll(states);
+    sortAll(states);
+    checkAll(states);
+    transformAll(states);
+
+    printState(states[18], states);
+    printState(states[26], states);
+
+    for (int i = 0; i < length(states); i++) release(states[i]->patterns);
+    release(states);
+    for (int i = 0; i < length(rules); i++) release(rules[i]->strings);
+    release(rules);
+    release(lines);
+    release(text);
 }
 
 // TODO: push and pop now simpler. Still need a flag for 'last'.
