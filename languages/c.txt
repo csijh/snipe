@@ -130,6 +130,11 @@ string3   \      string
 
 // One-line comment.
 
+start    abc    fred
+fred     )      start BlockE
+fred     )      start GroupE
+fred     \      start Note
+
 start    //     note NoteB
 note     !..~   note
 note     \s     note Note

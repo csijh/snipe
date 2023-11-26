@@ -13,11 +13,10 @@
 #include <ctype.h>
 #include <time.h>
 
-// TODO: maybe QUOTE+ QUOTE- with \n QUOTE- doing permanent mismatch and nothing
-// TODO: double up every state (no empty tokens, explicit sp nl handling, eol)
+// TODO: push and pop now simpler. Still need a flag for 'last'.
+// TODO: ensure().  BUT f(a){a=ensure(a);return a;}
 
-
-// ---------- types -------------------------------------------------------------
+// ---------- types ------------------------------------------------------------
 // These types and their names must be kept the same as in other Snipe modules.
 // A type is used to mark a text character, to represent the result of
 // scanning. The bracket types come in matching pairs, with a B or E suffix.
@@ -36,7 +35,7 @@ enum type {
     QUOTEB, LONGB, NOTEB, COMMENTB, COMMENTNB, TAGB, ROUNDB, ROUND2B,
     SQUAREB, SQUARE2B, GROUPB, GROUP2B, BLOCKB, BLOCK2B,
 
-    QUOTEE, LONGE, NOTEE, COMMENTE, COMMENTNE, TAGE, ROUNDE, ROUND2E,
+    QUOTEE, LONGE, NOTEE, COMMENTE, COMMENTNE, TagE, ROUNDE, ROUND2E,
     SQUAREE, SQUARE2E, GROUPE, GROUP2E, BLOCKE, BLOCK2E,
 
     COMMENTED = 64, BAD = 128,
@@ -44,7 +43,7 @@ enum type {
 
 // The full names of the types. The first character is used in tests.
 char *typeNames[64] = {
-    " ", ".", "-", "?", "Alternative", "Declaration", "Function",
+    "-", " ", ".", "Miss", "Alternative", "Declaration", "Function",
     "Identifier", "Join", "Keyword", "Long", "Mark", "Note", "Operator",
     "Property", "Quote", "Tag", "Unary", "Value", "Wrong",
 
@@ -88,7 +87,7 @@ int findtype(char *s, int row) {
     if (s == NULL) return NONE;
     for (int i = ALTERNATIVE; i <= BLOCK2E; i++) {
         char *name = typeNames[i];
-        if (strcmp(s, name) == 0) return i;
+        if (equal(s, name)) return i;
         if (! islower(name[strlen(name)-1])) continue;
         if (prefix(s, name)) return i;
     }
@@ -96,28 +95,31 @@ int findtype(char *s, int row) {
     return -1;
 }
 
-// ---------- Arrays ------------------------------------------------------------
-// An array is preceded by a (pointer-aligned) length. Its capacity is at least
-// the maximum ever needed, to avoid reallocation. For an array of pointers to
-// structures, the pointers and structures are allocated at the same time, and
-// the pointers are initialized.
+// ---------- Arrays -----------------------------------------------------------
+// An array is preceded by a (pointer-aligned) header with length. Its capacity
+// is at least the maximum ever needed, to avoid reallocation. For an array of
+// pointers to structures, the pointers and structures are allocated at the
+// same time, and the pointers are initialized. All allocations are chained
+// onto a global chain for easy freeing.
 
-struct header { int length; void *align[]; };
 typedef struct header header;
+struct header { int length; header *next; };
+
+header *allArrays = NULL;
 
 void *array(int max, int unit) {
     header *p = malloc(sizeof(header) + max * unit);
     p->length = 0;
+    p->next = allArrays;
+    allArrays = p;
     return p + 1;
 }
 
 void *arrayP(int max, int unit) {
-    header *p = malloc(sizeof(header) + max * sizeof(void *) + max * unit);
-    void **pp = (void **) p + 1;
+    void **pp = array(max, sizeof(void *) + unit);
     char *ps = (char *) (pp + max);
-    p->length = 0;
     for (int i = 0; i < max; i++) pp[i] = &ps[i * unit];
-    return p + 1;
+    return pp;
 }
 
 int length(void *a) {
@@ -132,8 +134,12 @@ int adjust(void *a, int d) {
     return p->length - d;
 }
 
-void release(void *a) {
-    free(((header *) a - 1));
+void freeAll() {
+    while (allArrays != NULL) {
+        header *block = allArrays;
+        allArrays = allArrays->next;
+        free(block);
+    }
 }
 
 // ---------- Lines ------------------------------------------------------------
@@ -248,14 +254,15 @@ Rule **getRules(char **lines) {
 }
 
 // Count up the patterns belonging to a named state. Add 96 for possible
-// additional one-character patterns when ranges are expanded.
+// additional one-character patterns when ranges are expanded. Double for
+// possible added patterns.
 int countPatterns(Rule **rules, char *name) {
     int n = 96;
     for (int i = 0; i < length(rules); i++) {
-        if (strcmp(name, rules[i]->base) != 0) continue;
+        if (! equal(name, rules[i]->base)) continue;
         n = n + length(rules[i]->strings);
     }
-    return n;
+    return 2 * n;
 }
 
 // ---------- States and patterns ----------------------------------------------
@@ -291,7 +298,7 @@ char *singles[128] = {
 // Find an existing state by name, returning its index or -1.
 int findState(State **states, char *name) {
     for (int i = 0; i < length(states); i++) {
-        if (strcmp(states[i]->name, name) == 0) return i;
+        if (equal(states[i]->name, name)) return i;
     }
     return -1;
 }
@@ -307,9 +314,9 @@ void addState(State **states, char *name, int maxPatterns) {
     };
 }
 
-// Create empty base states from the rules.
+// Create empty base states from the rules. Allow for later state splitting.
 State **makeStates(Rule **rules) {
-    State **states = arrayP(length(rules), sizeof(State));
+    State **states = arrayP(2 * length(rules), sizeof(State));
     for (int i = 0; i < length(rules); i++) {
         Rule *rule = rules[i];
         if (findState(states, rule->base) < 0) {
@@ -382,11 +389,10 @@ void fillStates(Rule **rules, State **states) {
     }
 }
 
-// Print a state name. When s has been split into s' and s", add the suffix.
+// Print a state name. When s has been split into s and s', add the suffix.
 void printName(State *s) {
     char *suffix = "";
-    if (s->partner >= 0 && s->start) suffix = "'";
-    if (s->partner >= 0 && s->after) suffix = "\"";
+    if (s->partner >= 0 && s->after) suffix = "'";
     printf("%s%s", s->name, suffix);
 }
 
@@ -438,7 +444,12 @@ void printState(State *state, State **states) {
         }
         else printPattern(p);
         printName(states[p->target]);
-        if (p->type != NONE) printf(" %s", typeNames[p->type]);
+        if (p->type != NONE) {
+            if (p->type == GAP) printf(" Gap");
+            else if (p->type == NEWLINE) printf(" Newline");
+            else if (p->type == MISS) printf(" Miss");
+            else printf(" %s", typeNames[p->type]);
+        }
         printf("\n");
     }
 }
@@ -571,7 +582,7 @@ void noDuplicates(State *base) {
         for (int j = i+1; j < length(list); j++) {
             Pattern *q = list[j];
             char *t = q->string;
-            if (strcmp(s,t) != 0) continue;
+            if (! equal(s,t)) continue;
             if (popType(p->type) && popType(q->type) && p->type != q->type) {
                 continue;
             }
@@ -708,13 +719,13 @@ void checkAll(State **states) {
 
 // ---------- Transforms -------------------------------------------------------
 // Transform the rules before compiling. For each state s which has both the
-// start and after flags set, convert it into two states, s' and s" where s
+// start and after flags set, convert it into two states, s and s' where s
 // only occurs at the start of tokens, and s' occurs only after the start. This
 // helps to solve several problems, avoiding having to make special cases of
 // any of them in the scanner itself.
 
 // If a state has both start and after set, create a new partner state with the
-// same name. If the name is s, the pair can be printed as s' and s". Copy the
+// same name. If the name is s, the pair can be printed as s and s'. Copy the
 // patterns to the partner state, set one flag in each, and set the partner
 // fields to refer to each other.
 void splitState(State **states, int s) {
@@ -733,9 +744,9 @@ void splitState(State **states, int s) {
     other->partner = s;
 }
 
-// Set the target t of every pattern in a state to t' or t", as appropriate. For
-// a \s or \n rule in an s", change the target to s' so that s" deals with the
-// final token before the separator, and s' deals with the separator.
+// Set the target t of every pattern in a state to t or t', as appropriate. For
+// a \s or \n rule in an s', change the target to s so that s' deals with the
+// final token before the separator, and s deals with the separator.
 void retarget(State **states, int i) {
     State *s = states[i];
     for (int i = 0; i < length(s->patterns); i++) {
@@ -755,21 +766,52 @@ void retarget(State **states, int i) {
     }
 }
 
+// Where a state has a pattern involving a close bracket, and it is not followed
+// by another close bracket pattern for the same string, add a MISS pattern
+// which doesn't change state. For example,
+//    s } t BlockE
+//    s } u GroupE
+//    s } s MISS
+void addMiss(State *s) {
+//    if (equal(s->name,"fred")) printf("before: %d\n", length(s->patterns));
+    if (equal(s->name,"fred")) printf("p13: %s\n", typeNames[s->patterns[13]->type]);
+    for (int i = 0; i < length(s->patterns); i++) {
+        Pattern *p = s->patterns[i];
+        if (! popType(p->type)) continue;
+        bool last = false;
+        if (i == length(s->patterns) - 1) last = true;
+        else if (! equal(p->string, s->patterns[i+1]->string)) last = true;
+        else if (! popType(s->patterns[i+1]->type)) last = true;
+        if (! last) continue;
+        if (equal(s->name,"fred")) printf("%d\n", i);
+        adjust(s->patterns, +1);
+        for (int j = length(s->patterns)-2; j > i; j--) {
+            *s->patterns[j+1] = *s->patterns[j];
+        }
+        *s->patterns[i+1] = *s->patterns[i];
+        s->patterns[i+1]->type = MISS;
+//        s->patterns[i+1]->target = ?
+        i++;
+    }
+//    if (equal(s->name,"fred")) printf("after: %d\n", length(s->patterns));
+    if (equal(s->name,"fred")) printf("p13: %s\n", typeNames[s->patterns[13]->type]);
+}
+
 // In a state with start flag set, convert \s and \n patterns into non-lookahead
-// SP, NL patterns. Change the corresponding type on \n from QUOTE or NOTE to
-// NOTEE, and everything else to NONE. That ensures that unclosed quotes get
-// treated as mismatched, and unclosed one-line comments get treated as
-// matched, and no attempts are made to create empty tokens.
+// SP, NL patterns. Change the corresponding type on \n from QUOTE to MISS, or
+// NOTE to NOTEE, and everything else to GAP or NEWLINE. That ensures that
+// unclosed quotes get treated as mismatched, and unclosed one-line comments
+// get treated as matched, and no attempts are made to create empty tokens.
 void transform(State *s) {
     if (! s->start) return;
     for (int i = 0; i < length(s->patterns); i++) {
         Pattern *p = s->patterns[i];
         if (p->string[0] != ' ' && p->string[0] != '\n') continue;
         p->look = false;
-        if (p->string[0] == ' ') p->type = NONE;
+        if (p->string[0] == ' ') p->type = GAP;
         else if (p->type == QUOTE) p->type = NOTEE;
         else if (p->type == NOTE) p->type = NOTEE;
-        else p->type = NONE;
+        else p->type = NEWLINE;
     }
 }
 
@@ -781,6 +823,7 @@ void transformAll(State **states) {
     n = length(states);
     for (int i = 0; i < n; i++) {
         retarget(states, i);
+        addMiss(states[i]);
         transform(states[i]);
     }
 }
@@ -842,18 +885,14 @@ int main() {
     checkAll(states);
     transformAll(states);
 
+//    printState(states[0], states);
     printState(states[18], states);
+    printf("\n");
     printState(states[26], states);
 
-    for (int i = 0; i < length(states); i++) release(states[i]->patterns);
-    release(states);
-    for (int i = 0; i < length(rules); i++) release(rules[i]->strings);
-    release(rules);
-    release(lines);
-    release(text);
+    freeAll();
 }
 
-// TODO: push and pop now simpler. Still need a flag for 'last'.
 
 /*
 //==============================================================================
@@ -1099,49 +1138,6 @@ int main(int n, char *args[n]) {
     freeArray(lines);
     free(text);
 }
-
-// ---------- Arrays -----------------------------------------------------------
-// An array has a preceding length. The length is initially zero. An array must
-// be allocated with a capacity large enough to cover the maximum length ever
-// needed, to avoid reallocation.
-
-// Pointer aligned array descriptor.
-struct prefix { int length; void *align[]; };
-typedef struct prefix Prefix;
-
-void *array(int max, int unit) {
-    Prefix *p = malloc(sizeof(Prefix) + max * unit);
-    p->length = 0;
-    return p + 1;
-}
-
-int length(void *a) {
-    Prefix *p = a;
-    p = p - 1;
-    return p->length;
-}
-
-// Increase or decrease length. Return new length.
-int adjust(void *a, int delta) {
-    Prefix *p = a;
-    p = p - 1;
-    p->length += delta;
-    return p->length;
-}
-
-void release(void *a) {
-    Prefix *p = a;
-    p = p - 1;
-    free(p);
-}
-
-// Release an array of pointers, and the structures they point to.
-void releasep(void *a) {
-    void **p = a;
-    for (int i = 0; i < length(p); i++) free(p[i]);
-    release(a);
-}
-
 
 
 */
