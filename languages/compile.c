@@ -95,51 +95,55 @@ int findtype(char *s, int row) {
     return -1;
 }
 
-// ---------- Arrays -----------------------------------------------------------
-// An array is preceded by a (pointer-aligned) header with length. Its capacity
-// is at least the maximum ever needed, to avoid reallocation. For an array of
-// pointers to structures, the pointers and structures are allocated at the
-// same time, and the pointers are initialized. All allocations are chained
-// onto a global chain for easy freeing.
+// ---------- Lists ------------------------------------------------------------
+// A list is a dynamic array which has a prefixed header containing the length,
+// capacity, unit size, and an index into a list of all allocations. The call
+// adjust(a,d) changes the length. It must be called with a = adjust(a,d) if
+// d>0 in case a is reallocated. If any function f(a) calls adjust(a,d), with
+// d>0, it must be called with a = f(a) in case a gets reallocated.
 
+struct header { short length, max, unit, index; void *align[]; };
 typedef struct header header;
-struct header { int length; header *next; };
 
-header *allArrays = NULL;
-
-void *array(int max, int unit) {
-    header *p = malloc(sizeof(header) + max * unit);
-    p->length = 0;
-    p->next = allArrays;
-    allArrays = p;
-    return p + 1;
-}
-
-void *arrayP(int max, int unit) {
-    void **pp = array(max, sizeof(void *) + unit);
-    char *ps = (char *) (pp + max);
-    for (int i = 0; i < max; i++) pp[i] = &ps[i * unit];
-    return pp;
-}
+// Keep a global list of all allocations, for easy freeing.
+header **allocations = NULL;
 
 int length(void *a) {
-    header *p = (header *) a - 1;
-    return p->length;
+    header *h = (header *) a - 1;
+    return h->length;
 }
 
-// Adjust length from n to n+d. Return n.
-int adjust(void *a, int d) {
-    header *p = (header *) a - 1;
-    p->length += d;
-    return p->length - d;
+// Adjust length from n to n+d. Return the possibly reallocated array.
+void *adjust(void *a, int d) {
+    header *h = (header *) a - 1;
+    h->length += d;
+    if (h->length <= h->max) return a;
+    while (h->length > h->max) h->max = 2 * h->max;
+    h = realloc(h, sizeof(header) + h->max * h->unit);
+    if (h->index >= 0) allocations[h->index] = h;
+    return h + 1;
+}
+
+void *newList(int unit) {
+    int max0 = 1;
+    if (allocations == NULL) {
+        int ptr = sizeof(void *);
+        header *h = malloc(sizeof(header) + max0 * ptr);
+        *h = (header) { .length = 0, .max = max0, .unit = ptr, .index = -1 };
+        allocations = (header **)(h + 1);
+    }
+    int index = length(allocations);
+    allocations = adjust(allocations, +1);
+    header *h = malloc(sizeof(header) + max0 * unit);
+    *h = (header) { .length = 0, .max = max0, .unit = unit, .index = index };
+    allocations[index] = h;
+    return h + 1;
 }
 
 void freeAll() {
-    while (allArrays != NULL) {
-        header *block = allArrays;
-        allArrays = allArrays->next;
-        free(block);
-    }
+    for (int i = 0; i < length(allocations); i++) free(allocations[i]);
+    header *h = (header *) allocations - 1;
+    free(h);
 }
 
 // ---------- Lines ------------------------------------------------------------
@@ -152,11 +156,11 @@ char *readFile(char *path) {
     fseek(file, 0, SEEK_END);
     int size = ftell(file);
     fseek(file, 0, SEEK_SET);
-    char *text =  array(size + 2, 1);
+    char *text = newList(1);
+    text = adjust(text, size+2);
     fread(text, 1, size, file);
     if (text[size-1] != '\n') text[size++] = '\n';
     text[size] = '\0';
-    adjust(text, size);
     fclose(file);
     return text;
 }
@@ -185,41 +189,63 @@ char *trim(char *line) {
 
 // Split a text into trimmed lines.
 char **splitLines(char *text) {
-    int n = 0, start = 0;
-    for (int i = 0; text[i] != '\0'; i++) if (text[i] == '\n') n++;
-    char **lines = array(n, sizeof(char *));
+    int start = 0;
+    char **lines = newList(sizeof(char *));
     for (int i = 0; text[i] != '\0'; i++) {
         if (text[i] != '\n') continue;
         text[i] = '\0';
         char *line = trim(&text[start]);
-        lines[adjust(lines,+1)] = line;
+        int n = length(lines);
+        lines = adjust(lines, +1);
+        lines[n] = line;
         start = i + 1;
     }
     return lines;
 }
 
 // ---------- Rules ------------------------------------------------------------
-// Extract the rules from the text, as strings.
+// Extract the rules from the text. A rule from the source is extracted into
+// several rule objects with just one pattern string each. A rule object has a
+// line number, and the original strings from the source. To be filled in later
+// are a lookahead flag, an unescaped pattern string, the base and target row
+// numbers, and the enumerated type constant.
 
-// A rule is a line number and strings, including an array of pattern strings.
-struct rule { int row; char *base, *target, *type; char **strings; };
+struct rule {
+    int line; char *base; char *string, *target, *type;
+    bool look; char *pattern; int br, tr, tc;
+};
 typedef struct rule Rule;
 
 // Split a line into strings in place.
 char **splitStrings(char *line) {
-    int len = strlen(line), start = 0;
-    char **strings = array(len, sizeof(char *));
+    char **strings = newList(sizeof(char *));
+    int start = 0;
     for (int i = 0; line[i] != '\0'; i++) {
         if (line[i] != ' ') continue;
         line[i] = '\0';
         if (i > 0 && line[i-1] != '\0') {
-            strings[adjust(strings,+1)] = &line[start];
+            int n = length(strings);
+            strings = adjust(strings, +1);
+            strings[n] = &line[start];
         }
         start = i + 1;
     }
-    strings[adjust(strings,+1)] = &line[start];
+    int n = length(strings);
+    strings = adjust(strings, +1);
+    strings[n] = &line[start];
     return strings;
 }
+
+int main() {
+    char *text = readFile("c.txt");
+    normalize(text);
+    char **lines = splitLines(text);
+    printf("#lines = %d\n", length(lines));
+    char **strings = splitStrings(lines[0]);
+    printf("#words = %d\n", length(strings));
+    freeAll();
+}
+/*
 
 // Fill in a rule from an array of strings.
 void fillRule(Rule *rule, int row, char **strings) {
@@ -892,7 +918,7 @@ int main() {
 
     freeAll();
 }
-
+*/
 
 /*
 //==============================================================================
