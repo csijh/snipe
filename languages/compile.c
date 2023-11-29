@@ -39,12 +39,13 @@ enum type {
     QuoteE, LongE, NoteE, CommentE, CommentNE, TagE, RoundE, Round2E,
     SquareE, Square2E, GroupE, Group2E, BlockE, Block2E,
 
+    FirstB = QuoteB, LastB = Block2B, FirstE = QuoteE, LastE = Block2E,
     Comment = 64, Bad = 128,
 };
 
-// The full names of the types. The first character is used in tests.
+// The full names of the types.
 char *typeNames[64] = {
-    "-", " ", ".", "Miss", "Alternative", "Declaration", "Function",
+    "None", "Gap", "Newline", "Miss", "Alternative", "Declaration", "Function",
     "Identifier", "Join", "Keyword", "Long", "Mark", "Note", "Operator",
     "Property", "Quote", "Tag", "Unary", "Value", "Wrong",
 
@@ -55,12 +56,25 @@ char *typeNames[64] = {
     "Round2E", "SquareE", "Square2E", "GroupE", "Group2E", "BlockE", "Block2E",
 };
 
+// The one-character abbreviations for testing.
+char abbrevs[64] = {
+    '-', ' ', '.', '?', 'A', 'D', 'F', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
+    'Q', 'T', 'U', 'V', 'W', 'Q', 'L', 'N', 'C', 'C', 'T', 'R', 'R', 'S', 'S',
+    'G', 'G', 'B', 'B', 'Q', 'L', 'N', 'C', 'C', 'T', 'R', 'R', 'S', 'S',
+    'G', 'G', 'B', 'B'
+};
+
 bool pushType(int type) {
-    return QuoteB <= type && type <= Block2B;
+    return FirstB <= type && type <= LastB;
 }
 
 bool popType(int type) {
-    return QuoteE <= type && type <= Block2E;
+    return FirstE <= type && type <= LastE;
+}
+
+bool match(int open, int close) {
+    if (open == Miss || close == Miss) return true;
+    return close == open + FirstE - FirstB;
 }
 
 bool equal(char *s, char *t) {
@@ -85,7 +99,6 @@ void error(char *format, ...) {
 
 // Convert a string to a type. Handle suffixes and abbreviations.
 int findType(char *s) {
-    if (equal(s,"None")) return None;
     for (int i = Alternative; i <= Block2E; i++) {
         char *name = typeNames[i];
         if (equal(s, name)) return i;
@@ -108,7 +121,8 @@ int findType(char *s) {
 struct header { short length, max, unit, index; void *align[]; };
 typedef struct header header;
 
-// Keep a global list of all allocations, for easy freeing.
+// A global list of allocations, for easy freeing. (Ironically, global links to
+// all allocations prevent them from being reported as memory leaks anyway!)
 header **store = NULL;
 
 // Create the store as a list of pointers.
@@ -228,22 +242,12 @@ char **getLines(char *path) {
     return lines;
 }
 
-// ---------- Patterns ---------------------------------------------------------
-// A pattern is like a rule from the source text, but with just a single pattern
-// string. A pattern has a line number, a base state, a lookahead flag, an
-// unescaped pattern string, a target and a type. For later use, it has the
-// index numbers of the base, target and type. A pattern string is unescaped by
-// transferring an initial backslash to the lookahead flag, replacing a double
-// backslash by a single backslash, replacing \s and \n by an actual space or
-// newline (printed as S or N) and replacing \ on its own by two ranges N..N
-// and S..~. The N..N is kept as a range at this stage, to indicate that it can
-// be overridden by a \n rule.
+// ---------- Rules ------------------------------------------------------------
+// Find the lines containing rules, and split each into a list of strings.
 
-struct pattern {
-    int line; char *baseName; bool look; char *string, *targetName, *typeName;
-    int base, target, type;
-};
-typedef struct pattern Pattern;
+// A rule is a line number and a list of strings.
+struct rule { int line; char **strings; };
+typedef struct rule Rule;
 
 // Split a line into strings in place.
 char **splitStrings(char *line) {
@@ -264,6 +268,90 @@ char **splitStrings(char *line) {
     strings[n] = &line[start];
     return strings;
 }
+
+// Stage 2: extract the rules.
+Rule **getRules(char **lines) {
+    Rule **rules = newList(sizeof(Rule *));
+    for (int i = 0; i < length(lines); i++) {
+        if (! islower(lines[i][0])) continue;
+        int n = length(rules);
+        rules = adjust(rules, +1);
+        rules[n] = newObject(sizeof(Rule));
+        rules[n]->line = i+1;
+        rules[n]->strings = splitStrings(lines[i]);
+    }
+    return rules;
+}
+
+// ---------- States -----------------------------------------------------------
+// A state has a row number (its row in the final table), a name, and an array
+// of patterns. It has flags to say whether it occurs at or after the start of
+// tokens. It has a visited flag used when checking for infinite loops. It has
+// a partner state if it begins with both start and after flags set, and so
+// gets split into a pair.
+
+// Forwards reference to patterns.
+typedef struct pattern Pattern;
+
+typedef struct state State;
+struct state {
+    int row; char *name; Pattern **patterns;
+    bool start, after, visited;
+    State *partner;
+};
+
+// Find an existing state by name, returning its index or -1.
+int findState(State **states, char *name) {
+    for (int i = 0; i < length(states); i++) {
+        if (equal(states[i]->name, name)) return i;
+    }
+    return -1;
+}
+
+// Add a new empty state with the given name. Give it a row number.
+State **addState(State **states, char *name) {
+    State *state = newObject(sizeof(State));
+    Pattern **ps = newList(sizeof(Pattern *));
+    int n = length(states);
+    *state = (State) {
+        .row = n, .name = name, .patterns = ps,
+        .start = false, .after = false, .visited = false,
+        .partner = NULL
+    };
+    states = adjust(states, +1);
+    states[n] = state;
+    return states;
+}
+
+// Stage 3: get the states from the rules. Optionally print.
+State **getStates(Rule **rules, bool print) {
+    State **states = newList(sizeof(State *));
+    for (int i = 0; i < length(rules); i++) {
+        Rule *rule = rules[i];
+        char *base = rule->strings[0];
+        int row = findState(states, base);
+        if (row < 0) states = addState(states, base);
+    }
+    if (print) for (int i = 0; i < length(states); i++) {
+        printf("%d: %s\n", states[i]->row, states[i]->name);
+    }
+    return states;
+}
+
+// ---------- Patterns ---------------------------------------------------------
+// A pattern is like a rule from the source text, but with just a single pattern
+// string. A pattern has a line number, base and target states, a lookahead
+// flag, an unescaped pattern string, and a type. A pattern string is unescaped
+// by transferring an initial backslash to the lookahead flag, replacing a
+// double backslash by a single backslash, replacing \s and \n by an actual
+// space or newline (printed as S or N) and replacing \ on its own by two
+// ranges N..N and S..~. The N..N is kept as a range at this stage, to indicate
+// that it can be overridden by a \n rule.
+
+struct pattern {
+    int line; State *base, *target; bool look; char *string; int type;
+};
+typedef struct pattern Pattern;
 
 // Deal with the escape conventions in the most recently added pattern.
 //   \\\... -> look \...
@@ -299,27 +387,32 @@ Pattern **unescape(Pattern **patterns) {
 }
 
 // Collect patterns from a rule in the source text.
-Pattern **collectPatterns(Pattern **patterns, int line, char **strings) {
+Pattern **collectPatterns(Pattern **patterns, Rule *rule, State **states) {
+    int line = rule->line;
+    char **strings = rule->strings;
     int n = length(strings);
     if (n < 3) error("incomplete rule on line %d", line);
-    char *base = strings[0];
+    State *base = states[findState(states, strings[0])];
     char *last = strings[n-1];
-    char *type = "None";
+    int type = None;
     if (isupper(last[0])) {
-        type = last;
+        type = findType(last);
+        if (type < 0) error("unknown type on line %d", line);
         n--;
         if (n < 2) error("incomplete rule on line %d", line);
     }
-    char *target = strings[n-1];
-    if (! islower(target[0])) error("expecting target on line %d", line);
+    if (! islower(strings[n-1][0])) error("expecting target on line %d", line);
+    int t = findState(states, strings[n-1]);
+    if (t < 0) error ("undefined target state on line %d", line);
+    State *target = states[t];
     for (int i = 1; i < n-1; i++) {
         char *string = strings[i];
         int r = length(patterns);
         patterns = adjust(patterns, +1);
         patterns[r] = newObject(sizeof(Pattern));
         *patterns[r] = (Pattern) {
-            .line = line, .baseName = base, .look = false, .string = string,
-            .targetName = target, .typeName = type
+            .line = line, .base = base, .target = target, .look = false,
+            .string = string, .type = type
         };
         patterns = unescape(patterns);
     }
@@ -328,7 +421,7 @@ Pattern **collectPatterns(Pattern **patterns, int line, char **strings) {
 
 // Display a pattern.
 void printPattern(Pattern *p) {
-    printf("%-10s ", p->baseName);
+    printf("%-10s ", p->base->name);
     if (p->look) printf("\\ "); else printf("  ");
     char s[20];
     strcpy(s, p->string);
@@ -337,102 +430,9 @@ void printPattern(Pattern *p) {
     if (s[3] == ' ') s[3] = 'S';
     if (s[3] == '\n') s[3] = 'N';
     printf("%-14s ", s);
-    printf("%-10s ", p->targetName);
-    if (! equal(p->typeName,"None")) printf("%-10s", p->typeName);
+    printf("%-10s ", p->target->name);
+    if (p->type != None) printf("%-10s", typeNames[p->type]);
     printf("\n");
-}
-
-// Stage 2: collect all the patterns from the rules, optionally print them.
-Pattern **getPatterns(char **lines, bool print) {
-    Pattern **patterns = newList(sizeof(Pattern *));
-    for (int i = 0; i < length(lines); i++) {
-        if (! islower(lines[i][0])) continue;
-        char **strings = splitStrings(lines[i]);
-        patterns = collectPatterns(patterns, i+1, strings);
-    }
-    if (print) {
-        for (int i=0; i<length(patterns); i++) printPattern(patterns[i]);
-    }
-    return patterns;
-}
-
-// ---------- States -----------------------------------------------------------
-// A state has a row number (its row in the final table), a name, and an array
-// of patterns. It has flags to say whether it occurs at or after the start of
-// tokens. It has a visited flag used when checking for infinite loops. It has
-// a partner state if it begins with both start and after flags set, and so
-// gets split into a pair.
-
-typedef struct state State;
-struct state {
-    int row; char *name; Pattern **patterns;
-    bool start, after, visited;
-    State *partner;
-};
-
-// Find an existing state by name, returning its index or -1.
-int findState(State **states, char *name) {
-    for (int i = 0; i < length(states); i++) {
-        if (equal(states[i]->name, name)) return i;
-    }
-    return -1;
-}
-
-// Add a new empty state with the given name. Give it a row number.
-State **addState(State **states, char *name) {
-    State *state = newObject(sizeof(State));
-    Pattern **ps = newList(sizeof(Pattern *));
-    int n = length(states);
-    *state = (State) {
-        .row = n, .name = name, .patterns = ps,
-        .start = false, .after = false, .visited = false,
-        .partner = NULL
-    };
-    states = adjust(states, +1);
-    states[n] = state;
-    return states;
-}
-
-// Create empty states from the patterns. Add base row numbers to patterns.
-State **makeStates(Pattern **patterns) {
-    State **states = newList(sizeof(State *));
-    for (int i = 0; i < length(patterns); i++) {
-        Pattern *p = patterns[i];
-        int row = findState(states, p->baseName);
-        if (row < 0) {
-            row = length(states);
-            states = addState(states, p->baseName);
-        }
-        p->base = row;
-    }
-    return states;
-}
-
-// Fill in the target rows and type codes for all the patterns
-void finishPatterns(Pattern **patterns, State **states) {
-    for (int i = 0; i < length(patterns); i++) {
-        Pattern *p = patterns[i];
-        p->target = findState(states, p->targetName);
-        if (p->target < 0) {
-            error("unknown target %s on line %d", p->targetName, p->line);
-        }
-        p->type = findType(p->typeName);
-        if (p->type < 0) {
-            error("unknown type %s on line %d", p->typeName, p->line);
-        }
-    }
-}
-
-// Distribute the patterns into the states.
-void fillStates(State **states, Pattern **patterns) {
-    for (int i = 0; i < length(patterns); i++) {
-        Pattern *p = patterns[i];
-        int row = p->base;
-        State *s = states[row];
-        int n = length(s->patterns);
-        s->patterns = adjust(s->patterns, +1);
-        s->patterns[n] = p;
-    }
 }
 
 // Check whether patterns p and q can be treated as successive range elements.
@@ -440,8 +440,8 @@ bool compatible(Pattern *p, Pattern *q) {
     if (p->look != q->look) return false;
     if (strlen(p->string) != 1 || strlen(q->string) != 1) return false;
     if (p->string[0] + 1 != q->string[0]) return false;
-    if (! equal(p->targetName, q->targetName)) return false;
-    if (! equal(p->typeName, q->typeName)) return false;
+    if (p->target != q->target) return false;
+    if (p->type != q->type) return false;
     return true;
 }
 
@@ -472,13 +472,14 @@ void printState(State *state) {
     printf("\n");
 }
 
-// Stage 3: create states, correlate them with patterns, optionally print.
-State **getStates(Pattern **patterns, bool print) {
-    State **states = makeStates(patterns);
-    finishPatterns(patterns, states);
-    fillStates(states, patterns);
+// Stage 4: collect the patterns from the rules. Optionally print the states.
+void getPatterns(Rule **rules, State **states, bool print) {
+    for (int i = 0; i < length(rules); i++) {
+        Rule *rule = rules[i];
+        State *base = states[findState(states, rule->strings[0])];
+        base->patterns = collectPatterns(base->patterns, rules[i], states);
+    }
     if (print) for (int i=0; i < length(states); i++) printState(states[i]);
-    return states;
 }
 
 // ---------- Ranges -----------------------------------------------------------
@@ -607,7 +608,7 @@ void sortAll(State **states) {
     }
 }
 
-// Stage 4: expand ranges. Sort. Optionally print.
+// Stage 5: expand ranges. Sort. Optionally print.
 void expandRanges(State **states, bool print) {
     derangeAll(states);
     sortAll(states);
@@ -622,11 +623,11 @@ void expandRanges(State **states, bool print) {
 
 // Set the start and after flags deduced from a state's patterns. Return true
 // if any changes were caused.
-bool deduce(State *state, State **states) {
+bool deduce(State *state) {
     bool changed = false;
     for (int i = 0; i < length(state->patterns); i++) {
         Pattern *p = state->patterns[i];
-        State *target = states[p->target];
+        State *target = p->target;
         if (p->type != None) {
             if (! target->start) changed = true;
             target->start = true;
@@ -654,7 +655,7 @@ void deduceAll(State **states) {
     while (changed) {
         changed = false;
         for (int i = 0; i < length(states); i++) {
-            changed = changed || deduce(states[i], states);
+            changed = changed || deduce(states[i]);
         }
     }
 }
@@ -736,7 +737,7 @@ void follow(State **states, State *state, char *look) {
         if (prefix(s, look)) next = look;
         else if (prefix(look, s)) next = s;
         else continue;
-        State *target = states[state->patterns[i]->target];
+        State *target = state->patterns[i]->target;
         follow(states, target, next);
     }
     state->visited = false;
@@ -751,7 +752,7 @@ void search(State **states, State *state) {
     }
 }
 
-// Stage 4: carry out checks. Optionally print.
+// Stage 6: carry out checks. Optionally print.
 void checkAll(State **states, bool print) {
     deduceAll(states);
     for (int i = 0; i < length(states); i++) {
@@ -765,11 +766,13 @@ void checkAll(State **states, bool print) {
 }
 
 // ---------- Transforms -------------------------------------------------------
-// Transform the rules before compiling. For each state s which has both the
-// start and after flags set, convert it into two states, s and s' where s
-// only occurs at the start of tokens, and s' occurs only after the start. This
-// helps to solve several problems, and avoid having to make special cases of
-// them in the scanner itself.
+
+// Transform the rules before compiling. Add Miss patterns to deal with
+// mismatched close brackets. For each state s which has both the start and
+// after flags set, convert it into two states, s and s' where s only occurs at
+// the start of tokens, and s' occurs only after the start. This helps to solve
+// several problems, and avoid having to make special cases of them in the
+// scanner itself.
 
 // Where a state has a pattern involving a close bracket, and it is not followed
 // by another close bracket pattern for the same string, add a Miss pattern.
@@ -792,10 +795,8 @@ void addMiss(State *s) {
         }
         s->patterns[i+1] = newObject(sizeof(Pattern));
         *s->patterns[i+1] = *s->patterns[i];
-        s->patterns[i+1]->typeName = "Miss";
         s->patterns[i+1]->type = Miss;
-        s->patterns[i+1]->targetName = s->name;
-        s->patterns[i+1]->target = s->row;
+        s->patterns[i+1]->target = s;
         i++;
     }
 }
@@ -804,37 +805,35 @@ void addMiss(State *s) {
 // same name. If the name is s, the pair can be printed as s and s'. Copy the
 // patterns to the partner state, set one flag in each, and set the partner
 // fields to refer to each other.
-void splitState(State **states, int s) {
-    State *state = states[s];
+void splitState(State *state, State **states) {
     if (! (state->start && state->after)) return;
-    int partner = length(states);
     char *newName = newObject(strlen(state->name) + 2);
     sprintf(newName, "%s'", state->name);
+    int p = length(states);
     states = addState(states, newName);
-    State *other = states[partner];
+    State *partner = states[p];
     for (int i = 0; i < length(state->patterns); i++) {
-        other->patterns = adjust(other->patterns, +1);
-        other->patterns[i] = newObject(sizeof(Pattern));
-        *other->patterns[i] = *state->patterns[i];
+        partner->patterns = adjust(partner->patterns, +1);
+        partner->patterns[i] = newObject(sizeof(Pattern));
+        *partner->patterns[i] = *state->patterns[i];
+        partner->patterns[i]->base = partner;
     }
     state->after = false;
-    other->after = true;
-    state->partner = states[partner];
-    other->partner = states[s];
+    partner->after = true;
+    state->partner = partner;
+    partner->partner = state;
 }
 
 // Set the target t of every pattern in a state to t or t', as appropriate. For
 // a \s or \n rule in an s', change the target to s so that s' deals with the
 // final token before the separator, and s deals with the separator.
-void retarget(State **states, int i) {
-    State *s = states[i];
+void retarget(State *s) {
     for (int i = 0; i < length(s->patterns); i++) {
         Pattern *p = s->patterns[i];
-        State *t = states[p->target];
+        State *t = p->target;
         if (s->partner != NULL && s->after) {
             if (p->string[0] == ' ' || p->string[0] == '\n') {
-                p->target = s->partner->row;
-                p->targetName = s->partner->name;
+                p->target = s->partner;
                 continue;
             }
         }
@@ -842,46 +841,13 @@ void retarget(State **states, int i) {
         if (p->type != None && ! t->start) change = true;
         if (p->type == None && ! p->look && ! t->after) change = true;
         if (p->type == None && p->look && t->start != s->start) change = true;
-        if (change) {
-            p->target = t->partner->row;
-            p->targetName = t->partner->name;
-        }
+        if (t->partner == NULL) change = false;
+        if (change) p->target = t->partner;
     }
 }
-
-// Stage 5: Split the states as necessary. Change the targets. Add Miss patterns
-// for close brackets. Carry out all the transformations on old and new
-// states. Optionally print.
-void transformAll(State **states, bool print) {
-    int n = length(states);
-    for (int i = 0; i < n; i++) {
-        addMiss(states[i]);
-    }
-    for (int i = 0; i < n; i++) splitState(states, i);
-    n = length(states);
-    for (int i = 0; i < n; i++) {
-//        retarget(states, i);
-//        transform(states[i]);
-    }
-    if (print) for (int i=0; i < length(states); i++) printState(states[i]);
-}
-
-int main() {
-    char **lines = getLines("c.txt");
-    Pattern **patterns = getPatterns(lines, false);
-    State **states = getStates(patterns, false);
-    expandRanges(states, false);
-    checkAll(states, false);
-    transformAll(states, true);
-    freeAll();
-}
-
-
-/*
-
 
 // In a state with start flag set, convert \s and \n patterns into non-lookahead
-// SP, NL patterns. Change the corresponding type on \n from Quote to Miss, or
+// S, N patterns. Change the corresponding type on \n from Quote to Miss, or
 // Note to NoteE, and everything else to Gap or Newline. That ensures that
 // unclosed quotes get treated as mismatched, and unclosed one-line comments
 // get treated as matched, and no attempts are made to create empty tokens.
@@ -892,18 +858,32 @@ void transform(State *s) {
         if (p->string[0] != ' ' && p->string[0] != '\n') continue;
         p->look = false;
         if (p->string[0] == ' ') p->type = Gap;
-        else if (p->type == Quote) p->type = NoteE;
+        else if (p->type == Quote) p->type = Miss;
         else if (p->type == Note) p->type = NoteE;
         else p->type = Newline;
     }
 }
 
+// Stage 7: Add Miss patterns for close brackets. Split the states as necessary.
+// Change the targets.  Carry out all the transformations on old and new
+// states. Optionally print.
+void transformAll(State **states, bool print) {
+    int n = length(states);
+    for (int i = 0; i < n; i++) addMiss(states[i]);
+    for (int i = 0; i < n; i++) splitState(states[i], states);
+    n = length(states);
+    for (int i = 0; i < n; i++) {
+        retarget(states[i]);
+        transform(states[i]);
+    }
+    if (print) for (int i=0; i < length(states); i++) printState(states[i]);
+}
 
 // ---------- Compiling --------------------------------------------------------
 // Compile the states into a compact transition table. The table has a row for
 // each state, and an overflow area used when there is more than one pattern
 // for a particular character. Each row consists of 96 entries of two bytes
-// each, one for each character \s, !, ..., ~, \n. The scanner uses the current
+// each, one for each character \n, \s, !, ..., ~. The scanner uses the current
 // state and the next character in the source text to look up an entry. The
 // entry may be an action for that single character, or an offset relative to
 // the start of the table to a list of patterns in the overflow area starting
@@ -913,12 +893,13 @@ typedef unsigned char byte;
 
 // Flags added to the type in an action. The LINK flag indicates that the action
 // is a link to the overflow area. The LOOK flag indicates a lookahead pattern.
-enum { LINK = 0x80, LOOK = 0x40 };
+// The TYPE mask removes the two flags.
+enum { LINK = 0x80, LOOK = 0x40, TYPE = 0x3F };
 
 // Fill in an action for a simple pattern: [LOOK+type, target]
 void compileAction(byte *action, Pattern *p) {
     int type = p->type;
-    int target = p->target;
+    int target = p->target->row;
     bool look = p->look;
     if (look) type = LOOK | type;
     action[0] = type;
@@ -932,198 +913,237 @@ void compileLink(byte *action, int offset) {
     action[1] = offset & 0xFF;
 }
 
-// Fill in a pattern at the end of the overflow area. The pattern is stored as a
-// byte containing the length, followed by the characters of the pattern after
-// the first, followed by the action. For example <= with type OP and target t
-// is stored as 4 bytes [2, '=', OP, t].
-void compileExtra(Pattern *p, byte *table) {
+// Fill in a pattern in the overflow area and return the possibly moved table.
+// The pattern is stored as a byte containing the length, followed by the
+// characters of the pattern after the first, followed by the action. For
+// example <= with type Op and target t is stored as 4 bytes [2, '=', Op, t].
+byte *compileExtra(byte *table, Pattern *p) {
     int len = strlen(p->string);
-    byte *entry = &table[length(table)];
-    entry[0] = len;
-    strncpy((char *)&entry[1], p->string + 1, len - 1);
-    compileAction(&entry[len], p);
+    int n = length(table);
+    table = adjust(table, len+2);
+    table[n] = len;
+    strncpy((char *)&table[n+1], p->string + 1, len - 1);
+    compileAction(&table[n+len], p);
+    return table;
 }
 
-int main() {
-    char *text = readFile("c.txt");
-    normalize(text);
-    char **lines = splitLines(text);
-    Rule **rules = getRules(lines);
-    State **states = makeStates(rules);
-    fillStates(rules, states);
-    derangeAll(states);
-    sortAll(states);
-    checkAll(states);
-    transformAll(states);
-
-//    printState(states[0], states);
-    printState(states[18], states);
-    printf("\n");
-    printState(states[26], states);
-
-    freeAll();
-}
-*/
-
-/*
-//==============================================================================
-
-// Fill in a stack op. For example, "s body t T -body" (in HTML) becomes
-// [POP, body, 2, 0, T, t]. If the input is "b" but not "body" the [2, 0] is a
-// guaranteed mismatch to skip [T, t]. The POP action jumps to [T,t] if
-// successful, or past it if not. After a POP or a sequence of POPs for the
-// same pattern string, add a similar Miss op.
-void compileOp(byte *b, Pattern *p) {
-
-}
-*/
-/*
-//==============================================================================
-// TODO: convert +t -t to PUSH, POP and add a Miss pattern.
-
-
-
-
-// Compile a state's patterns into the given table row, where end is the
-// current end of the table overflow. Return the new end.
-int compileState(State *base, int row, byte *table, int end) {
-    Pattern **patterns = base->patterns;
+// Compile a state into the table, and return the possibly moved table.
+byte *compileState(byte *table, State *state) {
+    Pattern **ps = state->patterns;
+    int n = length(ps);
     char prev = '\0';
-    for (int i = 0; i < length(patterns); i++) {
-        Pattern *p = patterns[i];
-        char ch = p->match[0];
-        int col = (ch == '\n') ? 95 : ch - ' ';
-        byte *entry = &table[2 * (96 * row + col)];
+    for (int i = 0; i < n; i++) {
+        Pattern *p = ps[i];
+        char ch = p->string[0];
+        int col = (ch == '\n') ? 0 : ch - ' ' + 1;
+        byte *entry = &table[2 * (96 * state->row + col)];
         if (ch != prev) {
             prev = ch;
-            if (strlen(p->match) == 1) {
-                compileAction(entry, p);
-                continue;
+            bool direct = (i == n-1 || ch != ps[i+1]->string[0]);
+            if (direct) compileAction(entry, p);
+            else {
+                compileLink(entry, length(table));
+                table = compileExtra(table, p);
             }
-            compileLink(entry, end);
         }
-        end = compileExtra(p, table, end);
+        else table = compileExtra(table, p);
     }
-    return end;
+    return table;
 }
 
-// Fill in the patterns from the position in the given array which start with
-// the same character. If there is one pattern (necessarily a singleton
-// character), put an action in the table. Otherwise, put a link in the table
-// and put the patterns and actions in the overflow area. The group of patterns
-// doesn't need to be terminated because the last pattern is always a singleton
-// character which matches. Return the new index in the array of patterns.
-// int compileGroup(Pattern **patterns, int n, byte *table, int row) {
-//     bool immediate = strlen(patterns[n]->match) == 1;
-//     char ch = patterns[n]->match[0];
-//     int col = (ch == '\n') ? 95 : ch - ' ';
-//     byte *entry = &table[2 * (96 * row + col)];
-//     if (immediate) {
-//         compileAction(entry, patterns[n]);
-//         return n+1;
-//     }
-//     compileLink(entry, size(table));
-//     while (n < length(patterns) && patterns[n]->match[0] == ch) {
-//         compileExtra(patterns[n], table);
-//         n++;
-//     }
-//     return n;
-// }
-
-// Fill all the patterns from all states into the table, where end is the current
-// end of the table's overflow area.
-void compile(State **states, byte *table, int end) {
+// Stage  8: build the table.
+byte *compile(State **states) {
+    byte *table = newList(1);
+    table = adjust(table, 2 * 96 * length(states));
     for (int i = 0; i < length(states); i++) {
-        State *base = states[i];
-        end = compileState(base, i, table, end);
-
-        Pattern **patterns = base->patterns;
-        int n = 0;
-        while (n < length(patterns)) {
-            n = compileGroup(patterns, n, table, i, ov);
-        }
-
+        table = compileState(table, states[i]);
     }
+    return table;
 }
 
 // ---------- Scanning ---------------------------------------------------------
 // A line of source text is scanned to produce an array of bytes, one for each
-// character. The first byte corresponding to a token gives its type (e.g. ID
+// character. The first byte corresponding to a token gives its type (e.g. Id
 // for an identifier). The bytes corresponding to the remaining characters of
-// the token contain None. The scanner first marks any leading spaces, then uses
-// the transition table to handle the remaining characters.
+// the token contain None.
 
-// TODO: change logic:
-// while (! match) {
-//   act = 0x80 ? LINK : type&0x3F
-//   match = true
-//   switch (act) {
-//      None: do nothing
-//      Gap: if not at start, match = false else tokenise
-//      Newline: similar
-//      POP: if brk = any, mismatch else if not eq match = false else pop
-//          if match +2 and continue else +4
-//      PUSH: push
-//      default: terminate token
-//   }
-//   if (!match) { get len check pattern }
-// }
+// Bracket matching is simulated by marking bytes in the output array with 0x80
+// for matched brackets, 0x40 for mismatched brackets, and 0xC0 for unmatched
+// open brackets.
+enum { MATCH = 0x80, MISMATCH = 0x40, OPEN = 0xC0, FLAGS = 0xC0 };
 
-// Use the given table and start state to scan the given input line, producing
-// the result in the given byte array, and returning the final state. Use
-// the states for names when tracing.
-int scan(byte *table, int st, char *in, byte *out, State **states, bool trace) {
+// Find the 'top of stack'.
+byte top(byte *out, int at) {
+    for (int i = at-1; i >= 0; i--) {
+        if ((out[i] & FLAGS) == OPEN) return (out[i] & TYPE);
+    }
+    return Miss;
+}
+
+// Simulate a pushed open bracket.
+void push(byte *out, int at) {
+    out[at] = out[at] | OPEN;
+}
+
+// Simulate popping. Find the 'top' and match or mismatch.
+void pop(byte *out, int at) {
+    int open = -1;
+    for (int i = at-1; i >= 0; i--) {
+        if ((out[i] & FLAGS) == OPEN) open = i;
+    }
+    int left = (open < 0) ? Miss : out[open] & TYPE;
+    int right = out[at] & TYPE;
+    if (left != Miss && right != Miss && match(left, right)) {
+        if (open >= 0) out[open] = left | MATCH;
+        out[at] = right | MATCH;
+    }
+    else {
+        if (open >= 0) out[open] = left | MISMATCH;
+        out[at] = right | MISMATCH;
+    }
+}
+
+// Use the given table and start row to scan the given input line, producing
+// the result in the given byte array, and returning the final state. If
+// states is not null, trace the execution.
+int scan(byte *table, int row, char *in, byte *out, State **states) {
+    bool trace = (states != NULL);
     int n = strlen(in);
-    for (int i = 0; i<=n; i++) out[i] = None;
+    for (int i = 0; i < n; i++) out[i] = None;
     int at = 0, start = 0;
-    while (at <= n) {
+    while (at < n) {
+        if (trace) printf("%s ", states[row]->name);
         char ch = in[at];
-        if (trace) printf("%s ", states[st]->name);
-        int col = ch - ' ';
-        if (ch == '\0') col = 95;
-        byte *action = &table[2 * (96 * st + col)];
+        int col = (ch == '\n') ? 0 : ch - ' ' + 1;
+        byte *action = &table[2 * (96 * row + col)];
         int len = 1;
         if ((action[0] & LINK) != 0) {
             int offset = ((action[0] & 0x7F) << 8) + action[1];
             byte *p = table + offset;
-            bool match = false;
-            while (! match) {
-                match = true;
+            bool found = false;
+            while (! found) {
+                found = true;
                 len = p[0];
-                for (int i = 1; i < len && match; i++) {
-                    if (in[at + i] != p[i]) match = false;
+                for (int i = 1; i < len && found; i++) {
+                    if (in[at + i] != p[i]) found = false;
                 }
-                if (match) break;
+                int t = p[len+1] & TYPE;
+                if (found && popType(t)) {
+                    if (! match(t, top(out,at))) found = false;
+                }
+                if (found) action = p + len;
                 else p = p + len + 2;
             }
-            action = p + len;
         }
         bool lookahead = (action[0] & LOOK) != 0;
-        int tag = action[0] & 0x3F;
+        int type = action[0] & TYPE;
         int target = action[1];
         if (trace) {
             if (lookahead) printf("\\ ");
-            if (in[at] == ' ') printf("SP");
-            else if (in[at] == '\0') printf("NL");
+            if (in[at] == ' ') printf("S");
+            else if (in[at] == '\n') printf("N");
             else for (int i = 0; i < len; i++) printf("%c", in[at+i]);
-            printf(" %s\n", tagNames[tag]);
+            printf(" %s\n", typeNames[type]);
         }
         if (! lookahead) at = at + len;
-        if (tag != None && start < at) {
-            out[start] = tag;
+        if (type != None && start < at) {
+            out[start] = type;
+            if (pushType(type)) push(out, start);
+            else if (popType(type)) pop(out, at);
             start = at;
         }
-        if (ch == ' ') { out[at++] = Gap; start++; }
-        if (ch == '\0') { out[at++] = Newline; start++; }
-        st = target;
+        row = target;
     }
-    return st;
+    return row;
 }
 
 // ---------- Testing ----------------------------------------------------------
 // The tests in a language description are intended to check that the rules work
 // as expected. They also act as tests for this program. A line starting with >
-// is a test and one starting with < is the expected output.
+// is a test and one immediately following and starting with < is the expected
+// output.
+
+// Extract the tests from the source lines, as a single string with newlines.
+char *extractTests(char **lines) {
+    char *tests = newList(1);
+    for (int i = 0; i < length(lines); i++) {
+        if (lines[i][0] != '>') continue;
+        int n = strlen(lines[i]);
+        int to = length(tests);
+        tests = adjust(tests, +n);
+        strcpy(&tests[to], lines[i]+1);
+        tests[to+n-1] = '\n';
+    }
+    int n = length(tests);
+    tests = adjust(tests, +1);
+    tests[n] = '\0';
+    return tests;
+}
+
+// Extract expected outputs, make sure they line up with the tests.
+// Expect a character instead of a newline.
+char *extractExpected(char *tests, char **lines) {
+    char *expected = newList(1);
+    for (int i = 0; i < length(lines); i++) {
+        if (lines[i][0] != '<') continue;
+        int n = strlen(lines[i]);
+        int to = length(expected);
+        expected = adjust(expected, +n-1);
+        strncpy(&expected[to], lines[i]+1, n-1);
+        int at = length(expected);
+        if (at > length(tests) || tests[at-1] != '\n') {
+            error("output doesn't line up on line %d", i+1);
+        }
+    }
+    int n = length(expected);
+    expected = adjust(expected, +1);
+    expected[n] = '\0';
+    if (length(expected) != length(tests)) {
+        error("test without output");
+    }
+    return expected;
+}
+
+// Translate the output bytes to characters, in place. An ordinary type becomes
+// an upper case letter, the first letter of its name, and mismatched or
+// unmatched brackets become lower case.
+char *translate(byte *out) {
+    char *tr = (char *) out;
+    for (int i = 0; i < length(out); i++) {
+        char ch = abbrevs[out[i] & TYPE];
+        if ((ch & FLAGS) == MISMATCH || (ch & FLAGS) == OPEN) ch = tolower(ch);
+        tr[i] = ch;
+    }
+    return tr;
+}
+
+
+void checkResults(char *expected, byte *out) {
+
+}
+
+int main() {
+    char **lines = getLines("c.txt");
+    Rule **rules = getRules(lines);
+    State **states = getStates(rules, false);
+    getPatterns(rules, states, false);
+    expandRanges(states, false);
+    checkAll(states, false);
+    transformAll(states, false);
+    byte *table = compile(states);
+    char *tests = extractTests(lines);
+    char *expected = extractExpected(tests, lines);
+    byte *out = newList(1);
+    out = adjust(out, length(tests));
+    scan(table, 0, tests, out, states);
+    printf("%s\n\n", expected);
+    char *tr = translate(out);
+    printf("%s\n", tr);
+    freeAll();
+}
+
+/*
+
 
 // Carry out a test, given a line of input and an expected line of output.
 int runTest(
