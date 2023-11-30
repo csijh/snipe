@@ -52,6 +52,7 @@ start   =                                           init  Op
 
 start  {   start BlockB
 start  }   start BlockE
+start  }   start GroupE
 start  [   start SquareB
 start  ]   start SquareE
 start  (   start RoundB
@@ -190,37 +191,50 @@ start     \s \n   start
 // first letter of its type. Remaining characters are marked with space, a
 // space is marked with an underline, and a newline is marked with a dot.
 
-// A few tokens
+// Character literals, including unclosed at end of line
+> 'x' '\'' 'x
+< QQQ QQ-Q qIq
+
+
+
+
+// A few one-character tokens
+> x+1;
+< IOVM.
+
+// A longer token, and matched round brackets
 > (count+1)
-< LI----OVR.
+< RI----OVR.
 
-// An id can start with a type or keyword
+// Matched square brackets, and mismatched brackets
+> [x],(y]
+< SISMrIs.
+
+// An id can start with a declarator or keyword
 > char chart for form
-< T--- I---- K-- I---.
+< D--- I---- K-- I---.
 
-// Operators and signs of different fixities
+// Operators of different fixities and marks
 > ++!<<=...->
-< U-UO--M--S-.
+< U-UO--M--M-.
 
-// Structure and block brackets (left structure bracket marked L)
+// Curly brackets recognised as group or block brackets
 > s={}; do{}
-< IOLES K-BE.
+< IOGGM K-BB.
 
-// More left structure brackets
-> enum{  struct{  enum E{  struct S{
-< K---L  K-----L  K--- IL  K----- IL.
+// More curly group brackets
+> enum{}  struct{}  enum E{}  struct S{}
+< K---GG  K-----GG  K--- IGG  K----- IGG.
 
-// More left structure brackets
-> ={ =(t){ =(struct t){
-< OL OLIRL OLK----- IRL.
+// More curly group brackets
+> ={}  =(t){}  =(struct t){}
+< OGG  ORIRGG  ORK----- IRGG.
 
 // Dot as sign or as part of number
 > s.x 1.2 .2
 < IOI V-- V-.
 
-// Character literals, including unclosed at end of line
-> 'x' '\'' 'x
-< Q-- Q--- W-.
+
 
 // Character literal, with joiner (unlikely)
 > '\

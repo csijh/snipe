@@ -1,4 +1,4 @@
-// Free and open source, see licence.txt.
+// Snipe editor. Free and open source, see licence.txt.
 
 // Compile a language definition. Read in a file such as c.txt, check the rules
 // for consistency, run the tests and, if everything succeeds, write out a
@@ -12,8 +12,6 @@
 #include <string.h>
 #include <ctype.h>
 #include <time.h>
-
-// TODO: push and pop now simpler. Still need a flag for 'last'.
 
 // ---------- types ------------------------------------------------------------
 // These types and their names must be kept the same as in other Snipe modules.
@@ -29,7 +27,7 @@
 // For display, XB -> X, XNB -> X, ... X+Comment -> Note, X+Bad -> Wrong.
 
 enum type {
-    None, Gap, Newline, Miss, Alternative, Declaration, Function,
+    None, Gap, Newline, Alternative, Declaration, Function,
     Identifier, Join, Keyword, Long, Mark, Note, Operator, Property, Quote,
     Tag, Unary, Value, Wrong,
 
@@ -37,23 +35,32 @@ enum type {
     SquareB, Square2B, GroupB, Group2B, BlockB, Block2B,
 
     QuoteE, LongE, NoteE, CommentE, CommentNE, TagE, RoundE, Round2E,
-    SquareE, Square2E, GroupE, Group2E, BlockE, Block2E,
+    SquareE, Square2E, GroupE, Group2E, BlockE, Block2E, Miss,
 
-    FirstB = QuoteB, LastB = Block2B, FirstE = QuoteE, LastE = Block2E,
+    FirstB = QuoteB, LastB = Block2B, FirstE = QuoteE, LastE = Miss,
     Comment = 64, Bad = 128,
 };
 
 // The full names of the types.
 char *typeNames[64] = {
-    "None", "Gap", "Newline", "Miss", "Alternative", "Declaration", "Function",
-    "Identifier", "Join", "Keyword", "Long", "Mark", "Note", "Operator",
-    "Property", "Quote", "Tag", "Unary", "Value", "Wrong",
+    [None]="None", [Gap]="Gap", [Newline]="Newline",
+    [Alternative]="Alternative", [Declaration]="Declaration",
+    [Function]="Function", [Identifier]="Identifier", [Join]="Join",
+    [Keyword]="Keyword", [Long]="Long", [Mark]="Mark", [Note]="Note",
+    [Operator]="Operator",[Property]="Property", [Quote]="Quote", [Tag]="Tag",
+    [Unary]="Unary",[Value]="Value",[Wrong]="Wrong",
 
-    "QuoteB", "LongB", "NoteB", "CommentB", "CommentNB", "TagB", "RoundB",
-    "Round2B", "SquareB", "Square2B", "GroupB", "Group2B", "BlockB", "Block2B",
+    [QuoteB]="QuoteB", [LongB]="LongB", [NoteB]="NoteB", [CommentB]="CommentB",
+    [CommentNB]="CommentNB", [TagB]="TagB", [RoundB]="RoundB",
+    [Round2B]="Round2B", [SquareB]="SquareB",[Square2B]="Square2B",
+    [GroupB]="GroupB",[Group2B]="Group2B",[BlockB]="BlockB",
+    [Block2B]="Block2B",
 
-    "QuoteE", "LongE", "NoteE", "CommentE", "CommentNE", "TagE", "RoundE",
-    "Round2E", "SquareE", "Square2E", "GroupE", "Group2E", "BlockE", "Block2E",
+    [QuoteE]="QuoteE", [LongE]="LongE", [NoteE]="NoteE", [CommentE]="CommentE",
+    [CommentNE]="CommentNE", [TagE]="TagE", [RoundE]="RoundE",
+    [Round2E]="Round2E", [SquareE]="SquareE", [Square2E]="Square2E",
+    [GroupE]="GroupE", [Group2E]="Group2E", [BlockE]="BlockE",
+    [Block2E]="Block2E",[Miss]="Miss",
 };
 
 // The one-character abbreviations for testing.
@@ -64,11 +71,11 @@ char abbrevs[64] = {
     'G', 'G', 'B', 'B'
 };
 
-bool pushType(int type) {
+bool beginType(int type) {
     return FirstB <= type && type <= LastB;
 }
 
-bool popType(int type) {
+bool endType(int type) {
     return FirstE <= type && type <= LastE;
 }
 
@@ -670,7 +677,7 @@ void noDuplicates(State *state) {
             Pattern *q = list[j];
             char *t = q->string;
             if (! equal(s,t)) continue;
-            if (popType(p->type) && popType(q->type) && p->type != q->type) {
+            if (endType(p->type) && endType(q->type) && p->type != q->type) {
                 continue;
             }
             error("state %s has pattern for %s twice", state->name, s);
@@ -700,7 +707,7 @@ void checkBrackets(State *base) {
     for (int i = 0; i < length(base->patterns); i++) {
         Pattern *p = base->patterns[i];
         if (! p->look) continue;
-        if (! pushType(p->type) && ! popType(p->type)) continue;
+        if (! beginType(p->type) && ! endType(p->type)) continue;
         error("bracket type with lookahead on line %d", p->line);
     }
 }
@@ -783,11 +790,11 @@ void checkAll(State **states, bool print) {
 void addMiss(State *s) {
     for (int i = 0; i < length(s->patterns); i++) {
         Pattern *p = s->patterns[i];
-        if (! popType(p->type)) continue;
+        if (! endType(p->type)) continue;
         bool last = false;
         if (i == length(s->patterns) - 1) last = true;
         else if (! equal(p->string, s->patterns[i+1]->string)) last = true;
-        else if (! popType(s->patterns[i+1]->type)) last = true;
+        else if (! endType(s->patterns[i+1]->type)) last = true;
         if (! last) continue;
         adjust(s->patterns, +1);
         for (int j = length(s->patterns)-2; j > i; j--) {
@@ -864,18 +871,18 @@ void transform(State *s) {
     }
 }
 
-// Stage 7: Add Miss patterns for close brackets. Split the states as necessary.
-// Change the targets.  Carry out all the transformations on old and new
-// states. Optionally print.
+// Stage 7: Split the states as necessary. Change the targets. Carry out all
+// the transformations on old and new states. Add Miss patterns for close
+// brackets. Optionally print.
 void transformAll(State **states, bool print) {
     int n = length(states);
-    for (int i = 0; i < n; i++) addMiss(states[i]);
     for (int i = 0; i < n; i++) splitState(states[i], states);
     n = length(states);
     for (int i = 0; i < n; i++) {
         retarget(states[i]);
         transform(states[i]);
     }
+    for (int i = 0; i < n; i++) addMiss(states[i]);
     if (print) for (int i=0; i < length(states); i++) printState(states[i]);
 }
 
@@ -1003,16 +1010,24 @@ void pop(byte *out, int at) {
     }
 }
 
+void trace(int r, bool l, char *in, int at, int n, int t, State **states) {
+    printf("%s ", states[r]->name);
+    if (l) printf("\\ ");
+    if (in[at] == ' ') printf("S");
+    else if (in[at] == '\n') printf("N");
+    else for (int i = 0; i < n; i++) printf("%c", in[at+i]);
+    printf(" %s\n", typeNames[t]);
+}
+
 // Use the given table and start row to scan the given input line, producing
 // the result in the given byte array, and returning the final state. If
 // states is not null, trace the execution.
 int scan(byte *table, int row, char *in, byte *out, State **states) {
-    bool trace = (states != NULL);
+    bool tracing = (states != NULL);
     int n = strlen(in);
     for (int i = 0; i < n; i++) out[i] = None;
     int at = 0, start = 0;
     while (at < n) {
-        if (trace) printf("%s ", states[row]->name);
         char ch = in[at];
         int col = (ch == '\n') ? 0 : ch - ' ' + 1;
         byte *action = &table[2 * (96 * row + col)];
@@ -1027,9 +1042,12 @@ int scan(byte *table, int row, char *in, byte *out, State **states) {
                 for (int i = 1; i < len && found; i++) {
                     if (in[at + i] != p[i]) found = false;
                 }
-                int t = p[len+1] & TYPE;
-                if (found && popType(t)) {
-                    if (! match(t, top(out,at))) found = false;
+                int t = p[len] & TYPE;
+                if (found) {
+                    if (endType(t) && ! match(top(out,at),t)) {
+                        out[start] = t;
+                        found = false;
+                    }
                 }
                 if (found) action = p + len;
                 else p = p + len + 2;
@@ -1038,18 +1056,12 @@ int scan(byte *table, int row, char *in, byte *out, State **states) {
         bool lookahead = (action[0] & LOOK) != 0;
         int type = action[0] & TYPE;
         int target = action[1];
-        if (trace) {
-            if (lookahead) printf("\\ ");
-            if (in[at] == ' ') printf("S");
-            else if (in[at] == '\n') printf("N");
-            else for (int i = 0; i < len; i++) printf("%c", in[at+i]);
-            printf(" %s\n", typeNames[type]);
-        }
+        if (tracing) trace(row, lookahead, in, at, len, type, states);
         if (! lookahead) at = at + len;
         if (type != None && start < at) {
-            out[start] = type;
-            if (pushType(type)) push(out, start);
-            else if (popType(type)) pop(out, at);
+            if (type != Miss) out[start] = type;
+            if (beginType(type)) push(out, start);
+            else if (endType(type)) pop(out, start);
             start = at;
         }
         row = target;
@@ -1081,7 +1093,7 @@ char *extractTests(char **lines) {
 }
 
 // Extract expected outputs, make sure they line up with the tests.
-// Expect a character instead of a newline.
+// Expect a character instead of a newline at the end of each.
 char *extractExpected(char *tests, char **lines) {
     char *expected = newList(1);
     for (int i = 0; i < length(lines); i++) {
@@ -1110,90 +1122,85 @@ char *extractExpected(char *tests, char **lines) {
 char *translate(byte *out) {
     char *tr = (char *) out;
     for (int i = 0; i < length(out); i++) {
-        char ch = abbrevs[out[i] & TYPE];
-        if ((ch & FLAGS) == MISMATCH || (ch & FLAGS) == OPEN) ch = tolower(ch);
+        byte b = out[i];
+        char ch = abbrevs[b & TYPE];
+        if ((b & FLAGS) == MISMATCH || (b & FLAGS) == OPEN) ch = tolower(ch);
         tr[i] = ch;
     }
     return tr;
 }
 
-
-void checkResults(char *expected, byte *out) {
-
+// Report a test failure and exit.
+void report(char *tests, char *expected, char *out, int start, int end) {
+    printf("Test failed. Input, expected output and actual output are:\n");
+    for (int i = start; i < end-1; i++) printf("%c", tests[i]);
+    printf("\n");
+    for (int i = start; i < end; i++) printf("%c", expected[i]);
+    printf("\n");
+    for (int i = start; i < end; i++) printf("%c", out[i]);
+    printf("\n");
+    exit(1);
 }
 
-int main() {
-    char **lines = getLines("c.txt");
-    Rule **rules = getRules(lines);
-    State **states = getStates(rules, false);
-    getPatterns(rules, states, false);
-    expandRanges(states, false);
-    checkAll(states, false);
-    transformAll(states, false);
-    byte *table = compile(states);
+void checkResults(char *tests, char *expected, char *out) {
+    int start = 0, end = 0;
+    while (tests[end] != '\0') {
+        while (tests[end] != '\n') end++;
+        end++;
+        for (int i = start; i < end; i++) {
+            if (expected[i] != (char)out[i]) {
+                report(tests, expected, out, start, end);
+            }
+        }
+        start = end;
+    }
+}
+
+void write(char *path, byte *table) {
+    FILE *p = fopen(path, "wb");
+    fwrite(table, length(table), 1, p);
+    fclose(p);
+}
+
+// Stage 9: handle the tests (all at once). On success, write out the table.
+void runTests(char **lines, byte *table, State **states, char *path) {
     char *tests = extractTests(lines);
     char *expected = extractExpected(tests, lines);
     byte *out = newList(1);
     out = adjust(out, length(tests));
     scan(table, 0, tests, out, states);
-    printf("%s\n\n", expected);
     char *tr = translate(out);
-    printf("%s\n", tr);
-    freeAll();
-}
-
-/*
-
-
-// Carry out a test, given a line of input and an expected line of output.
-int runTest(
-    byte *table, int st, char *in, char *expected, State **states, bool trace
-) {
-    int n = strlen(in) + 1;
-    byte bytes[n+1];
-    st = scan(table, st, in+2, bytes+2, states, trace);
-    char out[100] = "< ";
-    for (int i = 2; i < n; i++) out[i] = tagNames[bytes[i]][0];
-    out[n] = '\0';
-    if (strcmp(out, expected) == 0) return st;
-    printf("Test failed. Input, expected output and actual output are:\n");
-    printf("%s\n", in);
-    printf("%s\n", expected);
-    printf("%s\n", out);
-    exit(1);
-    return st;
-}
-
-void runTests(byte *table, char **lines, State **states, bool trace) {
-    int st = 0;
-    int count = 0;
-    for (int i = 0; i < length(lines); i++) {
-        if (lines[i][0] != '>') continue;
-        char *in = lines[i];
-        char *expected = lines[i+1];
-        st = runTest(table, st, in, expected, states, trace);
-        count++;
-    }
-    printf("Passed %d tests.\n", count);
+    checkResults(tests, expected, tr);
+    write(path, table);
 }
 
 // ---------- Writing ----------------------------------------------------------
 // The table and its overflow are written out to a binary file.
 
-void write(char *path, byte *table) {
-    FILE *p = fopen(path, "wb");
-    fwrite(table, size(table), 1, p);
-    fclose(p);
-}
-
 int main(int n, char *args[n]) {
     bool trace = (n < 2) ? false : strcmp(args[1], "-t") == 0;
-    char *file = args[n-1];
-    bool txt = strcmp(file + strlen(file) - 4, ".txt") == 0;
+    char *path = args[n-1];
+    bool txt = strcmp(path + strlen(path) - 4, ".txt") == 0;
     if (n > 3 || (n == 3 && ! trace) || ! txt) {
         printf("Usage: compile [-t] c.txt\n");
         exit(0);
     }
+    char **lines = getLines(path);
+    Rule **rules = getRules(lines);
+    State **states = getStates(rules, false);
+    getPatterns(rules, states, false);
+    expandRanges(states, false);
+    checkAll(states, false);
+    transformAll(states, true);
+    byte *table = compile(states);
+    if (trace) runTests(lines, table, states, path);
+    else runTests(lines, table, NULL, path);
+    freeAll();
+}
+
+/*
+
+int main(int n, char *args[n]) {
     char *text = readFile(file);
     normalize(text);
     char **lines = splitLines(text);
