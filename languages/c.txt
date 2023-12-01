@@ -106,37 +106,35 @@ dot     \      start Op
 
 // Character literals.
 
-start   '      char QuoteB
+start   '      char QuoteD
 char    !..~   char
 char    \\'    char
 char    \s     char Quote
-char    '      start QuoteE
+char    \'     char2 Quote
 char    \n     start Quote
+char2   '      start QuoteD
+char2   \      start Wrong
 
 // String literals. Allow joiners
 
-start     "      string QuoteB
+start     "      string QuoteD
 string    !..~   string
 string    \\"    string
 string    \\\    string2 Quote
 string    \s     string Quote
-string    "      start QuoteE
+string    \"     string2 Quote
 string    \n     start Quote
 
 string2   \\     string3
+string2   "      start QuoteD
 string2   \      string
-string3   \n     start Join
+string3   \n     string Join
 string3   \s     string Quote
 string3   \      string
 
 // One-line comment.
 
-start    abc    fred
-fred     )      start BlockE
-fred     )      start GroupE
-fred     \      start Note
-
-start    //     note NoteB
+start    //     note NoteD
 note     !..~   note
 note     \s     note Note
 note     \n     start Note
@@ -169,14 +167,17 @@ hash      define elif else endif error if   start Alt
 hash      ifdef ifndef line pragma undef    start Alt
 hash      \                                 start
 
-include   <                                 filename QuoteB
+include   <                                 filename QuoteD
 include   \s                                include
 include   \                                 start
 
 filename  !..~                              filename
-filename  >                                 start QuoteE
+filename  \>                                filename2 Quote
 filename  \s                                filename Quote
 filename  \n                                start Quote
+
+filename2 >                                 start QuoteD
+filename2 \                                 start Wrong
 
 // Backslash newline, e.g. in #define
 
@@ -191,141 +192,121 @@ start     \s \n   start
 // first letter of its type. Remaining characters are marked with space, a
 // space is marked with an underline, and a newline is marked with a dot.
 
-// Character literals, including unclosed at end of line
-> 'x' '\'' 'x
-< QQQ QQ-Q qIq
-
-
-
-
 // A few one-character tokens
 > x+1;
-< IOVM.
+< IOVM
 
 // A longer token, and matched round brackets
 > (count+1)
-< RI----OVR.
+< RI----OVR
 
 // Matched square brackets, and mismatched brackets
 > [x],(y]
-< SISMrIs.
+< SISMrIs
 
 // An id can start with a declarator or keyword
 > char chart for form
-< D--- I---- K-- I---.
+< D--- I---- K-- I---
 
 // Operators of different fixities and marks
 > ++!<<=...->
-< U-UO--M--M-.
+< U-UO--M--M-
 
 // Curly brackets recognised as group or block brackets
 > s={}; do{}
-< IOGGM K-BB.
+< IOGGM K-BB
 
 // More curly group brackets
 > enum{}  struct{}  enum E{}  struct S{}
-< K---GG  K-----GG  K--- IGG  K----- IGG.
+< K---GG  K-----GG  K--- IGG  K----- IGG
 
 // More curly group brackets
 > ={}  =(t){}  =(struct t){}
-< OGG  ORIRGG  ORK----- IRGG.
+< OGG  ORIRGG  ORK----- IRGG
 
 // Dot as sign or as part of number
 > s.x 1.2 .2
-< IOI V-- V-.
+< IOI V-- V-
 
-
-
-// Character literal, with joiner (unlikely)
-> '\
-< Q-.
-> x'
-< Q-.
+// Character literals, including unclosed at end of line
+> 'x' '\'' 'x
+< QQQ QQ-Q qQ
 
 // String literals, including unclosed
 > "hello world" "a\"b" "unclosed
-< Q----- Q----- Q----- W--------.
+< QQ---- Q----Q QQ---Q qQ-------
 
 // String literal with joiner
 > "hello \
-< Q----- Q.
+< QQ---- J
 > world"
-< Q-----.
+< Q----Q
 
 // One line comment
 > n = 0; // note
-< I O VS N- N---.
-
-// One line comment with joiner.
-> n = 0; // note \
-< I O VS N- N--- N.
-> n = 1;
-< N N N-.
-
-// Multi-line comment
-> n = 0; /* line one
-< I O VS C- C--- C--.
-> line two */ n = 1;
-< C--- C-- C- I O VS.
+< I O VM N- N---
 
 // Numbers
-> 42 1.2e+3 4.5E-6 0x7f 0x7F 0x7c.def 0xa.bcp+d 0xaU 0xaL 
-< V- V----- V----- V--- V--- V------- V-------- V--- V---.
+> 42 1.2e+3 4.5E-6 0x7f 0x7F 0x7c.def 0xa.bcp+d 0xaU 0xaL
+< V- V----- V----- V--- V--- V------- V-------- V--- V---
 
 // Reserved words (there can be spaces between # and a reserved word)
 > #if # else #define #include
-< MM- M M--- MM----- MM------.
+< AA- A A--- AA----- AA------
 
 // Include filename
 > #include <f> #include <one two.ext>
-< MM------ Q-- MM------ Q--- Q-------.
+< AA------ QQQ AA------ QQ-- Q------Q
 
 // Joiner
 > #define f(x) \
-< MM----- ILIR J.
+< AA----- IRIR J
 
 // Illegal characters
 > $ @ `
-< W W W.
+< W W W
 
 // Leading spaces
 >    x
-<    I.
+<    I
+
+// Multi-line comment
+> n = 0; /* line one
+< I O VM C- C--- C--
+> line two */ n = 1;
+< C--- C-- C- I O VM
 
 // A few general tests
 
 > if (b) n = 1;
-< K- LIR I O VS.
+< K- RIR I O VM
 
 > if (b) { n = 1; }
-< K- LIR B I O VS E.
+< K- RIR B I O VM B
 
 > int n;
-< T-- IS.
+< D-- IM
 
 > string s;
-< I----- IS.
+< I----- IM
 
 > enum suit { Club, Diamond, Heart, Spade };
-< K--- I--- L I---S I------S I----S I---- ES.
+< K--- I--- G I---M I------M I----M I---- GM
 
 > int ns[] = { 1, 2, 34};
-< T-- I-LR O L VS VS V-ES.
+< D-- I-SS O G VM VM V-GM
 
 > char *s = "a\nb\0c\04d";
-< T--- OI O Q------------S.
+< D--- OI O QQQ--Q--Q---QM
 
 > char *s = "\037e\038f\xffg";
-< T--- OI O Q----------------S.
-
-> s = "*/"//"; /* abc "*/"//";
-< I O Q---N-N- N- N-- N-------.
-
-> /*  "*/"//"; /* abc "*/"//";
-< C-  C--Q---S C- C-- C--Q---S.
+< D--- OI O QQ----Q----Q----QM
 
 > obj.x, obj->x, f(x)
-< I--OIS I--S-IS ILIR.
+< I--OIM I--M-IM IRIR
 
 > n = f   (x);
-< I O I   LIRS.
+< I O I   RIRM
+
+> s = "*/"//"; /* abc "*/"//";
+< I O QQ-QN-N- N- N-- N-------

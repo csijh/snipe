@@ -13,6 +13,9 @@
 #include <ctype.h>
 #include <time.h>
 
+// TODO: catch all the trace output, and just show the trace for the test that's
+// failed.
+
 // ---------- types ------------------------------------------------------------
 // These types and their names must be kept the same as in other Snipe modules.
 // A type is used to mark a text character, to represent the result of
@@ -27,17 +30,17 @@
 // For display, XB -> X, XNB -> X, ... X+Comment -> Note, X+Bad -> Wrong.
 
 enum type {
-    None, Gap, Newline, Alternative, Declaration, Function,
-    Identifier, Join, Keyword, Long, Mark, Note, Operator, Property, Quote,
-    Tag, Unary, Value, Wrong,
+    None, Gap, Newline, Alternative, Declaration, Function, Identifier, Join,
+    Keyword, Long, Mark, NoteD, Note, Operator, Property, QuoteD, Quote, Tag,
+    Unary, Value, Wrong,
 
-    QuoteB, LongB, NoteB, CommentB, CommentNB, TagB, RoundB, Round2B,
-    SquareB, Square2B, GroupB, Group2B, BlockB, Block2B,
+    LongB, CommentB, CommentNB, TagB, RoundB, Round2B, SquareB, Square2B,
+    GroupB, Group2B, BlockB, Block2B,
 
-    QuoteE, LongE, NoteE, CommentE, CommentNE, TagE, RoundE, Round2E,
-    SquareE, Square2E, GroupE, Group2E, BlockE, Block2E, Miss,
+    LongE, CommentE, CommentNE, TagE, RoundE, Round2E, SquareE, Square2E,
+    GroupE, Group2E, BlockE, Block2E, Miss,
 
-    FirstB = QuoteB, LastB = Block2B, FirstE = QuoteE, LastE = Miss,
+    FirstB = LongB, LastB = Block2B, FirstE = LongE, LastE = Miss,
     Comment = 64, Bad = 128,
 };
 
@@ -46,29 +49,32 @@ char *typeNames[64] = {
     [None]="None", [Gap]="Gap", [Newline]="Newline",
     [Alternative]="Alternative", [Declaration]="Declaration",
     [Function]="Function", [Identifier]="Identifier", [Join]="Join",
-    [Keyword]="Keyword", [Long]="Long", [Mark]="Mark", [Note]="Note",
-    [Operator]="Operator",[Property]="Property", [Quote]="Quote", [Tag]="Tag",
-    [Unary]="Unary",[Value]="Value",[Wrong]="Wrong",
+    [Keyword]="Keyword", [Long]="Long", [Mark]="Mark", [NoteD]="NoteD",
+    [Note]="Note", [Operator]="Operator", [Property]="Property",
+    [QuoteD]="QuoteD", [Quote]="Quote", [Tag]="Tag", [Unary]="Unary",
+    [Value]="Value", [Wrong]="Wrong",
 
-    [QuoteB]="QuoteB", [LongB]="LongB", [NoteB]="NoteB", [CommentB]="CommentB",
-    [CommentNB]="CommentNB", [TagB]="TagB", [RoundB]="RoundB",
-    [Round2B]="Round2B", [SquareB]="SquareB",[Square2B]="Square2B",
-    [GroupB]="GroupB",[Group2B]="Group2B",[BlockB]="BlockB",
-    [Block2B]="Block2B",
+    [LongB]="LongB", [CommentB]="CommentB", [CommentNB]="CommentNB",
+    [TagB]="TagB", [RoundB]="RoundB", [Round2B]="Round2B", [SquareB]="SquareB",
+    [Square2B]="Square2B", [GroupB]="GroupB", [Group2B]="Group2B",
+    [BlockB]="BlockB", [Block2B]="Block2B",
 
-    [QuoteE]="QuoteE", [LongE]="LongE", [NoteE]="NoteE", [CommentE]="CommentE",
-    [CommentNE]="CommentNE", [TagE]="TagE", [RoundE]="RoundE",
-    [Round2E]="Round2E", [SquareE]="SquareE", [Square2E]="Square2E",
-    [GroupE]="GroupE", [Group2E]="Group2E", [BlockE]="BlockE",
-    [Block2E]="Block2E",[Miss]="Miss",
-};
+    [LongE]="LongE", [CommentE]="CommentE", [CommentNE]="CommentNE",
+    [TagE]="TagE", [RoundE]="RoundE", [Round2E]="Round2E", [SquareE]="SquareE",
+    [Square2E]="Square2E", [GroupE]="GroupE", [Group2E]="Group2E",
+    [BlockE]="BlockE", [Block2E]="Block2E", [Miss]="Miss", };
 
 // The one-character abbreviations for testing.
 char abbrevs[64] = {
-    '-', ' ', '.', '?', 'A', 'D', 'F', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
-    'Q', 'T', 'U', 'V', 'W', 'Q', 'L', 'N', 'C', 'C', 'T', 'R', 'R', 'S', 'S',
-    'G', 'G', 'B', 'B', 'Q', 'L', 'N', 'C', 'C', 'T', 'R', 'R', 'S', 'S',
-    'G', 'G', 'B', 'B'
+    [None]='-', [Gap]=' ', [Newline]='.', [Alternative]='A', [Declaration]='D',
+    [Function]='F', [Identifier]='I', [Join]='J', [Keyword]='K', [Long]='L',
+    [Mark]='M', [NoteD]='N', [Note]='N', [Operator]='O', [Property]='P',
+    [QuoteD]='Q', [Quote]='Q', [Tag]='T', [Unary]='U', [Value]='V',[Wrong]='W',
+    [LongB]='L', [CommentB]='C', [CommentNB]='C', [TagB]='T', [RoundB]='R',
+    [Round2B]='R',[SquareB]='S', [Square2B]='S',[GroupB]='G', [Group2B]='G',
+    [BlockB]='B', [Block2B]='B', [LongE]='L', [CommentE]='C', [CommentNE]='C',
+    [TagE]='T', [RoundE]='R', [Round2E]='R', [SquareE]='S', [Square2E]='S',
+    [GroupE]='G', [Group2E]='G', [BlockE]='B', [Block2E]='B', [Miss]='?'
 };
 
 bool beginType(int type) {
@@ -377,10 +383,7 @@ Pattern **unescape(Pattern **patterns) {
     else if (prefix("\\\\", s)) { p->string  = &s[1]; }
     else if (equal(s, "\\s")) { p->look = true; p->string = " "; }
     else if (equal(s, "\\n")) { p->look = true; p->string = "\n"; }
-    else if (prefix("\\",s) && sn > 2) { p->look = true; p->string = &s[1]; }
-    else if (prefix("\\",s) && sn == 2) {
-        error("bad lookahead %s on line %d", s, p->line);
-    }
+    else if (prefix("\\",s) && sn >= 2) { p->look = true; p->string = &s[1]; }
     else if (equal(s,"\\")) {
         p->look = true;
         p->string = " ..~";
@@ -773,13 +776,8 @@ void checkAll(State **states, bool print) {
 }
 
 // ---------- Transforms -------------------------------------------------------
-
 // Transform the rules before compiling. Add Miss patterns to deal with
-// mismatched close brackets. For each state s which has both the start and
-// after flags set, convert it into two states, s and s' where s only occurs at
-// the start of tokens, and s' occurs only after the start. This helps to solve
-// several problems, and avoid having to make special cases of them in the
-// scanner itself.
+// mismatched close brackets.
 
 // Where a state has a pattern involving a close bracket, and it is not followed
 // by another close bracket pattern for the same string, add a Miss pattern.
@@ -808,80 +806,11 @@ void addMiss(State *s) {
     }
 }
 
-// If a state has both start and after set, create a new partner state with the
-// same name. If the name is s, the pair can be printed as s and s'. Copy the
-// patterns to the partner state, set one flag in each, and set the partner
-// fields to refer to each other.
-void splitState(State *state, State **states) {
-    if (! (state->start && state->after)) return;
-    char *newName = newObject(strlen(state->name) + 2);
-    sprintf(newName, "%s'", state->name);
-    int p = length(states);
-    states = addState(states, newName);
-    State *partner = states[p];
-    for (int i = 0; i < length(state->patterns); i++) {
-        partner->patterns = adjust(partner->patterns, +1);
-        partner->patterns[i] = newObject(sizeof(Pattern));
-        *partner->patterns[i] = *state->patterns[i];
-        partner->patterns[i]->base = partner;
-    }
-    state->after = false;
-    partner->after = true;
-    state->partner = partner;
-    partner->partner = state;
-}
-
-// Set the target t of every pattern in a state to t or t', as appropriate. For
-// a \s or \n rule in an s', change the target to s so that s' deals with the
-// final token before the separator, and s deals with the separator.
-void retarget(State *s) {
-    for (int i = 0; i < length(s->patterns); i++) {
-        Pattern *p = s->patterns[i];
-        State *t = p->target;
-        if (s->partner != NULL && s->after) {
-            if (p->string[0] == ' ' || p->string[0] == '\n') {
-                p->target = s->partner;
-                continue;
-            }
-        }
-        bool change = false;
-        if (p->type != None && ! t->start) change = true;
-        if (p->type == None && ! p->look && ! t->after) change = true;
-        if (p->type == None && p->look && t->start != s->start) change = true;
-        if (t->partner == NULL) change = false;
-        if (change) p->target = t->partner;
-    }
-}
-
-// In a state with start flag set, convert \s and \n patterns into non-lookahead
-// S, N patterns. Change the corresponding type on \n from Quote to Miss, or
-// Note to NoteE, and everything else to Gap or Newline. That ensures that
-// unclosed quotes get treated as mismatched, and unclosed one-line comments
-// get treated as matched, and no attempts are made to create empty tokens.
-void transform(State *s) {
-    if (! s->start) return;
-    for (int i = 0; i < length(s->patterns); i++) {
-        Pattern *p = s->patterns[i];
-        if (p->string[0] != ' ' && p->string[0] != '\n') continue;
-        p->look = false;
-        if (p->string[0] == ' ') p->type = Gap;
-        else if (p->type == Quote) p->type = Miss;
-        else if (p->type == Note) p->type = NoteE;
-        else p->type = Newline;
-    }
-}
-
 // Stage 7: Split the states as necessary. Change the targets. Carry out all
 // the transformations on old and new states. Add Miss patterns for close
 // brackets. Optionally print.
 void transformAll(State **states, bool print) {
     int n = length(states);
-    for (int i = 0; i < n; i++) splitState(states[i], states);
-    n = length(states);
-    for (int i = 0; i < n; i++) {
-        retarget(states[i]);
-        transform(states[i]);
-    }
     for (int i = 0; i < n; i++) addMiss(states[i]);
     if (print) for (int i=0; i < length(states); i++) printState(states[i]);
 }
@@ -979,6 +908,11 @@ byte *compile(State **states) {
 // open brackets.
 enum { MATCH = 0x80, MISMATCH = 0x40, OPEN = 0xC0, FLAGS = 0xC0 };
 
+// A tracer is an object containing the states (for their names) and a tracery,
+// i.e. an array of lines of traced execution.
+struct tracer { State **states; char *tracery; };
+typedef struct tracer Tracery;
+
 // Find the 'top of stack'.
 byte top(byte *out, int at) {
     for (int i = at-1; i >= 0; i--) {
@@ -1010,13 +944,30 @@ void pop(byte *out, int at) {
     }
 }
 
-void trace(int r, bool l, char *in, int at, int n, int t, State **states) {
-    printf("%s ", states[r]->name);
-    if (l) printf("\\ ");
-    if (in[at] == ' ') printf("S");
-    else if (in[at] == '\n') printf("N");
-    else for (int i = 0; i < n; i++) printf("%c", in[at+i]);
-    printf(" %s\n", typeNames[t]);
+void trace(int r, bool l, char *in, int at, int n, int t, Tracer *tracer) {
+    State **states = tracer->states;
+    int total = length(states[r]->name) + n + length(typeNames[t]) + 10;
+    tracer->tracery = ensure(tracer->tracery, total);
+    char *tracery = tracer->tracery;
+    int end = length(tracery) - 1;
+    int m = sprintf(&tracery[end], "%s ", states[r]->name);
+    tracery = adjust(tracery + m);
+    end = length(tracery) - 1;
+    if (l) {
+        m = sprintf(&tracery[end], "\\ ");
+        tracery = adjust(tracery + m);
+    }
+    end = length(tracery) - 1;
+    if (in[at] == ' ') m = sprintf(&tracery[end], "S");
+    else if (in[at] == '\n') m = sprintf(&tracery[end], "N");
+    else {
+        for (int i = 0; i < n; i++) printf(&tracery[end], "%c", in[at+i]);
+        m = n;
+    }
+    tracery = adjust(tracery + m);
+    end = length(tracery) - 1;
+    m = sprintf(&tracery[end], " %s\n", typeNames[t]);
+    tracery = adjust(tracery + m);
 }
 
 // Use the given table and start row to scan the given input line, producing
@@ -1064,9 +1015,45 @@ int scan(byte *table, int row, char *in, byte *out, State **states) {
             else if (endType(type)) pop(out, start);
             start = at;
         }
+        if (ch == ' ') { out[at++] = Gap; start = at; }
+        else if (ch == '\n') { out[at++] = Newline; start = at; }
         row = target;
     }
     return row;
+}
+
+// After scanning, check for unclosed quote delimiters and mark them as
+// mismatched.
+void checkUnclosed(byte *out) {
+    bool inQuote = false;
+    int opener = 0;
+    for (int i = 0; i < length(out); i++) {
+        if (out[i] == QuoteD) {
+            inQuote = ! inQuote;
+            if (inQuote) opener = i;
+        }
+        else if (out[i] == Newline) {
+            if (inQuote && i > 0 && out[i-1] != Join) {
+                out[opener] |= MISMATCH;
+                inQuote = false;
+            }
+        }
+    }
+}
+
+// After scanning, convert tokens between /* */ to comments.
+void commentOut(byte *out) {
+    bool inComment = false;
+    for (int i = 0; i < length(out); i++) {
+        int type = out[i] & TYPE;
+        if (! inComment && type == CommentB) inComment = true;
+        else if (inComment && type == CommentE) inComment = false;
+        else if (inComment && type == CommentB) type = Wrong;
+        else if (! inComment && type == CommentE) type = Wrong;
+        else if (inComment && type != None && type != Gap && type != Newline) {
+            out[i] = CommentB;
+        }
+    }
 }
 
 // ---------- Testing ----------------------------------------------------------
@@ -1093,15 +1080,14 @@ char *extractTests(char **lines) {
 }
 
 // Extract expected outputs, make sure they line up with the tests.
-// Expect a character instead of a newline at the end of each.
 char *extractExpected(char *tests, char **lines) {
     char *expected = newList(1);
     for (int i = 0; i < length(lines); i++) {
         if (lines[i][0] != '<') continue;
         int n = strlen(lines[i]);
         int to = length(expected);
-        expected = adjust(expected, +n-1);
-        strncpy(&expected[to], lines[i]+1, n-1);
+        expected = adjust(expected, +n);
+        strncpy(&expected[to], lines[i]+1, n);
         int at = length(expected);
         if (at > length(tests) || tests[at-1] != '\n') {
             error("output doesn't line up on line %d", i+1);
@@ -1135,9 +1121,9 @@ void report(char *tests, char *expected, char *out, int start, int end) {
     printf("Test failed. Input, expected output and actual output are:\n");
     for (int i = start; i < end-1; i++) printf("%c", tests[i]);
     printf("\n");
-    for (int i = start; i < end; i++) printf("%c", expected[i]);
+    for (int i = start; i < end-1; i++) printf("%c", expected[i]);
     printf("\n");
-    for (int i = start; i < end; i++) printf("%c", out[i]);
+    for (int i = start; i < end-1; i++) printf("%c", out[i]);
     printf("\n");
     exit(1);
 }
@@ -1147,7 +1133,7 @@ void checkResults(char *tests, char *expected, char *out) {
     while (tests[end] != '\0') {
         while (tests[end] != '\n') end++;
         end++;
-        for (int i = start; i < end; i++) {
+        for (int i = start; i < end-1; i++) {
             if (expected[i] != (char)out[i]) {
                 report(tests, expected, out, start, end);
             }
@@ -1157,7 +1143,10 @@ void checkResults(char *tests, char *expected, char *out) {
 }
 
 void write(char *path, byte *table) {
-    FILE *p = fopen(path, "wb");
+    char outfile[100];
+    strcpy(outfile, path);
+    strcpy(outfile + strlen(outfile) - 4, ".bin");
+    FILE *p = fopen(outfile, "wb");
     fwrite(table, length(table), 1, p);
     fclose(p);
 }
@@ -1169,13 +1158,15 @@ void runTests(char **lines, byte *table, State **states, char *path) {
     byte *out = newList(1);
     out = adjust(out, length(tests));
     scan(table, 0, tests, out, states);
+    checkUnclosed(out);
+    commentOut(out);
     char *tr = translate(out);
     checkResults(tests, expected, tr);
     write(path, table);
 }
 
-// ---------- Writing ----------------------------------------------------------
-// The table and its overflow are written out to a binary file.
+// ---------- Main -------------------------------------------------------------
+// Run all the stages.
 
 int main(int n, char *args[n]) {
     bool trace = (n < 2) ? false : strcmp(args[1], "-t") == 0;
@@ -1191,51 +1182,9 @@ int main(int n, char *args[n]) {
     getPatterns(rules, states, false);
     expandRanges(states, false);
     checkAll(states, false);
-    transformAll(states, true);
+    transformAll(states, false);
     byte *table = compile(states);
     if (trace) runTests(lines, table, states, path);
     else runTests(lines, table, NULL, path);
     freeAll();
 }
-
-/*
-
-int main(int n, char *args[n]) {
-    char *text = readFile(file);
-    normalize(text);
-    char **lines = splitLines(text);
-    Rule **rules = getRules(lines);
-    State **states = makeStates(rules);
-    fillStates(rules, states);
-    derangeAll(states);
-    sortAll(states);
-    checkAll(states);
-
-// int count = 0;
-// for (int i = 0; i < size(states); i++) {
-//     printf("%s: %d %d\n", states[i].name, states[i].start, states[i].after);
-//     if (states[i].start) count++;
-// }
-// printf("#states %d\n", size(states));
-// printf("%d more needed for starters\n", count);
-
-    byte *table = malloc(2*96*length(states) + 10000);
-    compile(states, table, 2*96*length(states));
-    runTests(table, lines, states, trace);
-
-    char outfile[100];
-    strcpy(outfile, file);
-    strcpy(outfile + strlen(outfile) - 4, ".bin");
-    write(outfile, table);
-
-    free(table);
-    for (int i = 0; i < length(states); i++) freeArray(states[i]->patterns);
-    freeArray(states);
-    for (int i = 0; i < length(rules); i++) freeArray(rules[i]->strings);
-    freeArray(rules);
-    freeArray(lines);
-    free(text);
-}
-
-
-*/
