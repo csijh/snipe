@@ -1,4 +1,5 @@
-// TODO: turn into document or file!
+// Snipe editor. Free and open source, see licence.txt.
+
 // TODO: use 4 gap buffers.
 // Store an array of variable-length strings, e.g. the lines or tags of a file.
 struct store;

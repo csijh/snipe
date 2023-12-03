@@ -1,16 +1,17 @@
 // Snipe editor. Free and open source, see licence.txt.
 
-// TODO: include gap buffers!
-
 // Provide support for dynamic arrays and gap buffers, accessed directly as
 // normal C arrays. No distinction is made between the two, an array being a
-// gap buffer with the gap at the end. Care needs to be taken when an array
-// might move through reallocation, or data might move in an array though a
-// change in the gap position. Ideally, an array or buffer should be owned by a
-// single module, which hides data movement issues from its callers.
+// gap buffer with the gap at the end. Care needs to be taken when data might
+// move, either because of reallocation, or because of a gap move. To avoid
+// propagating these issues, either the array can be accessed via an owner
+// object, or ensure() can be called to reallocate the array in advance of
+// passing it to a function.
 
 // Allocate an initially empty array of elements of the given unit size.
 void *newArray(int unit);
+
+void freeArray(void *a);
 
 // Change length by a given amount, which can be negative. For a buffer, this
 // represents the insertion or deletion of data just before the gap.

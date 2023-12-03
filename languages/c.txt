@@ -270,6 +270,12 @@ start     \s \n   start
 >    x
 <    I
 
+// Mismatched brackets on two lines.
+> one (
+< I-- r
+> two ]
+< I-- s
+
 // Multi-line comment
 > n = 0; /* line one
 < I O VM C- C--- C--
