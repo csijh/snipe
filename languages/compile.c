@@ -14,7 +14,7 @@
 #include <time.h>
 
 // ---------- types ------------------------------------------------------------
-// These types and their names must be kept the same as in other Snipe modules.
+// These types and their names must be kept the same as in src/scan.h.
 // A type is used to mark a text character, to represent the result of
 // scanning. The bracket types come in matching pairs, with a B or E suffix.
 // A few types and flags are used internally:
@@ -61,7 +61,6 @@ char *typeNames[64] = {
     [BlockE]="BlockE", [Block2E]="Block2E" };
 
 char abbrev(int type) {
-    if (typeNames[type] == NULL) return '?';
     switch (type) {
     case None: return '-';
     case Gap: return ' ';
@@ -896,7 +895,7 @@ bool matchTop(int type, byte *out, int at) {
     for (int i = at-1; i >= 0; i--) {
         if ((out[i] & FLAGS) == OPEN) return match((out[i] & TYPE), type);
     }
-    return true;
+    return false;
 }
 
 // Simulate a pushed open bracket.
@@ -1085,7 +1084,7 @@ char *extractExpected(char *tests, char **lines) {
 // unmatched brackets become lower case.
 char *translate(byte *out) {
     char *tr = (char *) out;
-    for (int i = 0; i < length(out); i++) {
+    for (int i = 0; i < length(out)-1; i++) {
         byte b = out[i];
         char ch = abbrev(b & TYPE);
         if ((b & FLAGS) == MISMATCH || (b & FLAGS) == OPEN) ch = tolower(ch);
