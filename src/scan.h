@@ -25,8 +25,9 @@ bool isOpener(int type);
 bool isCloser(int type);
 bool match(int opener, int closer);
 
-// Scan the text, using a language-specific table and a given start state, from
-// at to length(text), usually one line, filling in the corresponding position
-// in the types array. Update the stack of unmatched open brackets, which must
-// have sufficient capacity ensured in advance. Return the final state.
-int scan(byte *table, int state, int at, char *text, byte *types, int *stack);
+// Given a language as a state machine and an initial state, scan the input from
+// a given position up to its length (usually one line). Fill in token types in
+// the out array. Carry out bracket matching using the given stack, which must
+// have sufficient capacity ensured in advance. If the array of state names is
+// not NULL, use it to print a trace of the execution. Return the final state.
+int scan(byte *lang, int s0, char *in, int at, byte *out, int *stk, char **ns);

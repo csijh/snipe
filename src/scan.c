@@ -76,47 +76,59 @@ static inline void pop(int *stack, int atCloser, byte *types) {
     types[atCloser] |= Bad;
 }
 
-int scan(byte *table, int state, int at, char *text, byte *types, int *stack) {
-    int n = length(text);
-    for (int i = at; i < n; i++) types[i] = None;
+void trace(char **ns, int s, bool look, char *in, int at, int n, int type) {
+    printf("%-10s ", ns[s]);
+    int pad = 10;
+    if (look) { printf("\\"); pad--; }
+    if (in[at] == '\\') { printf("\\"); pad--; }
+    if (n == 1 && in[at] == ' ') printf("s");
+    else if (n == 1 && in[at] == '\n') printf("n");
+    else printf("%.*s", n, &in[at]);
+    printf(".*s ", pad-n, "          ");
+    printf(typeNames[type]);
+}
+
+int scan(byte *lang, int s0, char *in, int at, byte *out, int *stk, char **ns) {
+    int n = length(in);
+    for (int i = at; i < n; i++) out[i] = None;
+    int state = s0;
     int start = 0;
     while (at < n) {
-        char ch = text[at];
+        char ch = in[at];
         int col = columnOf(ch);
         byte *cell = &table[cellOf(state, col)];
-        int patternLength = 1;
+        int len = 1;
         if (isLink(cell)) {
             byte *pattern = table + offset(cell);
             bool found = false;
             while (! found) {
                 found = true;
-                patternLength = pattern[0];
+                len = pattern[0];
                 cell = patternCell(pattern);
-                for (int i = 1; i < patternLength && found; i++) {
-                    if (text[at + i] != pattern[i]) found = false;
+                for (int i = 1; i < len && found; i++) {
+                    if (in[at + i] != pattern[i]) found = false;
                 }
                 int type = typeOf(cell);
                 if (found && isSoft(cell)) {
                     int closer = typeOf(cell);
-                    if (! matchTop(stack,types,closer)) found = false;
+                    if (! matchTop(stack,out,closer)) found = false;
                 }
-                pattern = pattern + patternLength + CELL;
+                pattern = pattern + len + CELL;
             }
         }
         bool lookahead = isLook(cell);
         int type = typeOf(cell);
         int target = targetOf(cell);
-        // if (tracer != NULL) tracer->trace(tracer, state, lookahead, at, len, type);
-        // trace(row, lookahead, in, at, len, type, tracer);
-        if (! lookahead) at = at + patternLength;
+        if (ns != NULL) trace(ns, state, lookahead, at, len, type, target);
+        if (! lookahead) at = at + len;
         if (type != None && start < at) {
-            types[start] = type;
+            out[start] = type;
             if (isOpener(type)) push(stack, start);
-            else if (isCloser(type)) pop(stack, start, types);
+            else if (isCloser(type)) pop(stack, start, out);
             start = at;
         }
-        if (ch == ' ') { types[at++] = Gap; start = at; }
-        else if (ch == '\n') { types[at++] = Newline; start = at; }
+        if (ch == ' ') { out[at++] = Gap; start = at; }
+        else if (ch == '\n') { out[at++] = Newline; start = at; }
         state = target;
     }
     return state;

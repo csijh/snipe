@@ -948,7 +948,6 @@ void trace(int r, bool l, char *in, int at, int n, int t, Tracer *tracer) {
 
     tracer->text = addString(tracer->text, line);
     if (at[in] == '\n') tracer->text = addString(tracer->text, "\n");
-    return;
 }
 
 // Use the given table and start row to scan the given input line, producing
