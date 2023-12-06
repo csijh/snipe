@@ -1,96 +1,114 @@
-struct bracket { int site; int partner; };
-typedef struct bracket Bracket;
+// Snipe editor. Free and open source, see licence.txt.
+#include <limits.h>
 
-Bracket *newBrackets() {
-    return newArray(sizeof(Bracket));
+// Gap buffers for token types, unmatched brackets, matched brackets. The types
+// buffer has a byte for each byte of text. The first byte of a token gives its
+// type, the remaining bytes have type None. The low part of the unmatched
+// buffer is a conventional stack of the indexes of unmatched openers, from the
+// start of the text to the current position. The high part is a mirror image
+// stack of indexes of unmatched closers, from the end of the text back to the
+// current position. The indexes are negative, measured backwards from the end
+// of the types buffer. The low part of the matched buffer is a stack of
+// matched openers, in the order they were matched, to allow bracket matching
+// to be reversed. The high part is a similar stack of matched closers.
+struct tokens { byte *types; int *unmatched, *matched; };
+
+// A token index used when an empty stack is popped.
+enum { MISSING = INT_MIN };
+
+// Push a token index onto a forward stack, assuming pre-allocation.
+static inline void pushF(int *stack, int t) {
+    int n = length(stack);
+    adjust(stack, +1);
+    stack[n] = t;
 }
 
-// Scan is: move gap to end of line, deleteLeft to start of line, scan.
-
-void deleteLeft(int *brackets, int startOfLine) {
-    // pop any brackets with site >= startOfLine
+// Pop a token index (or MISSING) from a forward stack.
+static inline int popF(int *stack) {
+    int n = length(stack);
+    if (n == 0) return MISSING;
+    adjust(stack, -1);
+    return stack[n-1];
 }
 
-void moveGapLeft(int *brackets, int *types) {
-    // if bracket = top opener, pop it, pop corresponder after gap (match?)
-    // else is closer:
-    //    push after gap
-    //    search for opener, unmark, push after gap
+// Push a (negative) token index onto a backward stack, assuming pre-allocation.
+static inline void pushB(int *stack, int t) {
+    int n = high(stack);
+    rehigh(stack, -1);
+    stack[n-1] = t;
 }
 
-// Search leftward for the opener which matches the given closer.
-int findOpener(int closer, byte *types) {
-    int depth = 1, i;
-    for (i = closer-1; i >= 0 && depth > 0; i--) {
-        if (isCloser(types[i])) depth++;
-        else if (isOpener(types[i])) depth--;
+// Pop a (negative) token index (or MISSING) from a backward stack.
+static inline int popB(int *stack) {
+    int m = max(stack);
+    int h = high(stack);
+    if (h == m) return MISSING;
+    rehigh(stack, +1);
+    return stack[h-1];
+}
+
+// Do forward bracket matching on token t, assuming pre-allocation.
+static inline void matchF(Tokens *ts, int t) {
+    byte *types = ts->types;
+    if (isOpener(types[t])) pushF(ts->unmatched, t);
+    else if (isCloser(types[t])) {
+        int opener = popF(ts->unmatched);
+        if (opener == MISSING) {
+            types[t] |= Bad;
+        }
+        else if (match(types[opener], types[t])) {
+            types[opener] &= ~Bad;
+            types[t] &= ~Bad;
+        }
+        else {
+            types[opener] |= Bad;
+            types[t] |= Bad;
+        }
+        pushF(ts->matched, opener);
     }
-    // Check depth == 0; guaranteed? need MISSING constant
-    // Unmark
-    return i;
 }
 
-// Search is linear scan, matching brackets, looking for first unmatched.
-// Don't need to skip stacked, because must be before the first.
-// Possibly no more costly than maintaining links between matched brackets.
-// Speeding up using indents is probably not worth it.
-
-// If its top, pop it:      ['(',-9][TOP,-1]   ->   [TOP,-9]
-// If matched, unmatch it:  ['(',+5]...[)',-5][TOP,-9]   ->   ['(',-9]...[TOP,-5]
-void deleteLeft(Bracket *brackets, int *types) {
-    int n = length(brackets);
-    if (n < 2) return;
-    int top = brackets[n-1].partner;
-    int last = n-2;
-    if (last == top) {
-        brackets[last].partner = top;
-//        unmark(types, brackets[last].site);
+// Undo forward bracket matching on token t, assuming pre-allocation.
+static inline void unmatchF(Tokens *ts, int t) {
+    byte *types = ts->types;
+    types[t] &= ~Bad;
+    if (isOpener(types[t])) popF(ts->unmatched, t);
+    else if (isCloser(types[t])) {
+        int opener = popF(ts->matched);
+        if (opener != MISSING) {
+            types[opener] &= ~Bad;
+            pushF(ts->unmatched, opener);
+        }
     }
-    else {
-        int opener = brackets[last].partner;
-        unmark(types, brackets[opener].site);
-//        unmark(types, brackets[last].site);
-        brackets[opener].partner = top;
-        top = opener;
-        brackets[last].partner = top;
+}
+
+// Delete n token bytes before the gap.
+void deleteTokens(Tokens *ts, int n) {
+    for (int i = t-1; i >= t - n; t--) {
+        if (isOpener(ts->types[i]) || isCloser(ts->types[i])) {
+            unmatch(ts, i);
+        }
     }
-    adjust(brackets, -1);
 }
 
-void moveLeft(Brackets *brackets, int *types) {
-    int n = length(brackets);
+// Insert n token bytes at the start of the gap, and prepare for scanning,
+// pre-allocating the buffers.
+void insertTokens(Tokens *ts, int n) {
+    int t = length(ts->types);
+    ts->types = adjust(ts->types, n);
+    for (int i = t; i < t+n; i++) ts->types[i] = None;
+    ts->unmatched = ensure(ts->unmatched, n);
+    ts->matched = ensure(ts->matched, n);
 }
 
-// Consider search:
-// Have closer. Want matching opener. Use closer/opener counts per line.
-// Then search in the line.
+// Check if the top of the unmatched opener stack matches a closer type.
+bool matchTop(Tokens *ts, int type) {
 
+}
 
-// Contains all brackets.
-// Site is index into (text and) types array.
-// Partner contains matches, and doubles as stack.
-// Where is the stack top held? Search (#c,#o) or special or separate?
-// Current line must be cursor line.
-// Operations:
-//    (Move current site to end of line.)
-//    Delete brackets from site1 to site2 (need max).
-//    Allow scan to insert new brackets (matchTop, addOpener, addCloser)
-//    Move current site to nextLine/prevLine/cursor.
+// Give token at t the given type, and do any appropriate bracket matching.
+void setToken(Tokens *ts, int t, int type);
 
-// Case study: compile.c
-// Bytes: 40840  (text and types 81680)
-// Lines: 5938   (boundaries 23752)
-// Brackets: (733+203+166)*2*8 = (brackets structure bytes: 17623)
-
-// Suggestion: don't track matching of brackets at all.
-//     just stacks of sites of unmatched openers/closers before/after cursor
-// Matching of vertical brackets is indicated by indenting:
-//     up indent = prev indent - closers before cursor
-//     down indent = next indent - openers after cursor
-// Matching on the line is:
-//     mark spare openers before cursor
-//     mark
-
-// Deletion is: remove any markers inside range
-// Scan is: add markers
-// Move is:
+// Set token type (and handle brackets)
+// Move cursor.
+// Read for display.

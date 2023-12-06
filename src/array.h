@@ -13,23 +13,25 @@ void *newArray(int unit);
 
 void freeArray(void *a);
 
-// Change length by a given amount, which can be negative. For a buffer, this
-// represents the insertion or deletion of data just before the gap.
-void *adjust(void *a, int by);
-
-// Pre-allocate more memory to allow for 'by' more items, without changing the
-// length, so that some future adjust calls don't move the array.
-void *ensure(void *a, int by);
-
-// The number of items in an array, or the start index of the gap in a buffer.
+// The number of items in an array, also the start index of the gap in a buffer.
 int length(void *a);
 
-// The capacity of an array, or the start of the high data in a buffer, which is
-// also the end index of the gap.
+// The start of the high data in a buffer, also the end index of the gap.
 int high(void *a);
 
-// The capacity of an array, or the end of the high data in a buffer.
+// The capacity of an array, also the end of the high data in a buffer.
 int max(void *a);
+
+// Change length by d, which can be negative. For a gap buffer, this represents
+// the insertion or deletion of data at the start of the gap.
+void *adjust(void *a, int d);
+
+// Change the high point by d, reallocating if necessary.
+void *rehigh(void *a, int d);
+
+// Pre-allocate more memory to allow for d more items, so that some future
+// adjust calls don't move the array.
+void *ensure(void *a, int d);
 
 // Move the gap from length(a) to the given offset (without relocation).
 void moveGap(void *a, int to);

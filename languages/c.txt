@@ -141,8 +141,14 @@ note     \n     start Note
 
 // Multi-line comment.
 
-start    /*     start CommentB
-start    */     start CommentE
+start     /*     comment CommentB
+comment   !..~   comment
+comment   \s \n  comment Comment
+comment   \/*    comment2 Comment
+comment   \*/    comment2 Comment
+comment2  /*     comment Wrong
+comment2  */     start CommentE
+comment2  \      start Wrong
 
 // Numbers. There is no attempt to detect malformed numbers.
 start    0..9           decimal

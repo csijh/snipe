@@ -69,10 +69,10 @@ void moveGap(void *a, int gap) {
     }
 }
 
-void *ensure(void *a, int by) {
+void *ensure(void *a, int d) {
     header *h = (header *) a - 1;
     int hilen = (h->max - h->high);
-    int needed = (h->length + by + hilen);
+    int needed = (h->length + d + hilen);
     int size = h->max;
     if (size >= needed) return h + 1;
     while (size < needed) size = size * 3 / 2;
@@ -87,11 +87,18 @@ void *ensure(void *a, int by) {
     return h + 1;
 }
 
-void *adjust(void *a, int by) {
-    a = ensure(a, by);
+void *adjust(void *a, int d) {
+    a = ensure(a, d);
     header *h = (header *) a - 1;
-    h->length += by;
+    h->length += d;
     if (h->length < 0) h->length = 0;
+    return h + 1;
+}
+
+void *rehigh(void *a, int d) {
+    a = ensure(a, -d);
+    header *h = (header *) a - 1;
+    h->high += d;
     return h + 1;
 }
 

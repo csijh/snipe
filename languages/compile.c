@@ -21,14 +21,13 @@
 //   None     means no type, and marks token characters after the first
 //   Gap      marks a space or spaces as a separator
 //   Newline  marks a newline as a separator
-//   Comment  flags a token, reversibly, as a comment
 //   Bad      flags a token, reversibly, as mismatched
 // For display, XB -> X, XNB -> X, ... X+Comment -> Note, X+Bad -> Wrong.
 
 enum type {
-    None, Gap, Newline, Alternative, Declaration, Function, Identifier, Join,
-    Keyword, Long, Mark, NoteD, Note, Operator, Property, QuoteD, Quote, Tag,
-    Unary, Value, Wrong,
+    None, Gap, Newline, Alternative, Comment, Declaration, Function, Identifier,
+    Join, Keyword, Long, Mark, NoteD, Note, Operator, Property, QuoteD, Quote,
+    Tag, Unary, Value, Wrong,
 
     LongB, CommentB, CommentNB, TagB, RoundB, Round2B, SquareB, Square2B,
     GroupB, Group2B, BlockB, Block2B,
@@ -37,18 +36,19 @@ enum type {
     GroupE, Group2E, BlockE, Block2E,
 
     FirstB = LongB, LastB = Block2B, FirstE = LongE, LastE = Block2E,
-    Comment = 64, Bad = 128,
+    Bad = 128,
 };
 
 // The full names of the types.
 char *typeNames[64] = {
     [None]="None", [Gap]="Gap", [Newline]="Newline",
-    [Alternative]="Alternative", [Declaration]="Declaration",
-    [Function]="Function", [Identifier]="Identifier", [Join]="Join",
-    [Keyword]="Keyword", [Long]="Long", [Mark]="Mark", [NoteD]="NoteD",
-    [Note]="Note", [Operator]="Operator", [Property]="Property",
-    [QuoteD]="QuoteD", [Quote]="Quote", [Tag]="Tag", [Unary]="Unary",
-    [Value]="Value", [Wrong]="Wrong",
+    [Alternative]="Alternative", [Comment]="Comment",
+    [Declaration]="Declaration", [Function]="Function",
+    [Identifier]="Identifier", [Join]="Join", [Keyword]="Keyword",
+    [Long]="Long", [Mark]="Mark", [NoteD]="NoteD", [Note]="Note",
+    [Operator]="Operator", [Property]="Property", [QuoteD]="QuoteD",
+    [Quote]="Quote", [Tag]="Tag", [Unary]="Unary", [Value]="Value",
+    [Wrong]="Wrong",
 
     [LongB]="LongB", [CommentB]="CommentB", [CommentNB]="CommentNB",
     [TagB]="TagB", [RoundB]="RoundB", [Round2B]="Round2B", [SquareB]="SquareB",
@@ -1017,21 +1017,6 @@ void checkUnclosed(byte *out) {
     }
 }
 
-// After scanning, convert tokens between /* */ into comments.
-void commentOut(byte *out) {
-    bool inComment = false;
-    for (int i = 0; i < length(out); i++) {
-        int type = out[i] & TYPE;
-        if (! inComment && type == CommentB) inComment = true;
-        else if (inComment && type == CommentE) inComment = false;
-        else if (inComment && type == CommentB) type = Wrong;
-        else if (! inComment && type == CommentE) type = Wrong;
-        else if (inComment && type != None && type != Gap && type != Newline) {
-            out[i] = CommentB;
-        }
-    }
-}
-
 // ---------- Testing ----------------------------------------------------------
 // The tests in a language description are intended to check that the rules work
 // as expected. They also act as tests for this program. A line starting with >
@@ -1138,7 +1123,6 @@ void runTests(char **lines, byte *table, State **states, char *path) {
     tracer->text[0] = '\0';
     scan(table, 0, tests, out, tracer);
     checkUnclosed(out);
-    commentOut(out);
     int n = checkResults(tests, expected, translate(out), tracer);
     char outpath[strlen(path)+1];
     strcpy(outpath, path);
