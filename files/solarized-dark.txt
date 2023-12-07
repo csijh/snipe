@@ -14,6 +14,10 @@ PROPERTY #839496 base0
 FUNCTION #268bd2 blue
 BAD      #dc322f red
 
+// TODO: format can be:
+// name hex list-of-letters
+// name is ignored, upper case letters are token types, lower case are bgs
+
 // See http://ethanschoonover.com/solarized
 //
 // #002b36 base03

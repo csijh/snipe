@@ -106,35 +106,35 @@ dot     \      start Op
 
 // Character literals.
 
-start   '      char QuoteD
+start   '      char QuoteB
 char    !..~   char
 char    \\'    char
 char    \s     char Quote
 char    \'     char2 Quote
-char    \n     start Quote
-char2   '      start QuoteD
+char    \n     start QuoteE
+char2   '      start QuoteE
 char2   \      start Wrong
 
 // String literals. Allow joiners
 
-start     "      string QuoteD
+start     "      string QuoteB
 string    !..~   string
 string    \\"    string
 string    \\\    string2 Quote
 string    \s     string Quote
 string    \"     string2 Quote
-string    \n     start Quote
+string    \n     start QuoteE
 
 string2   \\     string3
-string2   "      start QuoteD
+string2   "      start QuoteE
 string2   \      string
-string3   \n     string Join
+string3   \n     string Mark
 string3   \s     string Quote
 string3   \      string
 
 // One-line comment.
 
-start    //     note NoteD
+start    //     note Note
 note     !..~   note
 note     \s     note Note
 note     \n     start Note
@@ -173,7 +173,7 @@ hash      define elif else endif error if   start Alt
 hash      ifdef ifndef line pragma undef    start Alt
 hash      \                                 start
 
-include   <                                 filename QuoteD
+include   <                                 filename Quote
 include   \s                                include
 include   \                                 start
 
@@ -182,12 +182,12 @@ filename  \>                                filename2 Quote
 filename  \s                                filename Quote
 filename  \n                                start Quote
 
-filename2 >                                 start QuoteD
+filename2 >                                 start Quote
 filename2 \                                 start Wrong
 
 // Backslash newline, e.g. in #define
 
-start \\ start Join
+start \\ start Mark
 
 // Illegal characters and white space.
 start     $ @ `   start Wrong
@@ -244,7 +244,7 @@ start     \s \n   start
 
 // String literal with joiner
 > "hello \
-< QQ---- J
+< QQ---- M
 > world"
 < Q----Q
 
@@ -266,7 +266,7 @@ start     \s \n   start
 
 // Joiner
 > #define f(x) \
-< AA----- IRIR J
+< AA----- IRIR M
 
 // Illegal characters
 > $ @ `

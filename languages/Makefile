@@ -1,5 +1,5 @@
 # Type make, then type ./compile c.txt
-compile = compile.c
+compile = compile.c ../src/types.c
 
 # C compiler and options for debugging or optimisation. On macOS, 'gcc'
 # refers to 'clang'.

@@ -13,6 +13,10 @@
 #include <ctype.h>
 #include <time.h>
 
+// Use the type constants from the main editor.
+#include "../src/types.h"
+
+/*
 // ---------- types ------------------------------------------------------------
 // These types and their names must be kept the same as in src/scan.h.
 // A type is used to mark a text character, to represent the result of
@@ -20,7 +24,6 @@
 // A few types and flags are used internally:
 //   None     means no type, and marks token characters after the first
 //   Gap      marks a space or spaces as a separator
-//   Newline  marks a newline as a separator
 //   Bad      flags a token, reversibly, as mismatched
 // For display, XB -> X, XNB -> X, ... X+Comment -> Note, X+Bad -> Wrong.
 
@@ -60,7 +63,7 @@ char *typeNames[64] = {
     [Square2E]="Square2E", [GroupE]="GroupE", [Group2E]="Group2E",
     [BlockE]="BlockE", [Block2E]="Block2E" };
 
-char abbrev(int type) {
+char visualType(int type) {
     switch (type) {
     case None: return '-';
     case Gap: return ' ';
@@ -69,18 +72,18 @@ char abbrev(int type) {
     }
 }
 
-bool beginType(int type) {
+bool isOpener(int type) {
     return FirstB <= type && type <= LastB;
 }
 
-bool endType(int type) {
+bool isCloser(int type) {
     return FirstE <= type && type <= LastE;
 }
 
-bool match(int open, int close) {
+bool bracketMatch(int open, int close) {
     return close == open + FirstE - FirstB;
 }
-
+*/
 bool equal(char *s, char *t) {
     return strcmp(s, t) == 0;
 }
@@ -104,7 +107,7 @@ void error(char *format, ...) {
 // Convert a string to a type. Handle suffixes and abbreviations.
 int findType(char *s) {
     for (int i = Alternative; i <= Block2E; i++) {
-        char *name = typeNames[i];
+        char *name = typeName(i);
         if (equal(s, name)) return i;
         if (! islower(name[strlen(name)-1])) continue;
         if (prefix(s, name)) return i;
@@ -441,7 +444,7 @@ void printPattern(Pattern *p) {
     else if (p->look || s[0] == '\\') printf("\\%-13s ", s);
     else printf("%-14s ", s);
     printf("%-10s ", p->target->name);
-    if (p->type != None) printf("%-10s", typeNames[p->type]);
+    if (p->type != None) printf("%-10s", typeName(p->type));
     if (p->soft) printf("(soft)");
     printf("\n");
 }
@@ -624,11 +627,11 @@ void sortAll(State **states) {
 void addSoft(State *s) {
     for (int i = 0; i < length(s->patterns); i++) {
         Pattern *p = s->patterns[i];
-        if (! endType(p->type)) continue;
+        if (! isCloser(p->type)) continue;
         bool last = false;
         if (i == length(s->patterns) - 1) last = true;
         else if (! equal(p->string, s->patterns[i+1]->string)) last = true;
-        else if (! endType(s->patterns[i+1]->type)) last = true;
+        else if (! isCloser(s->patterns[i+1]->type)) last = true;
         if (! last) p->soft = true;
      }
 }
@@ -697,7 +700,7 @@ void noDuplicates(State *state) {
             Pattern *q = list[j];
             char *t = q->string;
             if (! equal(s,t)) continue;
-            if (endType(p->type) && endType(q->type) && p->type != q->type) {
+            if (isCloser(p->type) && isCloser(q->type) && p->type != q->type) {
                 continue;
             }
             error("state %s has pattern for %s twice", state->name, s);
@@ -722,12 +725,14 @@ void complete(State *state) {
     else error("state %s doesn't handle %c", state->name, ch);
 }
 
-// Check that bracket types are not associated with lookaheads.
+// Check that bracket types are not associated with lookaheads, except for
+// QuoteE with \n.
 void checkBrackets(State *base) {
     for (int i = 0; i < length(base->patterns); i++) {
         Pattern *p = base->patterns[i];
         if (! p->look) continue;
-        if (! beginType(p->type) && ! endType(p->type)) continue;
+        if (! isOpener(p->type) && ! isCloser(p->type)) continue;
+        if (p->type == QuoteE && p->string[0] == '\n') continue;
         error("bracket type with lookahead on line %d", p->line);
     }
 }
@@ -893,7 +898,7 @@ typedef struct tracer Tracer;
 
 bool matchTop(int type, byte *out, int at) {
     for (int i = at-1; i >= 0; i--) {
-        if ((out[i] & FLAGS) == OPEN) return match((out[i] & TYPE), type);
+        if ((out[i] & FLAGS) == OPEN) return bracketMatch((out[i] & TYPE), type);
     }
     return false;
 }
@@ -911,7 +916,7 @@ void pop(byte *out, int at) {
     }
     int left = out[open] & TYPE;
     int right = out[at] & TYPE;
-    if (match(left, right)) {
+    if (bracketMatch(left, right)) {
         if (open >= 0) out[open] = left | MATCH;
         out[at] = right | MATCH;
     }
@@ -943,7 +948,7 @@ void trace(int r, bool l, char *in, int at, int n, int t, Tracer *tracer) {
     }
     char line[100] = "";
     char *base = tracer->states[r]->name;
-    char *type = (t == None) ? "" : typeNames[t];
+    char *type = (t == None) ? "" : typeName(t);
     sprintf(line, "%-10s %-10s %-10s\n", base, pattern, type);
 
     tracer->text = addString(tracer->text, line);
@@ -986,35 +991,23 @@ int scan(byte *table, int row, char *in, byte *out, Tracer *tracer) {
         trace(row, lookahead, in, at, len, type, tracer);
         if (! lookahead) at = at + len;
         if (type != None && start < at) {
-            out[start] = type;
-            if (beginType(type)) push(out, start);
-            else if (endType(type)) pop(out, start);
+            int type2 = type;
+            if (ch == '\n' && type == QuoteE) type2 = Quote;
+            out[start] = type2;
+            if (isOpener(type2)) push(out, start);
+            else if (isCloser(type2)) pop(out, start);
             start = at;
         }
         if (ch == ' ') { out[at++] = Gap; start = at; }
-        else if (ch == '\n') { out[at++] = Newline; start = at; }
+        else if (ch == '\n' && type == QuoteE) {
+            out[at++] = Quote2E;
+            pop(out, at-1);
+            start = at;
+        }
+        else if (ch == '\n') { out[at++] = Gap; start = at; }
         row = target;
     }
     return row;
-}
-
-// After scanning, check for unclosed quote delimiters and mark them as
-// mismatched.
-void checkUnclosed(byte *out) {
-    bool inQuote = false;
-    int opener = 0;
-    for (int i = 0; i < length(out); i++) {
-        if (out[i] == QuoteD) {
-            inQuote = ! inQuote;
-            if (inQuote) opener = i;
-        }
-        else if (out[i] == Newline) {
-            if (inQuote && i > 0 && out[i-1] != Join) {
-                out[opener] |= MISMATCH;
-                inQuote = false;
-            }
-        }
-    }
 }
 
 // ---------- Testing ----------------------------------------------------------
@@ -1070,7 +1063,7 @@ char *translate(byte *out) {
     char *tr = (char *) out;
     for (int i = 0; i < length(out)-1; i++) {
         byte b = out[i];
-        char ch = abbrev(b & TYPE);
+        char ch = visualType(b & TYPE);
         if ((b & FLAGS) == MISMATCH || (b & FLAGS) == OPEN) ch = tolower(ch);
         tr[i] = ch;
     }
@@ -1122,7 +1115,6 @@ void runTests(char **lines, byte *table, State **states, char *path) {
     adjust(tracer->text, +1);
     tracer->text[0] = '\0';
     scan(table, 0, tests, out, tracer);
-    checkUnclosed(out);
     int n = checkResults(tests, expected, translate(out), tracer);
     char outpath[strlen(path)+1];
     strcpy(outpath, path);

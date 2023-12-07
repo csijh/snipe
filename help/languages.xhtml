@@ -194,33 +194,39 @@ rule that applies, is that the opening and closing brackets are marked as
 mismatching. A closing bracket is also marked as a mismatch if the stack is
 empty.</p>
 
-<p>Delimiters of one-line comments or quotes are given types with suffix
-<code>D</code>:</p>
+<p>Delimiters of multi-line comments are treated as brackets, using
+<code>CommentB</code> for the opening delimiter, <code>CommentE</code> for the
+closing delimiter, and <code>Comment</code> for the tokens in between.</p>
 
-<pre>start " string QuoteD
+<pre>start /* comment CommentB
 </pre>
 
-<p>The tokens between the <code>QuoteD</code> delimiters are given the type
-<code>Quote</code>. If there is no closing delimiter before the end of the
-line, the bracket matcher treats the preceding <code>QuoteD</code> as
-unmatched. If there is a continuation convention, such as a backslash at the
-end of the line, to indicate that the quote is continued on the next line, the
-backslash can be given type <code>Mark</code>.</p>
+<p>One-line comments are treated differently, because they have no closing
+delimiter, and because they are indented and reformatted differently. A
+one-line comment is described as a sequence of tokens of type
+<code>Note</code>:</p>
 
-<p>For one-line comments, say <code>//</code> to the end of the line, the
-<code>//</code> is given type <code>NoteD</code> and the remaining tokens are
-given the type <code>Note</code>. At the end of the line, the bracket matcher
-treats the <code>NoteD</code> token as matched.</p>
-
-<p>Delimiters of multi-line quotes are handled like brackets, using
-<code>LongB</code> for the opening quote, <code>LongE</code> for the closing
-quote, and <code>Long</code> for the tokens in between. Delimiters of
-multi-line comments are also treated as brackets, using <code>CommentB</code>
-for the opening delimiter, <code>CommentE</code> for the closing delimiter, and
-<code>Comment</code> for the tokens in between.</p>
-
-<pre>start /* start CommentB
+<pre>start // note Note
 </pre>
+
+<p>Delimiters of quoted literals are treated as brackets, whether one-line or
+multi-line, with <code>QuoteB</code> for the opening delimiter,
+<code>QuoteE</code> for the closing delimiter, and <code>Quote</code> for the
+tokens in between:</p>
+
+<pre>start " string QuoteB
+</pre>
+
+<p>To deal with the awkward case of a one-line quoted literal with no closing
+delimiter, a rule of this form is treated specially:</p>
+
+<pre>string \n QuoteE
+</pre>
+
+<p>If there is a non-empty current token at this point, it is automatically
+terminated with type <code>Quote</code> by the scanner. The bracket matcher
+then arranges to highlight the corresponding <code>QuoteB</code> token as
+unmatched.</p>
 
 <p>For a tag-based language such as HTML or XML, types <code>TagB</code>,
 <code>Tag</code> and <code>TagE</code> can be used to handle and match tags.
@@ -325,7 +331,8 @@ in a loop.</p>
 states without making progress, there is a check that no infinite loop of jumps
 can occur. To ensure that there is always a non-empty token to carry bracket
 information, there is a check that a type with a <code>B</code> or
-<code>E</code> suffix is not used with a lookahead pattern.</p>
+<code>E</code> suffix is not used with a lookahead pattern. An exception is
+made for <code>QuoteB</code> used with a <code>\n</code> lookahead.</p>
 
 <h2>Types</h2>
 
@@ -335,11 +342,10 @@ information, there is a check that a type with a <code>B</code> or
 Identifier, Function, Property          - kinds of identifier
 Operator, Unary, Mark, Jot              - operators and punctuation
 Value, Wrong                            - constants, illegal tokens
-QuoteD, Quote, NoteD, Note              - one-line quotes and comments
-LongB, Long, LongE                      - multi-line quotes
-CommentB, Comment, CommentE             - multi-line comments
-Comment2B, Comment2E                    - nesting comments
-TagB, Tag, TagE                         - parts of HTML-like tags
+QuoteB, Quote, QuoteE,                  - multi-line or one-line quotes
+CommentB, Comment, CommentE, Note       - multi-line and one-line comments
+Quote2B, Quote2E, Comment2B, Comment2E  - alternatives
+TagB, Tag, TagE                         - HTML-like tag names
 RoundB, RoundE, Round2B, Round2E        - round brackets
 SquareB, SquareE, Square2B, Square2E    - square brackets
 GroupB, GroupE, Group2B, Group2E        - group brackets
@@ -512,37 +518,35 @@ into mini-tokens. For example, one-line comments, say starting with
 <code>//</code> and continuing to the end of the line, can be handled with
 rules of the form:</p>
 
-<pre>start    //     note NoteD
+<pre>start    //     note Note
 note     !..~   note
 note     \s     note Note
 note     \n     start Note
 </pre>
 
-<p>There is no explicit end-of-comment delimiter. The <code>NoteD</code> token
-is implictly regarded as being matched by the end-of-line.</p>
-
 <p>Where there is a closing delimiter, the rules are slightly trickier. For
 example, one line string literals can be handled by rules:</p>
 
-<pre>start     "      string QuoteD
+<pre>start     "      string QuoteB
 string    !..~   string
 string    \\"    string
 string    \"     string2 Quote
 string    \s     string Quote
-string    \n     start Quote
+string    \n     start QuoteE
 
-string2   "      start QuoteD
+string2   "      start QuoteE
 string2   \      start Wrong
 </pre>
 
-<p>The <code>string</code> state has a rule for <code>\\"</code> which skips
-an escape sequence <code>\"</code> sequence in the literal.
-It also has a lookahead <code>\"</code> for the closing delimiter,
-to ensure that any preceding characters are given the type <code>Quote</code>.
-Then the <code>string2</code> state matches the final delimiter and gives it
-type <code>QuoteD</code>. The <code>string2</code> state also has a default
-rule, even though it will never be used, just so that it passes the
-completeness checks.</p>
+<p>The <code>string</code> state has a rule for <code>\\"</code> which skips an
+escape sequence <code>\"</code> in the literal. It also has a lookahead
+<code>\"</code> for the closing delimiter, to ensure that any preceding
+characters are given the type <code>Quote</code>. Then the <code>string2</code>
+state matches the final delimiter as a separate token. The <code>string2</code>
+state also has a default rule, even though it will never be used, just so that
+it passes the completeness checks. If the quote is unclosed, the
+<code>\n</code> rule applies, and the scanner and bracket matcher automatically
+handle the situation.</p>
 
 <p>Multi-line comments, say starting with <code>/*</code> and ending with
 <code>*/</code> and not nesting, can be handled by:</p>
@@ -638,27 +642,27 @@ complicated, including its own curly brackets and template delimiters, so these
 brackets need to be matched in order to detect the return to the parent
 template. That can be done with rules of the form:</p>
 
-<pre>start ` template LongB
+<pre>start ` template QuoteB
 start } start BlockE
-start } template Group2E
+start } template Quote2E
 
-template   \${    template2 Long
+template   \${    template2 Quote
 template   !..~   template
-template   \s \n  template Long
-template   `      start LongE
+template   \s \n  template Quote
+template   `      start QuoteE
 
-template2  ${     start Group2B
+template2  ${     start Quote2B
 template2  \      start Wrong
 </pre>
 
 <p>The <code>template</code> state uses a lookahead for <code>${</code> to
-ensure that all the text up to that point is included in <code>Long</code>
+ensure that all the text up to that point is included in <code>Quote</code>
 tokens. The <code>template2</code> state gives <code>${</code> the type
-<code>Group2B</code>, treating it as an alternative type of group bracket. The
+<code>Quote2B</code>, treating it as an alternative type of bracket. The
 <code>template2</code> state also has a default rule for completeness. The
 scanner then goes to the start state to handle whatever is within the brackets.
 The <code>start</code> state recognises the matching close curly bracket,
-giving it type <code>Group2E</code>, and returns to the <code>template</code>
+giving it type <code>Quote2E</code>, and returns to the <code>template</code>
 state to deal with the rest of the template.</p>
 
 <p>In a language definition for a tag-based language like HTML, start and end
