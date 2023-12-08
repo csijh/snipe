@@ -1,20 +1,16 @@
 // Snipe editor. Free and open source, see licence.txt.
 #include <limits.h>
 
-// TODO: who extends the types array, and how does the brackets object keep up?
-
 // Brackets for a document are held in two gap buffers, one for unmatched and
-// one for matched brackets. The brackets object also has access to the array
-// of types for the document during one scan, for which the types array is
-// pre-allocated. The low part of the unmatched buffer is a conventional stack
-// of the indexes of unmatched openers, from the start of the text to the
-// current position. The high part is a mirror image stack of indexes of
-// unmatched closers, from the end of the text back to the current position.
-// The indexes in the high stack are negative, measured backwards from the end
-// of the types buffer. The low part of the matched buffer is a stack of
+// one for matched brackets. The low part of the unmatched buffer is a
+// conventional stack of the indexes of unmatched openers, from the start of
+// the text to the current position. The high part is a mirror image stack of
+// indexes of unmatched closers, from the end of the text back to the current
+// position. The indexes in the high stack are negative, measured backwards
+// from the end of the text. The low part of the matched buffer is a stack of
 // matched openers, in the order they were matched, to allow bracket matching
 // to be reversed. The high part similarly holds matched closers.
-struct brackets { int *unmatched, *matched; byte *types; };
+struct brackets { int *unmatched, *matched; };
 
 // A token index used when an empty stack is popped.
 enum { MISSING = INT_MIN };
@@ -32,7 +28,7 @@ static inline mark(byte *types, int open, int close) {
     }
 }
 
-// Push a token index onto a forward stack, assuming pre-allocation.
+// Push an opener onto a forward stack, assuming capacity already ensured.
 static inline void pushF(int *stack, int t) {
     int n = length(stack);
     adjust(stack, +1);
@@ -47,7 +43,7 @@ static inline int popF(int *stack) {
     return stack[n-1];
 }
 
-// Push a (negative) token index onto a backward stack, assuming pre-allocation.
+// Push a (negative) token index onto a backward stack, assuming capacity.
 static inline void pushB(int *stack, int t) {
     int n = high(stack);
     rehigh(stack, -1);
@@ -101,6 +97,7 @@ static inline void matchB(Brackets *ts, int t) {
     }
 }
 
+// TODO: negative?
 // Undo backward bracket matching on token t, assuming pre-allocation.
 static inline void unmatchB(Brackets *ts, int t) {
     byte *types = ts->types;
@@ -115,17 +112,17 @@ static inline void unmatchB(Brackets *ts, int t) {
     }
 }
 
-// Delete n token bytes before the gap.
+// Delete brackets in the n token bytes before the gap.
 void deleteBrackets(Brackets *ts, int n) {
     for (int i = t-1; i >= t - n; t--) {
-        if (isOpener(ts->types[i]) || isCloser(ts->types[i])) {
+        if (isBracket(ts->types[i])) {
             unmatchF(ts, i);
         }
     }
 }
 
-// Insert n token bytes at the start of the gap, and prepare for scanning,
-// pre-allocating the stack buffers.
+// Insert n bytes at the start of the gap, and prepare for scanning, ensuring
+// the capacity of the stack buffers.
 void insertBrackets(Brackets *ts, int n) {
     int t = length(ts->types);
     ts->types = adjust(ts->types, n);
@@ -146,3 +143,5 @@ void setBracket(Brackets *ts, int t, int type);
 // TODO: Move cursor.
 
 //
+
+// TODO: type = struct {byte t;}; What are the ops? What is the enum??

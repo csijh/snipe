@@ -48,6 +48,9 @@ bool isOpener(int type);
 // Check for a closing bracket type, i.e. between FirstE and LastE.
 bool isCloser(int type);
 
+// Check for a bracket, i.e. between FirstB and LastE.
+bool isBracket(int type);
+
 // Check whether opening and closing brackets match.
 bool bracketMatch(int opener, int closer);
 

@@ -49,6 +49,10 @@ char visualType(int type) {
     return type;
 }
 
+bool isBracket(int type) {
+    return FirstB <= type && type <= LastE;
+}
+
 bool isOpener(int type) {
     return FirstB <= type && type <= LastB;
 }
