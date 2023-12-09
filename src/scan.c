@@ -12,12 +12,21 @@ bool match(int opener, int closer) {
     return closer == opener + FirstE - FirstB;
 }
 
-// The state transition table for a language comes from ../languages.
-// The table has a row per state, and a column per character in \n, \s, !..~.
-// The columns have a fixed width. A cell has two bytes containing an action.
-enum { WIDTH = 96, CELL = 2 };
-static inline int columnOf(char ch) { return (ch == '\n') ? 0 : ch - ' ' + 1; }
-static inline int cellOf(int r, int c) { return CELL * (r * WIDTH + c); }
+// The state transition table for a language comes from ../languages. The table
+// has one row per state. There are 98 columns, two for \n or \s according to
+// whether or not there is a non-empty current token, and one each for !..~.
+// A cell has two bytes containing an action.
+enum { WIDTH = 98, CELL = 2 };
+
+static inline int columnOf(char ch, bool token) {
+    if (ch == \n) return token ? 0 : 1;
+    if (ch == ' ') return token ? 2 : 3;
+    return ch - '!' + 4;
+}
+
+static inline int cellOf(int r, int c) {
+    return CELL * (r * WIDTH + c);
+}
 
 // The first byte in a cell may have these flags. In the main body of the table,
 // the link flag indicates that the cell is a link to the overflow area. In the
@@ -95,7 +104,7 @@ int scan(byte *lang, int s0, char *in, int at, byte *out, int *stk, char **ns) {
     int start = 0;
     while (at < n) {
         char ch = in[at];
-        int col = columnOf(ch);
+        int col = columnOf(ch, start < at);
         byte *cell = &table[cellOf(state, col)];
         int len = 1;
         if (isLink(cell)) {

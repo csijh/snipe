@@ -220,13 +220,13 @@ tokens in between:</p>
 <p>To deal with the awkward case of a one-line quoted literal with no closing
 delimiter, a rule of this form is treated specially:</p>
 
-<pre>string \n QuoteE
+<pre>string \n Quote2E
 </pre>
 
 <p>If there is a non-empty current token at this point, it is automatically
-terminated with type <code>Quote</code> by the scanner. The bracket matcher
-then arranges to highlight the corresponding <code>QuoteB</code> token as
-unmatched.</p>
+terminated with type <code>Quote</code> by the scanner. The newline is then
+treated as having type <code>Quote2E</code>, so that the corresponding
+<code>QuoteB</code> token is highlighted as unmatched.</p>
 
 <p>For a tag-based language such as HTML or XML, types <code>TagB</code>,
 <code>Tag</code> and <code>TagE</code> can be used to handle and match tags.
@@ -332,7 +332,8 @@ states without making progress, there is a check that no infinite loop of jumps
 can occur. To ensure that there is always a non-empty token to carry bracket
 information, there is a check that a type with a <code>B</code> or
 <code>E</code> suffix is not used with a lookahead pattern. An exception is
-made for <code>QuoteB</code> used with a <code>\n</code> lookahead.</p>
+made for <code>QuoteE</code> or <code>Quote2E</code> used with a
+<code>\n</code> lookahead.</p>
 
 <h2>Types</h2>
 

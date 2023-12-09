@@ -8,13 +8,13 @@
 #include <assert.h>
 
 char *typeNames[64] = {
-    [None]="None", [Alternative]="Alternative", [B]="B", [Comment]="Comment",
-    [Declaration]="Declaration", [Error]="Error", [Function]="Function",
-    [G]="G", [H]="H", [Identifier]="Identifier", [Jot]="Jot",
-    [Keyword]="Keyword", [L]="L", [Mark]="Mark", [Note]="Note",
-    [Operator]="Operator", [Property]="Property", [Quote]="Quote", [R]="R",
-    [S]="S", [Tag]="Tag", [Unary]="Unary", [Value]="Value", [White]="White",
-    [X]="X", [Y]="Y",[Z]="Z",
+    [None]="None", [Alternative]="Alternative", [Block]="Block",
+    [Comment]="Comment", [Declaration]="Declaration", [Error]="Error",
+    [Function]="Function", [Group]="Group", [H]="H", [Identifier]="Identifier",
+    [Jot]="Jot", [Keyword]="Keyword", [L]="L", [Mark]="Mark", [Note]="Note",
+    [Operator]="Operator", [Property]="Property", [Quote]="Quote",
+    [Round]="Round", [Square]="Square", [Tag]="Tag", [Unary]="Unary",
+    [Value]="Value", [White]="White", [X]="X", [Y]="Y", [Z]="Z",
 
     [QuoteB]="QuoteB", [Quote2B]="Quote2B", [CommentB]="CommentB",
     [Comment2B]="Comment2B", [TagB]="TagB", [RoundB]="RoundB",
@@ -74,45 +74,45 @@ bool isPostfix(int type) {
 }
 
 // Token information is stored in three gap buffers. The types buffer has a byte
-// for each byte of source text, with the gap at the current cursor position.
-// The first byte for each token holds its type, and the remaining bytes hold
-// the type None. Brackets are stored in the unmatched and matched buffers. The
-// low part of the unmatched buffer is a conventional stack of the indexes of
-// unmatched openers, between the start of the text and the cursor. The high
-// part is a mirror image stack of indexes of unmatched closers, from the end
-// of the text back to the cursor. The indexes in the high stack are negative,
-// measured backwards from the end of the text. The low part of the matched
-// buffer is a stack of matched pairs of brackets up to the cursor, in the
-// order they were matched, to allow bracket matching to be reversed easily.
-// The high part similarly holds matched brackets after the cursor.
-struct tokens { byte *types; int *unmatched, *matched; };
+// for each byte of source text, with a sentinel byte at each end (as does the
+// source text), and with the gap at the current cursor position. The first
+// byte for each token holds its type, and the remaining bytes hold the type
+// None. Brackets are stored in the unmatched and matched buffers. The low part
+// of the unmatched buffer is a conventional stack of the indexes of unmatched
+// openers, between the start of the text and the cursor. The high part is a
+// mirror image stack of indexes of unmatched closers, from the end of the text
+// back to the cursor. The indexes in the high stack are negative, measured
+// backwards from the end of the text. The low part of the matched buffer is a
+// stack of matched openers up to the cursor, in the order they were matched,
+// to allow bracket matching to be reversed easily. The high part similarly
+// holds matched closers after the cursor. While adding tokens to a line,
+// remember the start position of the line and use it to count the number of
+// outdenting brackets (matched with openers on previous lines) and the number
+// of indenting brackets (openers still open at the end of the line).
+struct tokens { byte *types; int *unmatched, *matched; int line, outs, ins; };
 
-// A token index used when an empty stack is popped.
-enum { MISSING = INT_MIN };
-
+// Create new tokens object, with sentinels at either end of the types buffer.
 Tokens *newTokens() {
     Tokens *ts = malloc(sizeof(Tokens));
     ts->types = newArray(sizeof(byte));
     ts->unmatched = newArray(sizeof(int));
     ts->matched = newArray(sizeof(int));
+    ts->types = ensure(ts->types, 2);
+    adjust(ts->types, 1);
+    rehigh(ts->types, -1);
+    ts->types[0] = White;
+    ts->types[high(ts->types)] = White;
     return ts;
 }
 
-// Set all the new bytes to None. Make sure the other buffers have enough
+// Set all the new types to None. Make sure the other buffers have enough
 // capacity for the scanning of the new text.
-void insertTokens(Tokens *ts, int n) {
+void insertLine(Tokens *ts, int n) {
     int start = length(ts->types);
     ts->types = adjust(ts->types, n);
     for (int i = start; i < start+n; i++) ts->types[i] = None;
     ts->unmatched = ensure(ts->unmatched, n);
-    ts->matched = ensure(ts->matched, 2*n);
-}
-
-// Find the top of a forward stack (or MISSING).
-static inline int topF(int *stack) {
-    int n = length(stack);
-    if (n == 0) return MISSING;
-    return stack[n-1];
+    ts->matched = ensure(ts->matched, n);
 }
 
 // Push a bracket onto a forward stack, assuming capacity already ensured.
@@ -122,70 +122,62 @@ static inline void pushF(int *stack, int t) {
     stack[n] = t;
 }
 
-// Pop a bracket from a forward stack (or MISSING).
+// Pop a bracket from a forward stack (or sentinel).
 static inline int popF(int *stack) {
     int n = length(stack);
-    if (n == 0) return MISSING;
+    if (n == 0) return 0;
     adjust(stack, -1);
     return stack[n-1];
 }
 
-// Check whether two brackets match.
-static inline bool bracketMatch(int opener, int closer) {
-    if (opener == MISSING || closer == MISSING) return false;
-    return closer == opener + FirstE - FirstB;
+// Find the top of a forward stack (or the start sentinel).
+static inline int topF(int *stack) {
+    int n = length(stack);
+    if (n == 0) return 0;
+    return stack[n-1];
 }
 
-// Mark two brackets as matched or mismatched, given that one may be missing.
-static inline void mark(Tokens *ts, int open, int close) {
+// Check whether two brackets match.
+static inline bool bracketMatch(byte open, byte close) {
+    return close == open + FirstE - FirstB;
+}
+
+// Mark two brackets as matched or mismatched.
+static inline void mark(Tokens *ts, int opener, int closer) {
     byte *types = ts->types;
-    if (open == MISSING) types[close] |= Bad;
-    else if (close == MISSING) types[open] |= Bad;
-    else if (bracketMatch(types[open], types[close])) {
-        types[open] &= ~Bad;
-        types[close] &= ~Bad;
+    if (bracketMatch(types[opener], types[closer])) {
+        types[opener] &= ~Bad;
+        types[closer] &= ~Bad;
     }
     else {
-        types[open] |= Bad;
-        types[close] |= Bad;
+        types[opener] |= Bad;
+        types[closer] |= Bad;
     }
 }
 
-// Push an opener onto the unmatched stack, and mark it and its possible
-// partner on the high stack as matched or mismatched.
+// TODO: track start of current line, #closers, #openers.
+
+// TODO: do this as we go along, or fix at end of line?
+// Push an opener onto the unmatched stack, and mark it and its
+// partner on the high stack (or sentonel) as matched or mismatched.
 static inline void pushOpener(Tokens *ts, int opener) {
     int n = length(ts->unmatched);
     int h = high(ts->unmatched);
     int m = max(ts->unmatched);
-    pushF(ts->unmatched, opener);
-    int closer = MISSING;
+    int closer = m - 1;
     if (h <= m - n - 1) closer = ts->unmatched[m - n - 1];
+    pushF(ts->unmatched, opener);
     mark(ts, opener, closer);
 }
 
-void deleteTokens(Tokens *ts, int n) {
-    adjust(ts->types, -n);
+void deleteLine(Tokens *ts, int n) {
     int p = length(ts->types);
-    int topOpener = topF(ts->unmatched);
-    int topCloser = topF(ts->matched);
-    bool changed = true;
-    while (changed) {
-        changed = false;
-        if (topOpener < topCloser) {
-            if (topOpener != MISSING && topOpener >= p) {
-                popF(ts->unmatched);
-                topOpener = topF(ts->unmatched);
-                changed = true;
-            }
-        }
-        else if (topCloser < topOpener) {
-            if (topCloser != MISSING && topCloser >= p) {
-                popF(ts->matched);
-                topOpener = popF(ts->matched);
-                pushOpener(ts, topOpener);
-                topCloser = topF(ts->matched);
-                changed = true;
-            }
+    for (int i = p-1; i >= p-n; i--) {
+        if (isOpener(types[t])) popF(ts->unmatched, t);
+        else if (isCloser(types[t])) {
+            int opener = popF(ts->matched);
+            // TODO: check now or later
+            pushOpener(ts->unmatched, opener);
         }
     }
 }
@@ -194,12 +186,18 @@ void deleteTokens(Tokens *ts, int n) {
 
 // Track a cursor movement to position p. Brackets may be re-highlighted.
 void moveTokens(Tokens *ts, int p) {
-
+// unmatch front, match back.
 }
 
 // Add a token at position p. Update brackets as appropriate.
 void addToken(Tokens *ts, int p, byte type) {
-
+    ts->types[p] = type;
+    if (isOpener(type)) pushF(ts->unmatched, p);
+    else if (isCloser(type)) {
+        int opener = popF(ts->unmatched);
+        mark(ts->types, opener, p);
+        pushF(ts->matched, opener);
+    }
 }
 
 // Add a closer, only if it matches the top opener, returning success.

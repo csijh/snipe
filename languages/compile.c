@@ -16,74 +16,6 @@
 // Use the type constants from the main editor.
 #include "../src/types.h"
 
-/*
-// ---------- types ------------------------------------------------------------
-// These types and their names must be kept the same as in src/scan.h.
-// A type is used to mark a text character, to represent the result of
-// scanning. The bracket types come in matching pairs, with a B or E suffix.
-// A few types and flags are used internally:
-//   None     means no type, and marks token characters after the first
-//   Gap      marks a space or spaces as a separator
-//   Bad      flags a token, reversibly, as mismatched
-// For display, XB -> X, XNB -> X, ... X+Comment -> Note, X+Bad -> Wrong.
-
-enum type {
-    None, Gap, Newline, Alternative, Comment, Declaration, Function, Identifier,
-    Join, Keyword, Long, Mark, NoteD, Note, Operator, Property, QuoteD, Quote,
-    Tag, Unary, Value, Wrong,
-
-    LongB, CommentB, CommentNB, TagB, RoundB, Round2B, SquareB, Square2B,
-    GroupB, Group2B, BlockB, Block2B,
-
-    LongE, CommentE, CommentNE, TagE, RoundE, Round2E, SquareE, Square2E,
-    GroupE, Group2E, BlockE, Block2E,
-
-    FirstB = LongB, LastB = Block2B, FirstE = LongE, LastE = Block2E,
-    Bad = 128,
-};
-
-// The full names of the types.
-char *typeNames[64] = {
-    [None]="None", [Gap]="Gap", [Newline]="Newline",
-    [Alternative]="Alternative", [Comment]="Comment",
-    [Declaration]="Declaration", [Function]="Function",
-    [Identifier]="Identifier", [Join]="Join", [Keyword]="Keyword",
-    [Long]="Long", [Mark]="Mark", [NoteD]="NoteD", [Note]="Note",
-    [Operator]="Operator", [Property]="Property", [QuoteD]="QuoteD",
-    [Quote]="Quote", [Tag]="Tag", [Unary]="Unary", [Value]="Value",
-    [Wrong]="Wrong",
-
-    [LongB]="LongB", [CommentB]="CommentB", [CommentNB]="CommentNB",
-    [TagB]="TagB", [RoundB]="RoundB", [Round2B]="Round2B", [SquareB]="SquareB",
-    [Square2B]="Square2B", [GroupB]="GroupB", [Group2B]="Group2B",
-    [BlockB]="BlockB", [Block2B]="Block2B",
-
-    [LongE]="LongE", [CommentE]="CommentE", [CommentNE]="CommentNE",
-    [TagE]="TagE", [RoundE]="RoundE", [Round2E]="Round2E", [SquareE]="SquareE",
-    [Square2E]="Square2E", [GroupE]="GroupE", [Group2E]="Group2E",
-    [BlockE]="BlockE", [Block2E]="Block2E" };
-
-char visualType(int type) {
-    switch (type) {
-    case None: return '-';
-    case Gap: return ' ';
-    case Newline: return '.';
-    default: return typeNames[type][0];
-    }
-}
-
-bool isOpener(int type) {
-    return FirstB <= type && type <= LastB;
-}
-
-bool isCloser(int type) {
-    return FirstE <= type && type <= LastE;
-}
-
-bool bracketMatch(int open, int close) {
-    return close == open + FirstE - FirstB;
-}
-*/
 bool equal(char *s, char *t) {
     return strcmp(s, t) == 0;
 }
@@ -612,13 +544,6 @@ void sort(Pattern **list) {
     }
 }
 
-void sortAll(State **states) {
-    for (int i = 0; i < length(states); i++) {
-        State *state = states[i];
-        sort(state->patterns);
-    }
-}
-
 // Where a state has a pattern involving a close bracket, and it is followed
 // by another close bracket pattern for the same string, add a soft flag.
 // For example,
@@ -639,7 +564,6 @@ void addSoft(State *s) {
 // Stage 5: expand ranges. Sort. Add soft flags. Optionally print.
 void expandRanges(State **states, bool print) {
     derangeAll(states);
-//    sortAll(states);
     for (int i = 0; i < length(states); i++) sort(states[i]->patterns);
     for (int i = 0; i < length(states); i++) addSoft(states[i]);
     if (print) for (int i=0; i < length(states); i++) printState(states[i]);
@@ -800,34 +724,37 @@ void checkAll(State **states, bool print) {
 // ---------- Compiling --------------------------------------------------------
 // Compile the states into a compact transition table. The table has a row for
 // each state, and an overflow area used when there is more than one pattern
-// for a particular character. Each row consists of 96 entries of two bytes
-// each, one for each character \n, \s, !, ..., ~. The scanner uses the current
-// state and the next character in the source text to look up an entry. The
-// entry may be an action for that single character, or an offset relative to
-// the start of the table to a list of patterns in the overflow area starting
-// with that character, with their actions.
+// for a particular character. Each row consists of 98 cells of two bytes each,
+// two for \n and \s and one each for !..~. The scanner uses the current state,
+// the next character in the source text, and whether or not there is a
+// non-empty current token, to look up a cell. The cell may be an action, i.e.
+// a type and a target state, for that single character, or an offset relative
+// to the start of the table to a list of patterns in the overflow area
+// starting with that character, with their actions.
 
 typedef unsigned char byte;
+enum { COLUMNS = 98, CELL = 2 };
 
-// Flags added to the type in an action. The LINK flag in the main table
+// Flags added to the type in a cell. The LINK flag in the main table
 // indicates that the action is a link to the overflow area. The SOFT flag, in
 // the overflow area, represents a close bracket rule that is skipped if the
 // bracket doesn't match the most recent unmatched open bracket. The LOOK flag
 // indicates a lookahead pattern. The TYPE mask removes the two flags.
+
 enum { LINK = 0x80, SOFT = 0x80, LOOK = 0x40, TYPE = 0x3F };
 
 // When there is more than one pattern for a state starting with a character,
 // enter [LINK+hi, lo] where [hi,lo] is the offset to the overflow area.
-void compileLink(byte *action, int offset) {
-    action[0] = LINK | ((offset >> 8) & 0x7F);
-    action[1] = offset & 0xFF;
+void compileLink(byte *cell, int offset) {
+    cell[0] = LINK | ((offset >> 8) & 0x7F);
+    cell[1] = offset & 0xFF;
 }
 
 // Fill in an action other than a link: [SOFT+LOOK+type, target]
 void compileAction(byte *action, Pattern *p) {
     int type = p->type;
-    if (p->look) type = LOOK | type;
     if (p->soft) type = SOFT | type;
+    if (p->look) type = LOOK | type;
     action[0] = type;
     action[1] = p->target->row;
 }
@@ -846,7 +773,10 @@ byte *compileExtra(byte *table, Pattern *p) {
     return table;
 }
 
-// Compile a state into the table, and return the possibly moved table.
+// Compile a state into the table, and return the possibly moved table. For \n
+// and \s, compile one lookahead action to finish off any non-empty token and
+// stay on the same state, and one action to provide a type for the character
+// itself and go to the target state.
 byte *compileState(byte *table, State *state) {
     Pattern **ps = state->patterns;
     int n = length(ps);
@@ -854,14 +784,28 @@ byte *compileState(byte *table, State *state) {
     for (int i = 0; i < n; i++) {
         Pattern *p = ps[i];
         char ch = p->string[0];
-        int col = (ch == '\n') ? 0 : ch - ' ' + 1;
-        byte *entry = &table[2 * (96 * state->row + col)];
+        if (ch == '\n' || ch == ' ') {
+            Pattern p1 = *p, p2 = *p;
+            p1.target = state;
+            p2.look = false;
+            if (ch == '\n' && (p->type == QuoteE || p->type == Quote2E)) {
+                p1.type = Quote;
+            }
+            else p2.type = Gap;
+            byte *cell = &table[CELL * (COLUMNS * state->row)];
+            if (ch == ' ') cell = cell + 2 * CELL;
+            compileAction(cell, &p1);
+            compileAction(cell + CELL, &p2);
+            continue;
+        }
+        int col = ch - '!' + 4;
+        byte *cell = &table[CELL * (COLUMNS * state->row + col)];
         if (ch != prev) {
             prev = ch;
             bool direct = (i == n-1 || ch != ps[i+1]->string[0]);
-            if (direct) compileAction(entry, p);
+            if (direct) compileAction(cell, p);
             else {
-                compileLink(entry, length(table));
+                compileLink(cell, length(table));
                 table = compileExtra(table, p);
             }
         }
@@ -873,7 +817,7 @@ byte *compileState(byte *table, State *state) {
 // Stage 7: build the table.
 byte *compile(State **states) {
     byte *table = newList(1);
-    table = adjust(table, 2 * 96 * length(states));
+    table = adjust(table, length(states) * COLUMNS * CELL);
     for (int i = 0; i < length(states); i++) {
         table = compileState(table, states[i]);
     }
@@ -963,8 +907,11 @@ int scan(byte *table, int row, char *in, byte *out, Tracer *tracer) {
     int at = 0, start = 0;
     while (at < n) {
         char ch = in[at];
-        int col = (ch == '\n') ? 0 : ch - ' ' + 1;
-        byte *action = &table[2 * (96 * row + col)];
+        bool token = start < at;
+        int col = ch - '!' + 4;
+        if (ch == '\n') col = token ? 0 : 1;
+        else if (ch == ' ') col = token ? 2 : 3;
+        byte *action = &table[CELL * (COLUMNS * row + col)];
         int len = 1;
         if ((action[0] & LINK) != 0) {
             int offset = ((action[0] & 0x7F) << 8) + action[1];
@@ -991,20 +938,11 @@ int scan(byte *table, int row, char *in, byte *out, Tracer *tracer) {
         trace(row, lookahead, in, at, len, type, tracer);
         if (! lookahead) at = at + len;
         if (type != None && start < at) {
-            int type2 = type;
-            if (ch == '\n' && type == QuoteE) type2 = Quote;
-            out[start] = type2;
-            if (isOpener(type2)) push(out, start);
-            else if (isCloser(type2)) pop(out, start);
+            out[start] = type;
+            if (isOpener(type)) push(out, start);
+            else if (isCloser(type)) pop(out, start);
             start = at;
         }
-        if (ch == ' ') { out[at++] = Gap; start = at; }
-        else if (ch == '\n' && type == QuoteE) {
-            out[at++] = Quote2E;
-            pop(out, at-1);
-            start = at;
-        }
-        else if (ch == '\n') { out[at++] = Gap; start = at; }
         row = target;
     }
     return row;

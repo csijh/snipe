@@ -1,19 +1,20 @@
 // Snipe editor. Free and open source, see licence.txt.
 #include <stdbool.h>
 
-// Token types, one per byte of text. Single-letter types are used by
-// displayType() or reserved for future use:
+// Token types. One-letter ones are reserved for future use. Special ones are:
 //
 //     None    marks bytes of a token after the first
 //     Error   indicates an illegal, malformed or mismatched token
 //     White   marks a space or newline or indent as a separator
 //
 // Bracket types come in matching pairs: openers have a B suffix, and closers
-// have an E suffix. The Bad flag marks mismatched brackets.
+// have an E suffix. The Block, Group, Round, Square types are the reduced
+// forms of BlockB etc. used for display purposes. The Bad flag marks
+// mismatched brackets.
 enum type {
-    None, Alternative, B, Comment, Declaration, Error, Function, G, H,
-    Identifier, Jot, Keyword, L, Mark, Note, Operator, Property, Quote, R, S,
-    Tag, Unary, Value, White, X, Y, Z,
+    None, Alternative, Block, Comment, Declaration, Error, Function, Group, H,
+    Identifier, Jot, Keyword, L, Mark, Note, Operator, Property, Quote, Round,
+    Square, Tag, Unary, Value, White, X, Y, Z,
 
     QuoteB, Quote2B, CommentB, Comment2B, TagB, RoundB, Round2B, SquareB,
     Square2B, GroupB, Group2B, BlockB, Block2B,
@@ -27,32 +28,42 @@ enum type {
 
 typedef unsigned char byte;
 
-// A tokens object records tokens in the text, and handles bracket matching.
-// Insertions, deletions and cursor moves in the text are tracked.
+// A tokens object records tokens in the text by storing one type byte per text
+// byte, and handles bracket matching. After an edit to the text, a whole line
+// needs to be rescanned. The corresponding operations on the tokens object are
+// to delete a line of tokens, then insert a new unscanned line, then report
+// the tokens found by the scanner one by one, then move the cursor back to its
+// position in the line. Other cursor movements are tracked, because they
+// affect bracket matching and indenting.
 typedef struct tokens Tokens;
 
 // Create a new tokens object, initially empty.
 Tokens *newTokens();
 
-// Track an insertion of n (unscanned) text bytes after the cursor position.
-void insertTokens(Tokens *ts, int n);
+// Delete a line of n type bytes before the cursor. Brackets may be
+// re-highlighted as matched or mismatched.
+void deleteLine(Tokens *ts, int n);
 
-// Track a deletion of n text bytes before the cursor. Associated tokens are
-// removed, and brackets may be re-highlighted as matched or mismatched.
-void deleteTokens(Tokens *ts, int n);
-
-// Track a cursor movement to position p. Brackets may be re-highlighted.
-void moveTokens(Tokens *ts, int p);
+// Insert a line of n type bytes after the cursor, initially with no tokens.
+void insertLine(Tokens *ts, int n);
 
 // Add a token at position p. Update brackets as appropriate.
 void addToken(Tokens *ts, int p, byte type);
 
-// Add a closer, only if it matches the top opener, returning success.
-bool tryToken(Tokens *ts, int p, byte type);
+// Check whether a closer matches the top opener. (This is what makes it
+// necessary to keep brackets up to date with each token, rather than dealing
+// with them at the end of the line.)
+bool matchTop(Tokens *ts, byte type);
 
-// Read n token bytes from position p into the given byte array, returning
-// the possibly reallocated array.
-byte *readTokens(Tokens *ts, int p, int n, byte *bs);
+// -----------------------
+// TODO: after adding tokens for a line, ask for the # of closers/openers.
+
+// Move the cursor to position p. Brackets may be re-highlighted.
+void moveTokens(Tokens *ts, int p);
+
+// Read n token bytes from position p into the given byte array, which is
+// assumed to have enough capacity.
+void readTokens(Tokens *ts, int p, int n, byte *bs);
 
 // Return the full name of a type.
 char *typeName(int type);
@@ -66,8 +77,8 @@ bool isPrefix(int type);
 bool isPostfix(int type);
 
 // For display purposes, return a compact 5 bit version of a type. A bracket
-// type is replaced by the type in 1..26 starting with the same letter.
-// Mismatched brackets are returned as Error.
+// type is replaced by the version without the B, 2B, E, 2E suffix. Mismatched
+// brackets are returned as Error.
 byte displayType(int type);
 
 // For visualization purposes, return the first letter of the type name. Return
