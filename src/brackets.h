@@ -1,37 +1,61 @@
 // Snipe editor. Free and open source, see licence.txt.
 
-// Maintain brackets. Calls to deleteBrackets, insertBrackets, moveBrackets are
-// used to track gap-based changes in the text and types arrays. Changes are
-// made to the types array to reflect matching or mismatching brackets.
-struct brackets;
-typedef struct brackets Brackets;
+// Brackets are matched forwards from the beginning of the text to the cursor,
+// and backwards from the end of the text to the cursor. As the cursor moves,
+// brackets are unmatched and re-matched accordingly, which enables
+// highlighting to be changed.
 
-// Create a new brackets object, initially empty.
-Brackets *newBrackets();
+// Brackets are stored in two integer gap buffers, as index positions in the
+// text, so that they are independent of re-allocations of the text buffer.
+// Positions after the cursor are stored as negative indexes, relative to the
+// end of the text, so that they are immune to insertions and deletions at the
+// cursor. It is assumed that the text has a sentinel byte at each end, at
+// positions 0 and -1. These allow unmatched (surplus) brackets to be treated
+// the same as mismatched brackets.
 
-// Delete brackets in the n bytes before the gap. (Called to track a deletion of
-// n bytes from the types array.)
-void deleteBrackets(Brackets *ts, int n);
+// The low end of the active gap buffer holds openers (positions of open
+// brackets) before the cursor, which haven't been matched up to that point, as
+// with conventional bracket matching. The high end of the active buffer holds
+// closers after the cursor, in mirror image fashion. The openers are paired up
+// with the closers, inwards from the ends towards the cursor.
 
-// Insert n bytes at the start of the gap. (Called to track an insertion.)
-void insertBrackets(Brackets *ts, int n);
+// The low end of the passive gap buffer holds openers which have been paired up
+// before the cursor, in the order that the partner close brackets were
+// encountered. This allows bracket matching to be undone easily. The high end
+// similarly holds closers which have been paired up after the cursor.
 
-// Move the cursor to p. (Called to track movement in text/tokens)
-void moveBrackets(Brackets *ts, byte *types, int p);
+// Return the most recent opener.
+int topOpener(int *active);
 
-//
-void addToken(Brackets *ts, byte *types, int p);
+// Add a new opener before the cursor. Return the (negative) paired closer
+// after the cursor, so the pair can be highlighted as matched or mismatched.
+int pushOpener(int *active, int opener);
 
-// Record an open bracket which has just been added at position p.
-void addOpener(Brackets *ts, byte *types, int p);
+// Remove the top opener before the cursor. Return the (negative) paired closer
+// after the cursor, which now needs to be marked as unmatched.
+int popOpener(int *active);
 
-// Record a close bracket which has just been added at position p.
-void addCloser(Brackets *ts, byte *types, int p);
+// On pairing two brackets, remember the opener.
+void saveOpener(int *passive, int opener);
 
-// Add a close bracket only if it matches the top opener, returning success.
-bool tryCloser(Brackets *ts, byte *types, int p);
+// On removing a closer, retrieve its paired opener, which now needs to be
+// pushed on the active stack.
+int fetchOpener(int *passive);
 
+// Return the most recent (negative) closer after the cursor.
+int topCloser(int *active);
 
-// TODO: Store closers as well as openers in matched. Sentinels?
-// Solves unquotes. Allows state in newline.
-// TODO: Track matching of unmatched brackets.
+// Add a new (negative) closer after the cursor. Return the (positive) partner
+// opener before the cursor, so the pair can be highlighted.
+int pushCloser(int *active, int closer);
+
+// Remove the top closer after the cursor. Return the (positive) paired opener
+// before the cursor, which now needs to be marked as unmatched.
+int popCloser(int *active);
+
+// On pairing two brackets after the cursor, remember the (-ve) closer.
+void saveCloser(int *passive, int closer);
+
+// On removing an opener after the cursor, retrieve its (-ve) paired closer,
+// which now needs to be pushed on the active stack.
+int fetchCloser(int *passive);

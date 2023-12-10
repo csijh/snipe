@@ -1,147 +1,250 @@
 // Snipe editor. Free and open source, see licence.txt.
-#include <limits.h>
+#include "array.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <string.h>
+#include <ctype.h>
+#include <assert.h>
 
-// Brackets for a document are held in two gap buffers, one for unmatched and
-// one for matched brackets. The low part of the unmatched buffer is a
-// conventional stack of the indexes of unmatched openers, from the start of
-// the text to the current position. The high part is a mirror image stack of
-// indexes of unmatched closers, from the end of the text back to the current
-// position. The indexes in the high stack are negative, measured backwards
-// from the end of the text. The low part of the matched buffer is a stack of
-// matched openers, in the order they were matched, to allow bracket matching
-// to be reversed. The high part similarly holds matched closers.
-struct brackets { int *unmatched, *matched; };
+// Sentinel positions in the text.
+enum { SentinelB = 0, SentinelE = -1 };
 
-// A token index used when an empty stack is popped.
-enum { MISSING = INT_MIN };
+// Return the most recent opener.
+int topOpener(int *active) {
+    int n = length(active);
+    if (n == 0) return SentinelB;
+    return active[n-1];
+}
 
-// Mark two brackets as matched or mismatched, given that one may be missing.
-static inline mark(byte *types, int open, int close) {
-    if (open == MISSING) types[close] |= Bad;
-    else if (close == MISSING) types[open] |= Bad;
-    else if (bracketMatch(types[open], types[close])) {
-        types[open] &= ~Bad;
-        types[close] &= ~Bad;
-    else {
-        types[open] |= Bad;
-        types[close] |= Bad;
+// Add a new opener before the cursor. Return the (negative) paired closer
+// after the cursor, so the pair can be highlighted as matched or mismatched.
+int pushOpener(int *active, int opener) {
+    int n = length(active);
+    int h = high(active);
+    int m = max(active);
+    adjust(active, +1);
+    active[n] = opener;
+    if (h <= m - n - 1) return active[m - n - 1];
+    else return SentinelE;
+}
+
+// Remove the top opener before the cursor. Return the (negative) paired closer
+// after the cursor, which now needs to be marked as unmatched.
+int popOpener(int *active) {
+    adjust(active, -1);
+    int n = length(active);
+    int h = high(active);
+    int m = max(active);
+    if (h <= m - n - 1) return active[m - n - 1];
+    else return SentinelE;
+}
+
+// On pairing two brackets, remember the opener.
+void saveOpener(int *paired, int opener) {
+    int n = length(paired);
+    adjust(paired, +1);
+    paired[n] = opener;
+}
+
+// On removing a closer, retrieve its paired opener, which now needs to be
+// pushed on the active stack.
+int fetchOpener(int *paired) {
+    adjust(paired, -1);
+    int n = length(paired);
+    return paired[n];
+}
+
+// Return the most recent (negative) closer after the cursor.
+int topCloser(int *active) {
+    int h = high(active);
+    int m = max(active);
+    if (h == m) return SentinelE;
+    return active[h];
+}
+
+// Add a new (negative) closer after the cursor. Return the (positive) partner
+// opener before the cursor, so the pair can be highlighted.
+int pushCloser(int *active, int closer) {
+    rehigh(active, -1);
+    int h = high(active);
+    active[h] = closer;
+    int m = max(active);
+    int n = length(active);
+    if (n >= m - h) return active[m - h - 1];
+    else return SentinelB;
+}
+
+// Remove the (-ve) top closer after the cursor. Return the (+ve) paired
+// opener before the cursor, which now needs to be marked as unmatched.
+int popCloser(int *active) {
+    rehigh(active, +1);
+    int n = length(active);
+    int h = high(active);
+    int m = max(active);
+    if (n >= m - h) return active[m - h -1];
+    else return SentinelB;
+}
+
+// On pairing two brackets after the cursor, remember the (-ve) closer.
+void saveCloser(int *passive, int closer) {
+    rehigh(passive, -1);
+    int h = high(passive);
+    passive[h] = closer;
+}
+
+// On removing an opener after the cursor, retrieve its (-ve) paired closer,
+// which now needs to be pushed on the active stack.
+int fetchCloser(int *passive) {
+    int h = high(passive);
+    rehigh(passive, +1);
+    return passive[h];
+}
+
+// ---------- Testing ----------------------------------------------------------
+#ifdef bracketsTest
+
+// Each test is a string with . for sentinels, ()[]{} for brackets, and
+// optionally | for the cursor. The string is scanned to the end, then the
+// cursor is moved back to the | position. The expected output has a letter for
+// each bracket. Matched pairs are marked with A, B, ... and mismatched pairs
+// or unmatched brackets are marked with a, b, ...
+static char *tests[] = {
+    ".().",
+    ".CC.",
+
+    ".()().",
+    ".CCFF.",
+
+    ".()[].",
+    ".CCFF.",
+
+    ".[()].",
+    ".FDDF.",
+
+    ".(].",
+    ".cc.",
+
+    ".).",
+    ".b.",
+
+    ".| ().",
+    "...XX.",
+
+    ".( | ).",
+    ".X...X.",
+};
+static int ntests = (sizeof(tests) / sizeof(char *)) / 2;
+
+// Check if a pair is matched or mismatched.
+static bool match(char open, char close) {
+    switch (open) {
+    case '(': return close == ')';
+    case '[': return close == ']';
+    case '{': return close == '}';
+    default: return false;
     }
 }
 
-// Push an opener onto a forward stack, assuming capacity already ensured.
-static inline void pushF(int *stack, int t) {
-    int n = length(stack);
-    adjust(stack, +1);
-    stack[n] = t;
-}
-
-// Pop a token index (or MISSING) from a forward stack.
-static inline int popF(int *stack) {
-    int n = length(stack);
-    if (n == 0) return MISSING;
-    adjust(stack, -1);
-    return stack[n-1];
-}
-
-// Push a (negative) token index onto a backward stack, assuming capacity.
-static inline void pushB(int *stack, int t) {
-    int n = high(stack);
-    rehigh(stack, -1);
-    stack[n-1] = t;
-}
-
-// Pop a (negative) token index (or MISSING) from a backward stack.
-static inline int popB(int *stack) {
-    int m = max(stack);
-    int h = high(stack);
-    if (h == m) return MISSING;
-    rehigh(stack, +1);
-    return stack[h-1];
-}
-
-// Do forward bracket matching on token t, assuming pre-allocation.
-static inline void matchF(Brackets *ts, int t) {
-    byte *types = ts->types;
-    int type = types[t];
-    if (isOpener(type)) pushF(ts->unmatched, t);
-    else if (isCloser(type)) {
-        int opener = popF(ts->unmatched);
-        mark(ts->types, opener, t);
-        pushF(ts->matched, opener);
+static void showBuffer(char *name, int *buffer) {
+    printf("%s:", name);
+    for (int i = 0; i < max(buffer); i++) {
+        if (i < length(buffer)) printf(" %d", buffer[i]);
+        if (i == length(buffer)) printf(" | ");
+        if (i >= high(buffer)) printf("%d ", buffer[i]);
     }
+    printf("\n");
 }
 
-// Undo forward bracket matching on token t, assuming pre-allocation.
-static inline void unmatchF(Brackets *ts, int t) {
-    byte *types = ts->types;
-    types[t] &= ~Bad;
-    if (isOpener(types[t])) popF(ts->unmatched, t);
-    else if (isCloser(types[t])) {
-        int opener = popF(ts->matched);
-        if (opener != MISSING) {
-            types[opener] &= ~Bad;
-            pushF(ts->unmatched, opener);
+// Mark a pair as matched or mismatched.
+static void mark(char *in, char *out, int opener, int closer, char id) {
+    if (match(in[opener], in[closer])) out[opener] = out[closer] = id;
+    else out[opener] = out[closer] = tolower(id);
+}
+
+static void scan(char *in, char *out, int *active, int *passive) {
+    int n = strlen(in);
+    char letter = 'A';
+    for (int i = 1; i < n-1; i++) {
+        char ch = in[i];
+        if (ch == '(' || ch == '[' || ch == '{') {
+            int closer = pushOpener(active, i);
+            mark(in, out, SentinelB, n + closer, letter++);
+        }
+        else if (ch == ')' || ch == ']' || ch == '}') {
+            int opener = topOpener(active);
+            int oldCloser = popOpener(active);
+            mark(in, out, SentinelB, n + oldCloser, letter++);
+            mark(in, out, opener, i, letter++);
+            saveOpener(passive, opener);
         }
     }
+    out[0] = out[n-1] = '.';
 }
 
-// Do backward bracket matching on token t, assuming pre-allocation.
-static inline void matchB(Brackets *ts, int t) {
-    byte *types = ts->types;
-    int type = types[t];
-    if (isCloser(type)) pushB(ts->unmatched, t);
-    else if (isOpener(type)) {
-        int closer = popB(ts->unmatched);
-        mark(ts->types, type, closer);
-        pushB(ts->matched, closer);
-    }
-}
-
-// TODO: negative?
-// Undo backward bracket matching on token t, assuming pre-allocation.
-static inline void unmatchB(Brackets *ts, int t) {
-    byte *types = ts->types;
-    types[t] &= ~Bad;
-    if (isCloser(types[t])) popB(ts->unmatched, t);
-    else if (isOpener(types[t])) {
-        int closer = popB(ts->matched);
-        if (closer != MISSING) {
-            types[closer] &= ~Bad;
-            pushB(ts->unmatched, closer);
+static void moveBack(char *in, char *out, int *active, int *passive) {
+    int n = strlen(in);
+    char letter = 'Z';
+    int cursor = n-1;
+    for (int i = 1; i < n-1; i++) if (in[i] == '|') cursor = i;
+    for (int i = n-2; i > cursor; i--) {
+        char ch = in[i];
+    showBuffer("active", active);
+    showBuffer("passive", passive);
+        if (ch == '(' || ch == '[' || ch == '{') {
+            // Undo from front
+            int oldCloser = popOpener(active);
+            printf("markA %d %d\n", SentinelB, n + oldCloser);
+            mark(in, out, SentinelB, n + oldCloser, letter++);
+            // Add to back
+            int closer = topCloser(active);
+            int oldOpener = popCloser(active);
+            printf("markB %d %d\n", oldOpener, n + SentinelE);
+            mark(in, out, oldOpener, n + SentinelE, letter--);
+            printf("markC %d %d\n", i, n + closer);
+            mark(in, out, i, n + closer, letter--);
+            saveCloser(passive, closer);
+        }
+        else if (ch == ')' || ch == ']' || ch == '}') {
+            // Undo from front
+            int opener = fetchOpener(passive);
+            int oldCloser = pushOpener(active, opener);
+            printf("markD %d %d\n", opener, n + oldCloser);
+            mark(in, out, opener, n + oldCloser, letter--);
+            // Add to back.
+            int oldOpener = pushCloser(active, i - n);
+            printf("markE %d %d\n", oldOpener, n + SentinelE);
+            mark(in, out, oldOpener, n + SentinelE, letter--);
         }
     }
+    out[0] = out[n-1] = '.';
 }
 
-// Delete brackets in the n token bytes before the gap.
-void deleteBrackets(Brackets *ts, int n) {
-    for (int i = t-1; i >= t - n; t--) {
-        if (isBracket(ts->types[i])) {
-            unmatchF(ts, i);
-        }
+static void check(char *in, char *expect) {
+    int n = strlen(in);
+    int *active = newArray(sizeof(int));
+    active = ensure(active, n);
+    int *passive = newArray(sizeof(int));
+    passive = ensure(passive, n);
+    char out[n+1];
+    for (int i = 0; i < n; i++) out[i] = '.';
+    out[n] = '\0';
+    scan(in, out, active, passive);
+    moveBack(in, out, active, passive);
+    freeArray(active);
+    freeArray(passive);
+    if (strcmp(out, expect) != 0) {
+        printf("Test failed. Input, expected output and actual output are:\n");
+        printf("%s\n", in);
+        printf("%s\n", expect);
+        printf("%s\n", out);
+        exit(1);
     }
 }
 
-// Insert n bytes at the start of the gap, and prepare for scanning, ensuring
-// the capacity of the stack buffers.
-void insertBrackets(Brackets *ts, int n) {
-    int t = length(ts->types);
-    ts->types = adjust(ts->types, n);
-    for (int i = t; i < t+n; i++) ts->types[i] = None;
-    ts->unmatched = ensure(ts->unmatched, n);
-    ts->matched = ensure(ts->matched, n);
+int main() {
+    for (int i = 0; i < ntests; i++) check(tests[2*i], tests[2*i+1]);
+    printf("Brackets module OK\n");
 }
 
-// Check if the top of the unmatched opener stack matches a closer type.
-bool matchTop(Brackets *ts, int type) {
-
-}
-
-// Give token at t the given type, and do any appropriate bracket matching.
-void setBracket(Brackets *ts, int t, int type);
-
-// TODO: Set token type? (and handle brackets)
-// TODO: Move cursor.
-
-//
-
-// TODO: type = struct {byte t;}; What are the ops? What is the enum??
+#endif
