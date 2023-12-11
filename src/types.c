@@ -5,13 +5,14 @@
 #include <assert.h>
 
 char *typeNames[64] = {
-    [Alternative]="Alternative", [B]="B", [Comment]="Comment",
-    [Declaration]="Declaration", [E]="E", [Function]="Function", [G]="G",
-    [H]="H", [Identifier]="Identifier", [Jot]="Jot", [Keyword]="Keyword",
-    [L]="L", [Mark]="Mark", [Note]="Note", [Operator]="Operator",
-    [Property]="Property", [Quote]="Quote", [R]="R", [S]="S", [Tag]="Tag",
-    [Unary]="Unary", [Value]="Value", [Wrong]="Wrong", [X]="X", [Y]="Y",
-    [Z]="Z", [None]="None", [Gap]="Gap",
+    [None]="None", [Gap]="Gap",
+    [Alternative]="Alternative", [Block]="Block", [Comment]="Comment",
+    [Declaration]="Declaration", [Error]="Error", [Function]="Function",
+    [Group]="Group", [H]="H", [Identifier]="Identifier", [Jot]="Jot",
+    [Keyword]="Keyword", [L]="L", [Mark]="Mark", [Note]="Note",
+    [Operator]="Operator", [Property]="Property", [Quote]="Quote",
+    [Round]="Round", [Square]="Square", [Tag]="Tag", [Unary]="Unary",
+    [Value]="Value", [W]="W", [X]="X", [Y]="Y",[Z]="Z",
 
     [QuoteB]="QuoteB", [Quote2B]="Quote2B", [CommentB]="CommentB",
     [Comment2B]="Comment2B", [TagB]="TagB", [RoundB]="RoundB",
@@ -26,48 +27,45 @@ char *typeNames[64] = {
     [Block2E]="Block2E"
 };
 
-char *typeName(int type) {
-    return typeNames[type];
+char *typeName(Type t) {
+    return typeNames[t];
 }
 
-byte displayType(int type) {
-    bool bad = (type & Bad) != 0;
-    type = type & ~Bad;
-    if (type < FirstB) return type;
-    type = typeNames[type][0] - 'A';
-    if (bad) type = type | Bad;
-    return type;
+Type displayType(Type t) {
+    if ((t & Bad) != 0) return Error;
+    if (t < FirstB) return t;
+    return typeNames[t][0] - 'A' + 2;
 }
 
-char visualType(int type) {
-    bool bad = (type & Bad) != 0;
-    type = type & ~Bad;
-    if (type == None) return '-';
-    if (type == Gap) return ' ';
-    type = typeNames[type][0];
-    if (bad) type = tolower(type);
-    return type;
+char visualType(Type t) {
+    bool bad = (t & Bad) != 0;
+    t = t & ~Bad;
+    if (t == None) return '-';
+    if (t == Gap) return ' ';
+    t = typeNames[t][0];
+    if (bad) t = tolower(t);
+    return t;
 }
 
-bool isBracket(int type) {
-    return FirstB <= type && type <= LastE;
+bool isBracket(Type t) {
+    return FirstB <= t && t <= LastE;
 }
 
-bool isOpener(int type) {
-    return FirstB <= type && type <= LastB;
+bool isOpener(Type t) {
+    return FirstB <= t && t <= LastB;
 }
 
-bool isCloser(int type) {
-    return FirstE <= type && type <= LastE;
+bool isCloser(Type t) {
+    return FirstE <= t && t <= LastE;
 }
 
-bool bracketMatch(int opener, int closer) {
+bool bracketMatch(Type opener, Type closer) {
     return closer == opener + FirstE - FirstB;
 }
 
-bool isPrefix(int type) {
-    type = type & ~Bad;
-    switch (type) {
+bool isPrefix(Type t) {
+    t = t & ~Bad;
+    switch (t) {
     case BlockB: case Block2B: case BlockE: case Block2E:
     case CommentB: case Comment: case CommentE: case Comment2B: case Comment2E:
     case GroupB: case Group2B: case QuoteB: case Quote2B: case Quote: case Mark:
@@ -78,9 +76,9 @@ bool isPrefix(int type) {
     }
 }
 
-bool isPostfix(int type) {
-    type = type & ~Bad;
-    switch (type) {
+bool isPostfix(Type t) {
+    t = t & ~Bad;
+    switch (t) {
     case BlockB: case Block2B: case GroupE: case Group2E: case Mark:
     case Operator: case RoundE: case Round2E: case SquareE: case Square2E:
     case TagB: case Tag: case TagE:
@@ -93,7 +91,7 @@ bool isPostfix(int type) {
 #ifdef typesTest
 
 int main() {
-    for (int t = 0; t < LastE; t++) {
+    for (Type t = 0; t < LastE; t++) {
         assert(typeNames[t] != NULL);
         if (t == None) {
             assert(displayType(t) == t);
@@ -104,7 +102,7 @@ int main() {
             assert(visualType(t) == ' ');
         }
         else {
-            assert(displayType(t) < 26);
+            assert(displayType(t) <= Z && displayType(t|Bad) <= Z);
             assert('A' <= visualType(t) && visualType(t) <= 'Z');
             assert('a' <= visualType(t|Bad) && visualType(t|Bad) <= 'z');
         }

@@ -12,9 +12,9 @@
 // Bracket types come in matching pairs, with a B or E suffix.
 
 enum type {
-    Alternative, B, Comment, Declaration, E, Function, G, H, Identifier, Jot,
-    Keyword, L, Mark, Note, Operator, Property, Quote, R, S, Tag, Unary,
-    Value, Wrong, X, Y, Z, None, Gap,
+    None, Gap, Alternative, Block, Comment, Declaration, Error, Function, Group,
+    H, Identifier, Jot, Keyword, L, Mark, Note, Operator, Property, Quote,
+    Round, Square, Tag, Unary, Value, W, X, Y, Z,
 
     QuoteB, Quote2B, CommentB, Comment2B, TagB, RoundB, Round2B, SquareB,
     Square2B, GroupB, Group2B, BlockB, Block2B,
@@ -27,37 +27,37 @@ enum type {
     Bad = 128,
 };
 
-typedef unsigned char byte;
+typedef unsigned char Type;
 
 // Return the full name of the type.
-char *typeName(int type);
+char *typeName(Type t);
 
 // For display purposes, return a compact 5 bit version of a type. A bracket
-// type is replaced by the type in the first 26 starting with the same letter.
-// (The one-letter types are otherwise unused.) The Bad flag is retained.
-byte displayType(int type);
+// type is replaced by the version without the B, 2B, E, 2E suffix. Mismatched
+// brackets are returned as Error.
+Type displayType(Type t);
 
 // For visualization purposes, return the first letter of the type name. Return
-// it in lower case if the type has the Bad flag set. Return None as a minus
-// sign and Gap as a space.
-char visualType(int type);
+// it in lower case if it is a mismatched bracket. Return None as a minus sign,
+// and Gap as a space.
+char visualType(Type t);
 
 // Check for an opening bracket type, i.e. between FirstB and LastB.
-bool isOpener(int type);
+bool isOpener(Type t);
 
 // Check for a closing bracket type, i.e. between FirstE and LastE.
-bool isCloser(int type);
+bool isCloser(Type t);
 
 // Check for a bracket, i.e. between FirstB and LastE.
-bool isBracket(int type);
+bool isBracket(Type t);
 
 // Check whether opening and closing brackets match.
-bool bracketMatch(int opener, int closer);
+bool bracketMatch(Type opener, Type closer);
 
 // Return whether a type represents a prefix or infix token, preventing a
 // following auto-inserted semicolon.
-bool isPrefix(int type);
+bool isPrefix(Type t);
 
 // Return whether a type represents a postfix or infix token, preventing a
 // preceding auto-inserted semicolon.
-bool isPostfix(int type);
+bool isPostfix(Type t);

@@ -2,7 +2,8 @@
 # incremental compiling is not used. All the modules relevant to testing a
 # module are compiled together.)
 array = array.c
-brackets = brackets.c array.c
+types = types.c
+brackets = brackets.c types.c array.c
 tokens = tokens.c array.c
 
 # Debugging options (remove if not available)

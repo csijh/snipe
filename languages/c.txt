@@ -113,7 +113,7 @@ char    \s     char Quote
 char    \'     char2 Quote
 char    \n     start QuoteE
 char2   '      start QuoteE
-char2   \      start Wrong
+char2   \      start Error
 
 // String literals. Allow joiners
 
@@ -146,9 +146,9 @@ comment   !..~   comment
 comment   \s \n  comment Comment
 comment   \/*    comment2 Comment
 comment   \*/    comment2 Comment
-comment2  /*     comment Wrong
+comment2  /*     comment Error
 comment2  */     start CommentE
-comment2  \      start Wrong
+comment2  \      start Error
 
 // Numbers. There is no attempt to detect malformed numbers.
 start    0..9           decimal
@@ -183,14 +183,14 @@ filename  \s                                filename Quote
 filename  \n                                start Quote
 
 filename2 >                                 start Quote
-filename2 \                                 start Wrong
+filename2 \                                 start Error
 
 // Backslash newline, e.g. in #define
 
 start \\ start Mark
 
 // Illegal characters and white space.
-start     $ @ `   start Wrong
+start     $ @ `   start Error
 start     \s \n   start
 
 // ---------- Tests ------------------------------------------------------------
