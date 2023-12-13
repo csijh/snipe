@@ -48,18 +48,23 @@ char visualType(Type t) {
 }
 
 bool isBracket(Type t) {
+    t = t & ~Bad;
     return FirstB <= t && t <= LastE;
 }
 
 bool isOpener(Type t) {
+    t = t & ~Bad;
     return FirstB <= t && t <= LastB;
 }
 
 bool isCloser(Type t) {
+    t = t & ~Bad;
     return FirstE <= t && t <= LastE;
 }
 
 bool bracketMatch(Type opener, Type closer) {
+    opener = opener & ~Bad;
+    closer = closer & ~Bad;
     return closer == opener + FirstE - FirstB;
 }
 

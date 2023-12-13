@@ -17,21 +17,25 @@ enum { SentinelB = 0, SentinelE = -1 };
 // A brackets object has two gap buffers, one for active brackets, and one for
 // inactive brackets which have been paired, i.e. matched or mismatched. The
 // low part of the active buffer holds openers before the cursor which are
-// unpaired up to that point, during normal forward bracket matching. The high
-// part contains unpaired closers, which are the result of backward bracket
-// matching from the end of the text to the cursor. The inactive buffer allows
-// bracket matching to be undone, and contains open brackets which have been
-// paired during forward matching in the order their closers appeared. The high
-// part similarly contains paired closers after the cursor. The brackets object
-// also keeps track of the low water mark of the active openers and the number
-// of outdenters.
-struct brackets { index *active, *inactive; int lwm, outdenters; };
+// unpaired up to that point. The high part contains unpaired closers, which
+// are the result of backward bracket matching from the end of the text to the
+// cursor. The inactive buffer allows bracket matching to be undone, and the
+// low part contains open brackets which have been paired during forward
+// matching in the order their closers appeared. The high part similarly
+// contains paired closers after the cursor. The brackets object also tracks
+// the cursor and the number of outdenters and indenters on the current line,
+// during forward matching of the line.
+struct brackets {
+    int *active, *inactive;
+    int cursor, outdenters, indenters;
+};
 
 Brackets *newBrackets() {
     Brackets *bs = malloc(sizeof(Brackets));
-    bs->active = newArray(sizeof(index));
-    bs->inactive = newArray(sizeof(index));
-    bs->lwm = bs->outdenters = 0;
+    bs->active = newArray(sizeof(int));
+    bs->inactive = newArray(sizeof(int));
+    bs->outdenters = 0;
+    bs->indenters = 0;
     return bs;
 }
 
@@ -41,6 +45,38 @@ void freeBrackets(Brackets *bs) {
     free(bs);
 }
 
+// Mark a bracket as mismatched or unmatched.
+static void markBad(Type *ts, int bracket) {
+    ts[bracket] |= Bad;
+}
+
+// Mark a bracket as matched.
+static void markGood(Type *ts, int bracket) {
+    ts[bracket] &= ~Bad;
+}
+
+// Mark two brackets as matched or mismatched.
+static void mark(Type *ts, int opener, int closer) {
+    if (bracketMatch(ts[opener], ts[closer])) {
+        markGood(ts, opener);
+        markGood(ts, closer);
+    }
+    else {
+        markBad(ts, opener);
+        markBad(ts, closer);
+    }
+}
+
+// ---------- Forward matching -------------------------------------------------
+
+void startLine(Brackets *bs, Type *ts, int p) {
+    int n = length(ts);
+    bs->active = ensure(bs->active, n);
+    bs->inactive = ensure(bs->inactive, n);
+    bs->cursor = n;
+    bs->outdenters = bs->indenters = 0;
+}
+
 // Return the most recent opener.
 int topOpener(Brackets *bs) {
     int n = length(bs->active);
@@ -48,259 +84,325 @@ int topOpener(Brackets *bs) {
     return bs->active[n-1];
 }
 
-// Mark two brackets as matched or mismatched.
-static inline void mark(Type *ts, int opener, int closer) {
-    if (bracketMatch(ts[opener], ts[closer])) {
-        ts[opener] &= ~Bad;
-        ts[closer] &= ~Bad;
-    }
-    else {
-        ts[opener] |= Bad;
-        ts[closer] |= Bad;
-    }
-}
-
 // Add a new opener. Highlight it and the (negative) paired closer after the
 // cursor as matched or mismatched.
-void addOpener(Brackets *bs, Type *ts, index opener) {
+void pushOpener(Brackets *bs, Type *ts, int opener) {
     int n = length(bs->active);
     int h = high(bs->active);
     int m = max(bs->active);
     adjust(bs->active, +1);
     bs->active[n] = opener;
-    int closer = SentinelE;
-    if (h <= m - n - 1) closer = m - n - 1;
+    int closer = SentinelE + max(ts);
+    if (h <= m - n - 1) closer = bs->active[m - n - 1] + max(ts);
     mark(ts, opener, closer);
+    bs->indenters++;
 }
 
-// Undo addOpener, or prepare to pair up the top opener with a new closer. Mark
-// the old paired closer after the cursor as unmatched.
-static index popOpener(Brackets *bs, Type *ts) {
-    adjust(bs->active, -1);
+// Undo pushOpener, either to reverse a matching step, or to prepare to pair up
+// the top opener with a new closer. Mark the old paired closer after the
+// cursor as unmatched.
+static int popOpener(Brackets *bs, Type *ts) {
     int n = length(bs->active);
-    index opener = bs->active[n];
+    if (n == 0) return SentinelB;
+    int opener = bs->active[n-1];
+    adjust(bs->active, -1);
     int h = high(bs->active);
     int m = max(bs->active);
-    index oldCloser = SentinelE;
-    if (h <= m - n - 1) oldCloser = m - n - 1;
-    ts[oldCloser] &= ~Bad;
+    int oldCloser = SentinelE + max(ts);
+    if (h <= m - n - 1) oldCloser = bs->active[m - n - 1] + max(ts);
+    markBad(ts, oldCloser);
     return opener;
 }
 
-// On pairing with a closer, remember the opener.
-static void saveOpener(Brackets *bs, index opener) {
+// On pairing an opener with a closer, remember the opener.
+static void saveOpener(Brackets *bs, Type *ts, int opener) {
     int n = length(bs->inactive);
     adjust(bs->inactive, +1);
     bs->inactive[n] = opener;
 }
 
-// Handle a closer during scanning of a line.
-void addCloser(Brackets *bs, Type *ts, index closer) {
-    index opener = popOpener(bs, ts);
-    saveOpener(bs, opener);
+// Match a closer with the top opener.
+void matchCloser(Brackets *bs, Type *ts, int closer) {
+    int opener = popOpener(bs, ts);
+    saveOpener(bs, ts, opener);
+    mark(ts, opener, closer);
+    if (bs->indenters == 0) bs->outdenters++;
+    else bs->indenters--;
+}
+
+int outdenters(Brackets *bs) {
+    return bs->outdenters;
+}
+
+int indenters(Brackets *bs) {
+    return bs->indenters;
+}
+
+// Retrieve a previously saved opener.
+static int fetchOpener(Brackets *bs, Type *ts) {
+    adjust(bs->inactive, -1);
+    int n = length(bs->inactive);
+    return bs->inactive[n];
+}
+
+// Match forward when not scanning.
+static void matchForward(Brackets *bs, Type *ts, int from, int to) {
+    for (int i = from; i < to; i++) {
+        if (isOpener(ts[i])) pushOpener(bs, ts, i);
+        else if (isCloser(ts[i])) matchCloser(bs, ts, i);
+    }
+}
+
+// Undo forward matching of a closer.
+static void unmatchCloser(Brackets *bs, Type *ts) {
+    int opener = fetchOpener(bs, ts);
+    pushOpener(bs, ts, opener);
+}
+
+// Undo the forward matching of brackets, backwards from 'from' to 'to'.
+static void unmatchForward(Brackets *bs, Type *ts, int to, int from) {
+    for (int i = from-1; i >= to; i--) {
+        if (isOpener(ts[i])) popOpener(bs, ts);
+        else if (isCloser(ts[i])) unmatchCloser(bs, ts);
+    }
+}
+
+// ---------- Backward matching ------------------------------------------------
+
+// Add a new (negative) closer. Highlight it and the (positive) paired opener
+// before the cursor as matched or mismatched.
+static void pushCloser(Brackets *bs, Type *ts, int closer) {
+    int n = length(bs->active);
+    int h = high(bs->active);
+    int m = max(bs->active);
+    rehigh(bs->active, -1);
+    printf("pC %d\n", closer-max(ts));
+    bs->active[h-1] = closer - max(ts);
+    int opener = SentinelB;
+    if (n > m - h - 1) opener = bs->active[m - h - 1];
     mark(ts, opener, closer);
 }
 
-// ------------------------------------------------------------------
-/*
-// On removing a closer, retrieve its paired opener, which now needs to be
-// pushed on the active stack.
-int fetchOpener(int *paired) {
-    adjust(paired, -1);
-    int n = length(paired);
-    return paired[n];
+// Undo addCloser, either to reverse backward matching, or to prepare to pair up
+// the top closer with a new opener. Mark the old paired opener before the
+// cursor as unmatched.
+static int popCloser(Brackets *bs, Type *ts) {
+    int h = high(bs->active);
+    if (h == max(bs->active)) return SentinelE + max(ts);
+    int closer = bs->active[h] + max(ts);
+    rehigh(bs->active, +1);
+    int n = length(bs->active);
+    int m = max(bs->active);
+    int oldOpener = SentinelB;
+    if (n > m - h - 1) oldOpener = bs->active[m - h - 1];
+    markBad(ts, oldOpener);
+    return closer;
 }
 
-// Return the most recent (negative) closer after the cursor.
-int topCloser(int *active) {
-    int h = high(active);
-    int m = max(active);
-    if (h == m) return SentinelE;
-    return active[h];
+// On pairing a closer with an opener, remember the closer.
+static void saveCloser(Brackets *bs, Type *ts, int closer) {
+    rehigh(bs->inactive, -1);
+    int h = high(bs->inactive);
+    printf("saveCloser %d\n", closer - max(ts));
+    bs->inactive[h] = closer - max(ts);
 }
 
-// Add a new (negative) closer after the cursor. Return the (positive) partner
-// opener before the cursor, so the pair can be highlighted.
-int pushCloser(int *active, int closer) {
-    rehigh(active, -1);
-    int h = high(active);
-    active[h] = closer;
-    int m = max(active);
-    int n = length(active);
-    if (n >= m - h) return active[m - h - 1];
-    else return SentinelB;
+// Match an opener with the top closer.
+static void matchOpener(Brackets *bs, Type *ts, int opener) {
+    int closer = popCloser(bs, ts);
+    saveCloser(bs, ts, closer);
+    mark(ts, opener, closer);
 }
 
-// Remove the (-ve) top closer after the cursor. Return the (+ve) paired
-// opener before the cursor, which now needs to be marked as unmatched.
-int popCloser(int *active) {
-    rehigh(active, +1);
-    int n = length(active);
-    int h = high(active);
-    int m = max(active);
-    if (n >= m - h) return active[m - h -1];
-    else return SentinelB;
+// Retrieve a previously saved closer.
+static int fetchCloser(Brackets *bs, Type *ts) {
+    int h = high(bs->inactive);
+    rehigh(bs->inactive, +1);
+    printf("fetchCloser %d\n", bs->inactive[h]);
+    return bs->inactive[h] + max(ts);
 }
 
-// On pairing two brackets after the cursor, remember the (-ve) closer.
-void saveCloser(int *passive, int closer) {
-    rehigh(passive, -1);
-    int h = high(passive);
-    passive[h] = closer;
+// Undo backward matching of an opener.
+static void unmatchOpener(Brackets *bs, Type *ts) {
+    int closer = fetchCloser(bs, ts);
+    printf("unmatchOpener %d", closer-max(ts));
+    pushCloser(bs, ts, closer);
 }
 
-// On removing an opener after the cursor, retrieve its (-ve) paired closer,
-// which now needs to be pushed on the active stack.
-int fetchCloser(int *passive) {
-    int h = high(passive);
-    rehigh(passive, +1);
-    return passive[h];
+static void printBuffer(char *name, int *b) {
+    printf("%s: ", name);
+    for (int i = 0; i < length(b); i++) printf("%d ", b[i]);
+    printf("|");
+    for (int i = high(b); i < max(b); i++) printf(" %d", b[i]);
+    printf("\n");
 }
-*/
+
+// Undo the backward matching of brackets, forwards from 'from' to 'to'.
+static void unmatchBackward(Brackets *bs, Type *ts, int from, int to) {
+    printBuffer("active", bs->active);
+    printBuffer("inactv", bs->inactive);
+    for (int i = from; i < to; i++) {
+        if (isCloser(ts[i])) popCloser(bs, ts);
+        else if (isOpener(ts[i])) unmatchOpener(bs, ts);
+    }
+}
+
+// Match backward.
+static void matchBackward(Brackets *bs, Type *ts, int to, int from) {
+    for (int i = from-1; i >= to; i--) {
+        if (isCloser(ts[i])) {
+    printf("matchBackward i=%d %d\n", i, i-max(ts));
+            pushCloser(bs, ts, i);
+        }
+        else if (isOpener(ts[i])) matchOpener(bs, ts, i);
+    }
+}
+
+void clearLine(Brackets *bs, Type *ts, int p) {
+    unmatchForward(bs, ts, p, bs->cursor);
+    unmatchBackward(bs, ts, bs->cursor, length(ts));
+}
+
+void moveBrackets(Brackets *bs, Type *ts, int p) {
+    if (p > bs->cursor) {
+        moveGap(ts, bs->cursor);
+        unmatchBackward(bs, ts, bs->cursor, p);
+        moveGap(ts, p);
+        matchForward(bs, ts, bs->cursor, p);
+        bs->cursor = p;
+    }
+    else {
+        moveGap(ts, bs->cursor);
+        unmatchForward(bs, ts, p, bs->cursor);
+        moveGap(ts, p);
+printBuffer("A active", bs->active);
+printBuffer("A inactv", bs->inactive);
+        matchBackward(bs, ts, p, bs->cursor);
+        bs->cursor = p;
+    }
+}
+
 // ---------- Testing ----------------------------------------------------------
 #ifdef bracketsTest
 
-/*
 // Each test is a string with . for sentinels, ()[]{} for brackets, and
 // optionally | for the cursor. The string is scanned to the end, then the
 // cursor is moved back to the | position. The expected output has a letter for
-// each bracket. Matched pairs are marked with A, B, ... and mismatched pairs
-// or unmatched brackets are marked with a, b, ...
+// each bracket. Active pairs are marked A, B, ... or a, b, ... if mismatched
+// or unmatched. Inactive pairs are marked Z, Y, ... or z, y, ... if mismatched
+// or unmatched.
 static char *tests[] = {
+    /*
     ".().",
-    ".CC.",
+    ".ZZ.",
 
     ".()().",
-    ".CCFF.",
+    ".ZZYY.",
 
     ".()[].",
-    ".CCFF.",
+    ".ZZYY.",
 
     ".[()].",
-    ".FDDF.",
+    ".YZZY.",
 
     ".(].",
-    ".cc.",
+    ".zz.",
 
     ".).",
-    ".b.",
+    ".z.",
 
     ".| ().",
-    "...XX.",
-
+    ".  ZZ.",
+*/
     ".( | ).",
     ".X...X.",
 };
 static int ntests = (sizeof(tests) / sizeof(char *)) / 2;
 
-// Check if a pair is matched or mismatched.
-static bool match(char open, char close) {
-    switch (open) {
-    case '(': return close == ')';
-    case '[': return close == ']';
-    case '{': return close == '}';
-    default: return false;
-    }
-}
-
-static void showBuffer(char *name, int *buffer) {
-    printf("%s:", name);
-    for (int i = 0; i < max(buffer); i++) {
-        if (i < length(buffer)) printf(" %d", buffer[i]);
-        if (i == length(buffer)) printf(" | ");
-        if (i >= high(buffer)) printf("%d ", buffer[i]);
-    }
-    printf("\n");
-}
-
-// Mark a pair as matched or mismatched.
-static void mark(char *in, char *out, int opener, int closer, char id) {
-    if (match(in[opener], in[closer])) out[opener] = out[closer] = id;
-    else out[opener] = out[closer] = tolower(id);
-}
-
-static void scan(char *in, char *out, int *active, int *passive) {
-    int n = strlen(in);
-    char letter = 'A';
-    for (int i = 1; i < n-1; i++) {
-        char ch = in[i];
-        if (ch == '(' || ch == '[' || ch == '{') {
-            int closer = pushOpener(active, i);
-            mark(in, out, SentinelB, n + closer, letter++);
-        }
-        else if (ch == ')' || ch == ']' || ch == '}') {
-            int opener = topOpener(active);
-            int oldCloser = popOpener(active);
-            mark(in, out, SentinelB, n + oldCloser, letter++);
-            mark(in, out, opener, i, letter++);
-            saveOpener(passive, opener);
+// Convert an input string into a byte array of types.
+static void convertIn(char *in, Type *ts) {
+    for (int i = 0; i < strlen(in); i++) {
+        switch (in[i]) {
+        case '(': ts[i] = RoundB; break;
+        case '[': ts[i] = SquareB; break;
+        case '{': ts[i] = BlockB; break;
+        case ')': ts[i] = RoundE; break;
+        case ']': ts[i] = SquareE; break;
+        case '}': ts[i] = BlockE; break;
+        default:  ts[i] = Gap; break;
         }
     }
-    out[0] = out[n-1] = '.';
 }
 
-static void moveBack(char *in, char *out, int *active, int *passive) {
-    int n = strlen(in);
-    char letter = 'Z';
-    int cursor = n-1;
-    for (int i = 1; i < n-1; i++) if (in[i] == '|') cursor = i;
-    for (int i = n-2; i > cursor; i--) {
-        char ch = in[i];
-    showBuffer("active", active);
-    showBuffer("passive", passive);
-        if (ch == '(' || ch == '[' || ch == '{') {
-            // Undo from front
-            int oldCloser = popOpener(active);
-            printf("markA %d %d\n", SentinelB, n + oldCloser);
-            mark(in, out, SentinelB, n + oldCloser, letter++);
-            // Add to back
-            int closer = topCloser(active);
-            int oldOpener = popCloser(active);
-            printf("markB %d %d\n", oldOpener, n + SentinelE);
-            mark(in, out, oldOpener, n + SentinelE, letter--);
-            printf("markC %d %d\n", i, n + closer);
-            mark(in, out, i, n + closer, letter--);
-            saveCloser(passive, closer);
-        }
-        else if (ch == ')' || ch == ']' || ch == '}') {
-            // Undo from front
-            int opener = fetchOpener(passive);
-            int oldCloser = pushOpener(active, opener);
-            printf("markD %d %d\n", opener, n + oldCloser);
-            mark(in, out, opener, n + oldCloser, letter--);
-            // Add to back.
-            int oldOpener = pushCloser(active, i - n);
-            printf("markE %d %d\n", oldOpener, n + SentinelE);
-            mark(in, out, oldOpener, n + SentinelE, letter--);
-        }
+// Convert a brackets object and types array into an output string.
+static void convertOut(Brackets *bs, Type *ts, char *out) {
+    for (int i = 0; i < length(bs->active); i++) {
+        char letter = 'A' + i;
+        if ((ts[i] & Bad) != 0) letter = 'a' + i;
+        out[bs->active[i]] = letter;
     }
-    out[0] = out[n-1] = '.';
+    int j = 0;
+    for (int i = 0; i < bs->cursor; i++) {
+        if (! isCloser(ts[i])) continue;
+        int opener = bs->inactive[j];
+        char letter = 'Z' - j;
+        if ((ts[i] & Bad) != 0) letter = 'z' - j;
+        out[opener] = out[i] = letter;
+        j++;
+    }
+    for (int i = max(bs->active) - 1; i >= high(bs->active); i--) {
+        int m = max(bs->active);
+        char letter = 'A' + (m - i - 1);
+        if ((ts[i] & Bad) != 0) letter = 'a' + (m - i - 1);
+        out[bs->active[i] + m] = letter;
+    }
+    j = 0;
+    for (int i = max(ts) - 1; i >= bs->cursor; i--) {
+        if (! isOpener(ts[i])) continue;
+        int closer = bs->inactive[max(bs->inactive) - 1 - j] + max(ts);
+        char letter = 'Z' + j;
+        if ((ts[i] & Bad) != 0) letter = 'z' + j;
+        out[i] = out[closer] = letter;
+        j++;
+    }
+    out[0] = out[strlen(out)-1] = '.';
 }
 
+// Do bracket matching on the whole of the input. If there is a cursor, move it
+// back to the start, then forward.
 static void check(char *in, char *expect) {
+    Brackets *bs = newBrackets();
+    Type *ts = newArray(sizeof(Type));
     int n = strlen(in);
-    int *active = newArray(sizeof(int));
-    active = ensure(active, n);
-    int *passive = newArray(sizeof(int));
-    passive = ensure(passive, n);
+    ts = adjust(ts, n);
+    convertIn(in, ts);
+    startLine(bs, ts, 0);
+    matchForward(bs, ts, 0, n);
     char out[n+1];
-    for (int i = 0; i < n; i++) out[i] = '.';
+    for (int i = 0; i < n; i++) out[i] = ' ';
     out[n] = '\0';
-    scan(in, out, active, passive);
-    moveBack(in, out, active, passive);
-    freeArray(active);
-    freeArray(passive);
-    if (strcmp(out, expect) != 0) {
-        printf("Test failed. Input, expected output and actual output are:\n");
-        printf("%s\n", in);
-        printf("%s\n", expect);
-        printf("%s\n", out);
-        exit(1);
+    int cursor = -1;
+    for (int i = 0; i < n; i++) if (in[i] == '|') cursor = i;
+    if (cursor >= 0) {
+        moveGap(ts, n);
+        moveBrackets(bs, ts, 0);
+        moveGap(ts, 0);
+        moveBrackets(bs, ts, cursor);
+        moveGap(ts, cursor);
     }
+    convertOut(bs, ts, out);
+    freeArray(ts);
+    freeBrackets(bs);
+    if (strcmp(out, expect) == 0) return;
+    printf("Test failed. Input, expected output and actual output are:\n");
+    printf("%s\n", in);
+    printf("%s\n", expect);
+    printf("%s\n", out);
+    exit(1);
 }
-*/
+
 int main() {
-//    for (int i = 0; i < ntests; i++) check(tests[2*i], tests[2*i+1]);
+    for (int i = 0; i < ntests; i++) check(tests[2*i], tests[2*i+1]);
     printf("Brackets module OK\n");
 }
 
