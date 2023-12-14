@@ -1,12 +1,18 @@
 // Snipe editor. Free and open source, see licence.txt.
+#include <limits.h>
 
 // Provide support for dynamic arrays and gap buffers, accessed directly as
 // normal C arrays. No distinction is made between the two, an array being a
-// gap buffer with the gap at the end. Care needs to be taken when data might
-// move, either because of reallocation, or because of a gap move. To avoid
-// propagating these issues, either the array can be accessed via an owner
-// object, or ensure() can be called to reallocate the array in advance of
-// passing it to a function.
+// gap buffer with the gap at the end. Care needs to be taken because an array
+// might move because of reallocation. To avoid propagating these issues,
+// either the array can be accessed via an owner object, or ensure() can be
+// called to reallocate the array in advance of passing it to a function.
+typedef unsigned char byte;
+
+// To make indexes stable across insertions or deletions at the gap, indexes
+// after the gap are negative, relative to the end of the buffer. A MISSING
+// index is ignored, to reduce the number of special cases.
+enum { MISSING = INT_MIN };
 
 // Allocate an initially empty array of elements of the given unit size.
 void *newArray(int unit);
@@ -35,6 +41,14 @@ void *ensure(void *a, int d);
 
 // Move the gap from length(a) to the given offset (without relocation).
 void moveGap(void *a, int to);
+
+// Index a buffer of bytes or ints using an integer which is negative and
+// relative to the end of the buffer if it is after the gap, so that it is
+// stable across inserts and deletes at the gap.
+byte getByte(byte *a, int i);
+void setByte(byte *a, int i, byte b);
+int getInt(int *a, int i);
+void setInt(int *a, int i, int n);
 
 // Report an error in printf style, and exit.
 void error(char *format, ...);

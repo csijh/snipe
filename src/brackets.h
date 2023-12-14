@@ -5,40 +5,45 @@
 // and backwards from the end of the text to the cursor. Remaining unpaired
 // brackets at the cursor are paired up inwards from the ends towards the
 // cursor. As the cursor moves, bracket matching is undone and re-done, which
-// changes the highlighting of mismatched or unmatched brackets. Positions in
-// the text or types are represented as integer indexes. All operations are
-// done using the types array, without needing the text itself. It is assumed
-// that the text and types arrays have a sentinel byte at each end to allow
-// surplus unmatched brackets to be treated the same as mismatched brackets.
+// changes the highlighting of mismatched or unmatched brackets. All operations
+// are done using the types array, without needing the text itself. Positions
+// are represented as gap buffer indexes (i.e. negative after the gap). Surplus
+// unmatched brackets are represented as the position MISSING, so they can be
+// treated the same as mismatched brackets.
 typedef struct brackets Brackets;
 
 // Create or free a brackets object.
 Brackets *newBrackets();
 void freeBrackets(Brackets *bs);
 
-// Delete brackets from the line between position p and length(ts). An edit
-// begins with a clearLine call for the line about to be changed.
-void clearLine(Brackets *bs, Type *ts, int p);
-
-// Immediately after an edit, before rescanning of the line, the new line
-// contents from p to length(ts) are used for initialisation.
-void startLine(Brackets *bs, Type *ts, int p);
+// Start processing a line that has been edited, between positions lo and hi.
+// Brackets should have been cleared from the line before the edit.
+void startLine(Brackets *bs, Type *ts, int lo, int hi);
 
 // Ask for the top opener while scanning a line (for bracket-sensitive rules).
 int topOpener(Brackets *bs);
 
-// Handle an opener during scanning of a line.
+// Push an opener on the stack during scanning of a line.
 void pushOpener(Brackets *bs, Type *ts, int opener);
 
-// Handle a closer during scanning of a line.
+// Match a closer with the top opener during scanning of a line.
 void matchCloser(Brackets *bs, Type *ts, int closer);
 
 // Immediately after scanning, ask for the number of outdenters and indenters of
 // the line just scanned, providing the indent information for the line.
+// (These are the closers that relate to earlier lines, and the openers that
+// relate to later lines.)
 int outdenters(Brackets *bs);
 int indenters(Brackets *bs);
 
-// Move the cursor to position p immediately after scanning to return the cursor
-// to the right place in the line, or between edits to track cursor movement.
-// Brackets may be re-highlighted.
-void moveBrackets(Brackets *bs, Type *ts, int p);
+// Re-match brackets forwards between lo and to (when scanning is not needed).
+void matchForward(Brackets *bs, Type *ts, int lo, int hi);
+
+// Undo forward matching between lo and hi.
+void clearForward(Brackets *bs, Type *ts, int lo, int hi);
+
+// (Re-)match brackets backwards between lo and hi (both negative).
+void matchForward(Brackets *bs, Type *ts, int lo, int hi);
+
+// Undo backward matching between lo and hi (both negative).
+void clearBackward(Brackets *bs, Type *ts, int lo, int hi);

@@ -44,6 +44,30 @@ int max(void *a) {
     return h->max;
 }
 
+byte getByte(byte *a, int i) {
+    if (i == MISSING) return 0;
+    else if (i < 0) return a[i + max(a)];
+    else return a[i];
+}
+
+void setByte(byte *a, int i, byte b) {
+    if (i == MISSING) return;
+    if (i >= 0) a[i] = b;
+    else a[i + max(a)] = b;
+}
+
+int getInt(int *a, int i) {
+    if (i == MISSING) return 0;
+    else if (i < 0) return a[i + max(a)];
+    else return a[i];
+}
+
+void setInt(int *a, int i, int n) {
+    if (i == MISSING) return;
+    if (i >= 0) a[i] = n;
+    else a[i + max(a)] = n;
+}
+
 void moveGap(void *a, int gap) {
     header *h = (header *) a - 1;
     int n = h->length + (h->max - h->high);
