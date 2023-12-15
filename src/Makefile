@@ -2,6 +2,7 @@
 # incremental compiling is not used. All the modules relevant to testing a
 # module are compiled together.)
 array = array.c
+bytes = bytes.c
 types = types.c
 brackets = brackets.c types.c array.c
 tokens = tokens.c array.c

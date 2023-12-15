@@ -39,6 +39,11 @@ int high(void *a) {
     return h->high;
 }
 
+int total(void *a) {
+    header *h = (header *) a - 1;
+    return h->length + h->max - h->high;
+}
+
 int max(void *a) {
     header *h = (header *) a - 1;
     return h->max;
@@ -54,6 +59,18 @@ void setByte(byte *a, int i, byte b) {
     if (i == MISSING) return;
     if (i >= 0) a[i] = b;
     else a[i + max(a)] = b;
+}
+
+char getChar(char *a, int i) {
+    if (i == MISSING) return '\0';
+    else if (i < 0) return a[i + max(a)];
+    else return a[i];
+}
+
+void setChar(char *a, int i, char c) {
+    if (i == MISSING) return;
+    if (i >= 0) a[i] = c;
+    else a[i + max(a)] = c;
 }
 
 int getInt(int *a, int i) {

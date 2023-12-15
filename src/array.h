@@ -25,6 +25,9 @@ int length(void *a);
 // The start of the high data in a buffer, also the end index of the gap.
 int high(void *a);
 
+// The total content of a buffer, before and after the gap.
+int total(void *a);
+
 // The capacity of an array, also the end of the high data in a buffer.
 int max(void *a);
 
@@ -47,6 +50,8 @@ void moveGap(void *a, int to);
 // stable across inserts and deletes at the gap.
 byte getByte(byte *a, int i);
 void setByte(byte *a, int i, byte b);
+char getChar(char *a, int i);
+void setChar(char *a, int i, char c);
 int getInt(int *a, int i);
 void setInt(int *a, int i, int n);
 

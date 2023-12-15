@@ -77,6 +77,7 @@ int topOpener(Brackets *bs) {
 
 // Push opener, and highlight it and the paired backward closer.
 void pushOpener(Brackets *bs, Type *ts, int opener) {
+    if (opener == MISSING) return;
     int n = length(bs->active);
     adjust(bs->active, +1);
     bs->active[n] = opener;
@@ -134,16 +135,16 @@ static int fetchOpener(Brackets *bs) {
 
 void matchForward(Brackets *bs, Type *ts, int lo, int hi) {
     for (int i = lo; i < hi; i++) {
-        if (isOpener(ts[i])) pushOpener(bs, ts, i);
-        else if (isCloser(ts[i])) matchCloser(bs, ts, i);
+        if (isOpener(getByte(ts,i))) pushOpener(bs, ts, i);
+        else if (isCloser(getByte(ts,i))) matchCloser(bs, ts, i);
     }
 }
 
 // Undo forward matching between lo and hi.
 void clearForward(Brackets *bs, Type *ts, int lo, int hi) {
     for (int i = hi-1; i >= lo; i--) {
-        if (isOpener(ts[i])) popOpener(bs, ts);
-        else if (isCloser(ts[i])) pushOpener(bs, ts, fetchOpener(bs));
+        if (isOpener(getByte(ts,i))) popOpener(bs, ts);
+        else if (isCloser(getByte(ts,i))) pushOpener(bs, ts, fetchOpener(bs));
     }
 }
 
@@ -191,8 +192,8 @@ static void matchOpener(Brackets *bs, Type *ts, int opener) {
 // Match backward.
 static void matchBackward(Brackets *bs, Type *ts, int hi, int lo) {
     for (int i = lo-1; i >= hi; i--) {
-        if (isCloser(ts[i])) pushCloser(bs, ts, i);
-        else if (isOpener(ts[i])) matchOpener(bs, ts, i);
+        if (isCloser(getByte(ts,i))) pushCloser(bs, ts, i);
+        else if (isOpener(getByte(ts,i))) matchOpener(bs, ts, i);
     }
 }
 
@@ -206,13 +207,13 @@ static int fetchCloser(Brackets *bs, Type *ts) {
 // Undo the backward matching of brackets between lo and hi.
 void clearBackward(Brackets *bs, Type *ts, int lo, int hi) {
     for (int i = lo; i < hi; i++) {
-        if (isCloser(ts[i])) popCloser(bs, ts);
-        else if (isOpener(ts[i])) pushCloser(bs, ts, fetchCloser(bs, ts));
+        if (isCloser(getByte(ts,i))) popCloser(bs, ts);
+        else if (isOpener(getByte(ts,i))) pushCloser(bs, ts, fetchCloser(bs, ts));
     }
 }
 
 //==============================================================================
-/*
+
 static void printBuffer(char *name, int *b) {
     printf("%s: ", name);
     for (int i = 0; i < length(b); i++) printf("%d ", b[i]);
@@ -221,10 +222,11 @@ static void printBuffer(char *name, int *b) {
     printf("\n");
 }
 
+/*
 static void printTypes(Type *ts) {
-    for (int i = 0; i < length(ts); i++) printf("%c", visualType(ts[i]));
+    for (int i = 0; i < length(ts); i++) printf("%c", visualType(getByte(ts,i)));
     for (int i = length(ts); i < high(ts); i++) printf("_");
-    for (int i = high(ts); i < max(ts); i++) printf("%c", visualType(ts[i]));
+    for (int i = high(ts); i < max(ts); i++) printf("%c", visualType(getByte(ts,i)));
     printf("\n");
 }
 */
@@ -293,64 +295,85 @@ static char *tests[] = {
 static int ntests = (sizeof(tests) / sizeof(char *)) / 2;
 
 // Convert an input string into a byte array of types.
-static void convertIn(char *in, Type *ts) {
+static Type *convertIn(char *in) {
+    Type *ts = newArray(sizeof(Type));
+    int n = strlen(in);
+    ts = adjust(ts, n);
     for (int i = 0; i < strlen(in); i++) {
         switch (in[i]) {
-        case '(': ts[i] = RoundB; break;
-        case '[': ts[i] = SquareB; break;
-        case '{': ts[i] = BlockB; break;
-        case ')': ts[i] = RoundE; break;
-        case ']': ts[i] = SquareE; break;
-        case '}': ts[i] = BlockE; break;
-        default:  ts[i] = Gap; break;
+        case '(': setByte(ts,i,RoundB); break;
+        case '[': setByte(ts,i,SquareB); break;
+        case '{': setByte(ts,i,BlockB); break;
+        case ')': setByte(ts,i,RoundE); break;
+        case ']': setByte(ts,i,SquareE); break;
+        case '}': setByte(ts,i,BlockE); break;
+        default:  setByte(ts,i,Gap); break;
         }
     }
+    return ts;
 }
 
 // Convert a brackets object and types array into an output string.
-static void convertOut(Brackets *bs, Type *ts, char *out) {
+static char *convertOut(Brackets *bs, Type *ts) {
+    char *out = newArray(1);
+    out = adjust(out, total(ts));
+    for (int i = 0; i < total(ts); i++) setChar(out, i, ' ');
+    moveGap(out, length(ts));
     for (int i = 0; i < length(bs->active); i++) {
         char letter = 'A' + i;
-        if ((ts[i] & Bad) != 0) letter = 'a' + i;
-        out[bs->active[i]] = letter;
-    }
-    int j = 0;
-    for (int i = 0; i < length(ts); i++) {
-        if (! isCloser(ts[i])) continue;
-        int opener = bs->inactive[j];
-        char letter = 'Z' - j;
-        if ((ts[i] & Bad) != 0) letter = 'z' - j;
-        out[opener] = out[i] = letter;
-        j++;
+        if ((getByte(ts,i) & Bad) != 0) letter = 'a' + i;
+        setChar(out, bs->active[i], letter);
     }
     for (int i = max(bs->active) - 1; i >= high(bs->active); i--) {
         int m = max(bs->active);
         char letter = 'A' + (m - i - 1);
-        if ((ts[i] & Bad) != 0) letter = 'a' + (m - i - 1);
-        out[bs->active[i] + max(ts)] = letter;
+        if ((getByte(ts,i) & Bad) != 0) letter = 'a' + (m - i - 1);
+        setChar(out, bs->active[i], letter);
+    }
+    int j = 0;
+    for (int i = 0; i < length(ts); i++) {
+        if (! isCloser(getByte(ts,i))) continue;
+        int opener = bs->inactive[j];
+        char letter = 'Z' - j;
+        if ((getByte(ts,i) & Bad) != 0) letter = 'z' - j;
+        setChar(out, opener, letter);
+        setChar(out, i, letter);
+        j++;
     }
     j = 0;
     for (int i = max(ts) - 1; i >= high(ts); i--) {
-        if (! isOpener(ts[i])) continue;
-        int closer = bs->inactive[max(bs->inactive) - 1 - j] + max(ts);
+        if (! isOpener(getByte(ts,i))) continue;
+        int closer = bs->inactive[max(bs->inactive) - 1 - j];
         char letter = 'Z' + j;
-        if ((ts[i] & Bad) != 0) letter = 'z' + j;
-        out[i] = out[closer] = letter;
+        if ((getByte(ts,i) & Bad) != 0) letter = 'z' + j;
+        setChar(out, i, letter);
+        setChar(out, closer, letter);
         j++;
     }
-    out[0] = out[strlen(out)-1] = '.';
+    return out;
 }
+
+static void check(char *in, char *expect) {
+    Brackets *bs = newBrackets();
+    Type *ts = convertIn(in);
+    int n = length(ts);
+    startLine(bs, ts, 0, n);
+    matchForward(bs, ts, 0, n);
+    char *out = convertOut(bs, ts);
+    clearForward(bs, ts, 0, n);
+    moveGap(ts, 0);
+    matchBackward(bs, ts, high(ts)-max(ts), 0);
+    printBuffer("a", bs->active);
+    printBuffer("b", bs->inactive);
+    freeArray(out);
+    freeArray(ts);
+    freeBrackets(bs);
+}
+
 /*
 // Do bracket matching on the whole of the input. If there is a cursor, move it
 // back to the start, then forward.
-static void check(char *in, char *expect) {
-    Brackets *bs = newBrackets();
-    Type *ts = newArray(sizeof(Type));
-    int n = strlen(in);
-    ts = adjust(ts, n);
-    convertIn(in, ts);
-    startLine(bs, ts, 1);
-    matchForward(bs, ts, 1, n-1);
+
     char out[n+1];
     for (int i = 0; i < n; i++) out[i] = ' ';
     out[n] = '\0';
@@ -379,7 +402,7 @@ printBuffer("d", bs->inactive);
 }
 */
 int main() {
-//    for (int i = 0; i < ntests; i++) check(tests[2*i], tests[2*i+1]);
+    for (int i = 0; i < ntests; i++) check(tests[2*i], tests[2*i+1]);
     printf("Brackets module OK\n");
 }
 
