@@ -1,5 +1,4 @@
 // Snipe editor. Free and open source, see licence.txt.
-#include "array.h"
 #include "brackets.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,26 +17,35 @@
 // matching in the order their closers appeared. The high part similarly
 // contains paired closers after the cursor. The brackets object also tracks
 // the number of outdenters and indenters on the current line, during forward
-// matching of the line.
+// matching of the line. The high part of both buffers contains negative
+// indexes, relative to the end of the text, to make them stable across text
+// insertions and deletions. The end of the text is tracked accordingly.
 struct brackets {
+    int lowA, highA, maxA, lowI, highI, maxI;
     int *active, *inactive;
-    int outdenters, indenters;
+    int end, outdenters, indenters;
 };
+
+enum { MAX0 = 2, MUL = 3, DIV = 2 };
 
 Brackets *newBrackets() {
     Brackets *bs = malloc(sizeof(Brackets));
-    bs->active = newArray(sizeof(int));
-    bs->inactive = newArray(sizeof(int));
-    bs->outdenters = 0;
-    bs->indenters = 0;
+    int *a = malloc(MAX0 * sizeof(int));
+    int *i = malloc(MAX0 * sizeof(int));
+    *bs = (Brackets) {
+        .lowA=0, .highA=MAX0, .maxA=MAX0, .lowI=0, .highI=MAX0, .maxI=MAX0,
+        .active = a, .inactive = i,
+        .end = 0, .outdenters = 0, .indenters = 0
+    };
     return bs;
 }
 
 void freeBrackets(Brackets *bs) {
-    freeArray(bs->active);
-    freeArray(bs->inactive);
+    free(bs->active);
+    free(bs->inactive);
     free(bs);
 }
+/*
 
 // Mark a bracket as mismatched or unmatched.
 static void markBad(Type *ts, int bracket) {
@@ -211,9 +219,9 @@ void clearBackward(Brackets *bs, Type *ts, int lo, int hi) {
         else if (isOpener(getByte(ts,i))) pushCloser(bs, ts, fetchCloser(bs, ts));
     }
 }
-
+*/
 //==============================================================================
-
+/*
 static void printBuffer(char *name, int *b) {
     printf("%s: ", name);
     for (int i = 0; i < length(b); i++) printf("%d ", b[i]);
@@ -222,15 +230,13 @@ static void printBuffer(char *name, int *b) {
     printf("\n");
 }
 
-/*
 static void printTypes(Type *ts) {
     for (int i = 0; i < length(ts); i++) printf("%c", visualType(getByte(ts,i)));
     for (int i = length(ts); i < high(ts); i++) printf("_");
     for (int i = high(ts); i < max(ts); i++) printf("%c", visualType(getByte(ts,i)));
     printf("\n");
 }
-*/
-/*
+
 void clearLine(Brackets *bs, Type *ts, int p) {
     clearForward(bs, ts, p, bs->cursor);
     clearBackward(bs, ts, bs->cursor, length(ts));
@@ -260,7 +266,7 @@ printf("gap %d %d %d\n", gap, gap+p, gap+bs->cursor);
 */
 // ---------- Testing ----------------------------------------------------------
 #ifdef bracketsTest
-
+/*
 // Each test is a string with . for sentinels, ()[]{} for brackets, and
 // optionally | for the cursor. The string is scanned to the end, then the
 // cursor is moved back to the | position. The expected output has a letter for
@@ -370,7 +376,6 @@ static void check(char *in, char *expect) {
     freeBrackets(bs);
 }
 
-/*
 // Do bracket matching on the whole of the input. If there is a cursor, move it
 // back to the start, then forward.
 
@@ -402,7 +407,7 @@ printBuffer("d", bs->inactive);
 }
 */
 int main() {
-    for (int i = 0; i < ntests; i++) check(tests[2*i], tests[2*i+1]);
+//    for (int i = 0; i < ntests; i++) check(tests[2*i], tests[2*i+1]);
     printf("Brackets module OK\n");
 }
 

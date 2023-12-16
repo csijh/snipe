@@ -1,10 +1,10 @@
 // Snipe editor. Free and open source, see licence.txt.
-#include "types.h"
+#include "kinds.h"
 #include <stdio.h>
 #include <ctype.h>
 #include <assert.h>
 
-char *typeNames[64] = {
+char *kindNames[64] = {
     [None]="None", [Gap]="Gap",
     [Alternative]="Alternative", [Block]="Block", [Comment]="Comment",
     [Declaration]="Declaration", [Error]="Error", [Function]="Function",
@@ -27,50 +27,50 @@ char *typeNames[64] = {
     [Block2E]="Block2E"
 };
 
-char *typeName(Type t) {
-    return typeNames[t];
+char *kindName(Kind k) {
+    return kindNames[k];
 }
 
-Type displayType(Type t) {
-    if ((t & Bad) != 0) return Error;
-    if (t < FirstB) return t;
-    return typeNames[t][0] - 'A' + 2;
+Kind displayKind(Kind k) {
+    if ((k & Bad) != 0) return Error;
+    if (k < FirstB) return k;
+    return kindNames[k][0] - 'A' + 2;
 }
 
-char visualType(Type t) {
-    bool bad = (t & Bad) != 0;
-    t = t & ~Bad;
-    if (t == None) return '-';
-    if (t == Gap) return ' ';
-    t = typeNames[t][0];
-    if (bad) t = tolower(t);
-    return t;
+char visualKind(Kind k) {
+    bool bad = (k & Bad) != 0;
+    k = k & ~Bad;
+    if (k == None) return '-';
+    if (k == Gap) return ' ';
+    k = kindNames[k][0];
+    if (bad) k = tolower(k);
+    return k;
 }
 
-bool isBracket(Type t) {
-    t = t & ~Bad;
-    return FirstB <= t && t <= LastE;
+bool isBracket(Kind k) {
+    k = k & ~Bad;
+    return FirstB <= k && k <= LastE;
 }
 
-bool isOpener(Type t) {
-    t = t & ~Bad;
-    return FirstB <= t && t <= LastB;
+bool isOpener(Kind k) {
+    k = k & ~Bad;
+    return FirstB <= k && k <= LastB;
 }
 
-bool isCloser(Type t) {
-    t = t & ~Bad;
-    return FirstE <= t && t <= LastE;
+bool isCloser(Kind k) {
+    k = k & ~Bad;
+    return FirstE <= k && k <= LastE;
 }
 
-bool bracketMatch(Type opener, Type closer) {
+bool bracketMatch(Kind opener, Kind closer) {
     opener = opener & ~Bad;
     closer = closer & ~Bad;
     return closer == opener + FirstE - FirstB;
 }
 
-bool isPrefix(Type t) {
-    t = t & ~Bad;
-    switch (t) {
+bool isPrefix(Kind k) {
+    k = k & ~Bad;
+    switch (k) {
     case BlockB: case Block2B: case BlockE: case Block2E:
     case CommentB: case Comment: case CommentE: case Comment2B: case Comment2E:
     case GroupB: case Group2B: case QuoteB: case Quote2B: case Quote: case Mark:
@@ -81,9 +81,9 @@ bool isPrefix(Type t) {
     }
 }
 
-bool isPostfix(Type t) {
-    t = t & ~Bad;
-    switch (t) {
+bool isPostfix(Kind k) {
+    k = k & ~Bad;
+    switch (k) {
     case BlockB: case Block2B: case GroupE: case Group2E: case Mark:
     case Operator: case RoundE: case Round2E: case SquareE: case Square2E:
     case TagB: case Tag: case TagE:
@@ -93,26 +93,26 @@ bool isPostfix(Type t) {
 }
 
 // ---------- Testing ----------------------------------------------------------
-#ifdef typesTest
+#ifdef kindsTest
 
 int main() {
-    for (Type t = 0; t < LastE; t++) {
-        assert(typeNames[t] != NULL);
-        if (t == None) {
-            assert(displayType(t) == t);
-            assert(visualType(t) == '-');
+    for (Kind k = 0; k < LastE; k++) {
+        assert(kindNames[k] != NULL);
+        if (k == None) {
+            assert(displayKind(k) == k);
+            assert(visualKind(k) == '-');
         }
-        else if (t == Gap) {
-            assert(displayType(t) == t);
-            assert(visualType(t) == ' ');
+        else if (k == Gap) {
+            assert(displayKind(k) == k);
+            assert(visualKind(k) == ' ');
         }
         else {
-            assert(displayType(t) <= Z && displayType(t|Bad) <= Z);
-            assert('A' <= visualType(t) && visualType(t) <= 'Z');
-            assert('a' <= visualType(t|Bad) && visualType(t|Bad) <= 'z');
+            assert(displayKind(k) <= Z && displayKind(k|Bad) <= Z);
+            assert('A' <= visualKind(k) && visualKind(k) <= 'Z');
+            assert('a' <= visualKind(k|Bad) && visualKind(k|Bad) <= 'z');
         }
     }
-    printf("Types module OK\n");
+    printf("Kinds module OK\n");
 }
 
 #endif

@@ -1,5 +1,11 @@
 // Snipe editor. Free and open source, see licence.txt.
 
+// The places before the gap are normal
+// indexes. The places after the gap are relative to the end of the text, so
+// that they remain stable across insertions and deletions at the cursor. Text
+// insertions and deletions are monitored, to track the size of the text, and
+// make any necessary but usually minor adjustments to the gap position.
+
 // The gap buffer is 0..low..high..max, and the text is 0..end.
 struct places Places { int low, high, max, end; int *data; };
 
