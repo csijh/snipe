@@ -12,12 +12,14 @@
 // Just as importantly, they are difficult to beat for simplicity.
 struct text { int low, high, max; char *chars; Kind *kinds; };
 
+// Initial size and expansion factor.
+enum { MAX0 = 2, MUL = 3, DIV = 2 };
+
 Text *newText() {
-    int max0 = 2;
     Text *t = malloc(sizeof(Text));
-    char *chars = malloc(max0);
-    Kind *kinds = malloc(max0);
-    *t = (Text) { .low=0, .high=max0, .max=max0, .chars=chars, .kinds=kinds };
+    char *chars = malloc(MAX0);
+    Kind *kinds = malloc(MAX0);
+    *t = (Text) { .low=0, .high=MAX0, .max=MAX0, .chars=chars, .kinds=kinds };
     return t;
 }
 
@@ -72,7 +74,7 @@ static void ensureT(Text *t, int extra) {
     char *chars = t->chars;
     Kind *kinds = t->kinds;
     int new = max;
-    while (new < low + max - high + extra) new = new * 3 / 2;
+    while (new < low + max - high + extra) new = new * MUL / DIV;
     chars = realloc(chars, new);
     kinds = realloc(kinds, new);
     if (high < max) {
