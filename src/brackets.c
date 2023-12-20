@@ -28,7 +28,7 @@ static void ensureB(Buffer *b, int extra) {
     int low = b->low, high = b->high, max = b->max;
     int new = max;
     while (new < low + max - high + extra) new = new * MUL / DIV;
-    b->data = realloc(b->data, new);
+    b->data = realloc(b->data, new * sizeof(int));
     if (high < max) {
         memmove(b->data + high + new - max, b->data + high, max - high);
     }
@@ -43,6 +43,7 @@ static void ensureB(Buffer *b, int extra) {
 // insertions and deletions.
 
 static void pushL(Buffer *b, int opener) {
+    b->data[0] = opener;
     b->data[b->low++] = opener;
 }
 
@@ -63,17 +64,24 @@ static int popR(Buffer *b) {
     return closer;
 }
 
-// On the active stack, get the opener matching the top closer, or the closer
-// matching the top opener.
+// Get the number of openers or closers.
 
-static int getOpener(Buffer *b) {
-    int i = b->max - b->high - 1;
+static int lengthL(Buffer *b) {
+    return b->low;
+}
+
+static int lengthR(Buffer *b) {
+    return b->max - b->high;
+}
+
+// Get the i'th opener, or the i'th closer.
+
+static int getL(Buffer *b, int i) {
     if (b->low <= i) return MISSING;
     return b->data[i];
 }
 
-static int getCloser(Buffer *b) {
-    int i = b->low - 1;
+static int getR(Buffer *b, int i) {
     if (b->high > b->max - i - 1) return MISSING;
     int closer = b->data[b->max - i - 1];
     if (closer != MISSING) closer = closer + b->end;
@@ -143,7 +151,8 @@ int matchTop(Brackets *bs, Text *t, Kind close) {
 // Push opener, and re-highlight.
 void pushOpener(Brackets *bs, Text *t, int opener) {
     pushL(&bs->active, opener);
-    int closer = getCloser(&bs->active);
+    int i = lengthL(&bs->active);
+    int closer = getR(&bs->active, i);
     if (closer == MISSING) markOne(t, opener, false);
     else markTwo(t, opener, closer);
     bs->indenters++;
@@ -151,8 +160,9 @@ void pushOpener(Brackets *bs, Text *t, int opener) {
 
 // Undo pushOpener, and re-highlight.
 static int popOpener(Brackets *bs, Text *t) {
-    int closer = getCloser(&bs->active);
     int opener = popL(&bs->active);
+    int i = lengthL(&bs->active);
+    int closer = getR(&bs->active, i);
     if (opener == MISSING) return MISSING;
     if (closer != MISSING) markOne(t, closer, false);
     return opener;
@@ -197,15 +207,17 @@ void clearForward(Brackets *bs, Text *t, int lo, int hi) {
 // Add a new closer, and re-highlight.
 static void pushCloser(Brackets *bs, Text *t, int closer) {
     pushR(&bs->active, closer);
-    int opener = getOpener(&bs->active);
+    int i = lengthR(&bs->active) - 1;
+    int opener = getL(&bs->active, i);
     if (opener == MISSING) markOne(t, closer, false);
     else markTwo(t, opener, closer);
 }
 
 // Undo pushCloser, and re-highlight.
 static int popCloser(Brackets *bs, Text *t) {
-    int opener = getOpener(&bs->active);
     int closer = popR(&bs->active);
+    int i = lengthR(&bs->active);
+    int opener = getL(&bs->active, i);
     if (closer == MISSING) return MISSING;
     if (opener != MISSING) markOne(t, opener, false);
     return closer;
@@ -219,8 +231,8 @@ static void matchOpener(Brackets *bs, Text *t, int opener) {
 }
 
 // Match backward.
-static void matchBackward(Brackets *bs, Text *t, int hi, int lo) {
-    for (int i = lo-1; i >= hi; i--) {
+static void matchBackward(Brackets *bs, Text *t, int lo, int hi) {
+    for (int i = hi-1; i >= lo; i--) {
         if (isCloser(getK(t,i))) pushCloser(bs, t, i);
         else if (isOpener(getK(t,i))) matchOpener(bs, t, i);
     }
@@ -239,24 +251,12 @@ void clearBackward(Brackets *bs, Text *t, int lo, int hi) {
 
 //==============================================================================
 /*
-static void printBuffer(char *name, int *b) {
-    printf("%s: ", name);
-    for (int i = 0; i < length(b); i++) printf("%d ", b[i]);
-    printf("|");
-    for (int i = high(b); i < max(b); i++) printf(" %d", b[i]);
-    printf("\n");
-}
 
 static void printTypes(Text *t) {
     for (int i = 0; i < length(t); i++) printf("%c", visualType(getK(t,i)));
     for (int i = length(t); i < high(t); i++) printf("_");
     for (int i = high(t); i < max(t); i++) printf("%c", visualType(getK(t,i)));
     printf("\n");
-}
-
-void clearLine(Brackets *bs, Text *t, int p) {
-    clearForward(bs, t, p, bs->cursor);
-    clearBackward(bs, t, bs->cursor, length(t));
 }
 
 void moveBrackets(Brackets *bs, Text *t, int p) {
@@ -284,7 +284,7 @@ printf("gap %d %d %d\n", gap, gap+p, gap+bs->cursor);
 // ---------- Testing ----------------------------------------------------------
 #ifdef bracketsTest
 
-// Convert an input string into a text object.
+// Convert an input string into a text object, with bracket tokens.
 static Text *convertIn(char *in) {
     Text *t = newText();
     int n = strlen(in);
@@ -305,8 +305,8 @@ static Text *convertIn(char *in) {
 
 // Convert a brackets object and text into an output string.
 static char *convertOut(Brackets *bs, Text *t) {
-    char *out = newArray(1);
-    out = adjust(out, lengthT(t));
+    char *out = malloc(lengthT(t)+1);
+    out[lengthT(t)] = '\0';
     for (int i = 0; i < lengthT(t); i++) out[i] = ' ';
     for (int i = 0; i < bs->active.low; i++) {
         char letter = 'A' + i;
@@ -322,7 +322,7 @@ static char *convertOut(Brackets *bs, Text *t) {
     int j = 0;
     for (int i = 0; i < cursorT(t); i++) {
         if (! isCloser(getK(t,i))) continue;
-        int opener = bs->inactive.data[j];
+        int opener = getL(&bs->inactive, j);
         char letter = 'Z' - j;
         if ((getK(t,i) & Bad) != 0) letter = 'z' - j;
         out[opener] = letter;
@@ -330,9 +330,9 @@ static char *convertOut(Brackets *bs, Text *t) {
         j++;
     }
     j = 0;
-    for (int i = lemgthT(t) - 1; i >= cursorT(t); i--) {
+    for (int i = lengthT(t) - 1; i >= cursorT(t); i--) {
         if (! isOpener(getK(t,i))) continue;
-        int closer = bs->inactive[max(bs->inactive) - 1 - j];
+        int closer = getR(&bs->inactive, j);
         char letter = 'Z' + j;
         if ((getK(t,i) & Bad) != 0) letter = 'z' + j;
         out[i] = letter;
@@ -342,17 +342,48 @@ static char *convertOut(Brackets *bs, Text *t) {
     return out;
 }
 
+static void printBuffer(char *name, Buffer *b) {
+    printf("%s: ", name);
+    for (int i = 0; i < b->low; i++) printf("%d ", b->data[i]);
+    printf("|");
+    for (int i = b->high; i < b->max; i++) printf(" %d", b->data[i]);
+    printf("\n");
+}
 
-/*
-// Each test is a string with . for sentinels, ()[]{} for brackets, and
+static void check(char *in, char *expect) {
+    Brackets *bs = newBrackets();
+    Text *t = convertIn(in);
+    int n = lengthT(t);
+    startLine(bs, t, 0, n);
+    matchForward(bs, t, 0, n);
+    printBuffer("a", &bs->active);
+    printBuffer("b", &bs->inactive);
+    char *out = convertOut(bs, t);
+    printf("out %s\n", out);
+    clearForward(bs, t, 0, n);
+    moveT(t, 0);
+    matchBackward(bs, t, 0, n);
+    printBuffer("i", &bs->inactive);
+    char *out2 = convertOut(bs, t);
+    printf("out2 %s\n", out2);
+
+
+    free(out2);
+    free(out);
+    freeText(t);
+    freeBrackets(bs);
+}
+
+
+// Each test is a string with ()[]{} for brackets, and
 // optionally | for the cursor. The string is scanned to the end, then the
 // cursor is moved back to the | position. The expected output has a letter for
 // each bracket. Active pairs are marked A, B, ... or a, b, ... if mismatched
 // or unmatched. Inactive pairs are marked Z, Y, ... or z, y, ... if mismatched
 // or unmatched.
 static char *tests[] = {
-    ".().",
-    ".ZZ.",
+    "()",
+    "ZZ",
 
     ".()().",
     ".ZZYY.",
@@ -376,7 +407,7 @@ static char *tests[] = {
     ".X...X.",
 };
 static int ntests = (sizeof(tests) / sizeof(char *)) / 2;
-
+/*
 static void check(char *in, char *expect) {
     Brackets *bs = newBrackets();
     Text *t = convertIn(in);
@@ -425,10 +456,7 @@ printBuffer("d", bs->inactive);
 }
 */
 int main() {
-    Text *t = convertIn("()[]");
-    printf("%s\n", kindName(getK(t,3)));
-    freeText(t);
-//    for (int i = 0; i < ntests; i++) check(tests[2*i], tests[2*i+1]);
+    for (int i = 0; i < 1; i++) check(tests[2*i], tests[2*i+1]);
     printf("Brackets module OK\n");
 }
 

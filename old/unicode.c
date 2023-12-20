@@ -7,8 +7,30 @@
 #include <wchar.h>
 #include <assert.h>
 
-// For utf8valid, see
-// https://www.w3.org/International/questions/qa-forms-utf-8
+// For getUTF8, see https://nullprogram.com/blog/2017/10/06/, but don't assume
+// the input is padded.
+
+extern inline int getUTF8(char const *s, int *plength) {
+    static const char lengths[] = {
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 3, 3, 4, 0
+    };
+    static const int masks[] = {0x00, 0x7f, 0x1f, 0x0f, 0x07};
+    int len = lengths[s[0] >> 3];
+};
+
+// Table of lengths for ulength. Non-static so ulength can be inlined.
+const char ulengthTable[] = {
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 3, 3, 4, 0
+};
+
+// Find length of UTF8 character from first byte, or return 0 for invalid.
+// Based on https://nullprogram.com/blog/2017/10/06/.
+extern inline int ulength(char *s) {
+    unsigned char ch = s[0];
+    return ulengthTable[ch>>3];
+}
 
 extern inline int getUTF8(char const *t, int *plength) {
     int ch = t[0], len = 1;
@@ -46,6 +68,9 @@ void putUTF8(unsigned int code, char *s) {
 }
 
 typedef unsigned char byte;
+
+// For utf8valid, see
+// https://www.w3.org/International/questions/qa-forms-utf-8
 
 // Check that a, b form a valid character code (8 to 11 bits)
 static inline bool check2(byte a, byte b) {
