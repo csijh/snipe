@@ -7,38 +7,18 @@
 #include <wchar.h>
 #include <assert.h>
 
-// For getUTF8, see https://nullprogram.com/blog/2017/10/06/, but don't assume
-// the input is padded.
-
+// See https://nullprogram.com/blog/2017/10/06/, without assuming that the input
+// is padded.
 extern inline int getUTF8(char const *s, int *plength) {
     static const char lengths[] = {
         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
         0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 3, 3, 4, 0
     };
     static const int masks[] = {0x00, 0x7f, 0x1f, 0x0f, 0x07};
-    int len = lengths[s[0] >> 3];
-};
-
-// Table of lengths for ulength. Non-static so ulength can be inlined.
-const char ulengthTable[] = {
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 3, 3, 4, 0
-};
-
-// Find length of UTF8 character from first byte, or return 0 for invalid.
-// Based on https://nullprogram.com/blog/2017/10/06/.
-extern inline int ulength(char *s) {
-    unsigned char ch = s[0];
-    return ulengthTable[ch>>3];
-}
-
-extern inline int getUTF8(char const *t, int *plength) {
-    int ch = t[0], len = 1;
-    if ((ch & 0x80) == 0) { *plength = len; return ch; }
-    else if ((ch & 0xE0) == 0xC0) { len = 2; ch = ch & 0x3F; }
-    else if ((ch & 0xF0) == 0xE0) { len = 3; ch = ch & 0x1F; }
-    else if ((ch & 0xF8) == 0xF0) { len = 4; ch = ch & 0x0F; }
-    for (int i = 1; i < len; i++) ch = (ch << 6) | (t[i] & 0x3F);
+    unsigned char const *b = (unsigned char const *) s;
+    int len = lengths[b[0] >> 3];
+    int ch = b[0] & masks[len];
+    for (int i = 1; i < len; i++) ch = (ch << 6) | (b[i] & 0x3F);
     *plength = len;
     return ch;
 }
@@ -68,9 +48,6 @@ void putUTF8(unsigned int code, char *s) {
 }
 
 typedef unsigned char byte;
-
-// For utf8valid, see
-// https://www.w3.org/International/questions/qa-forms-utf-8
 
 // Check that a, b form a valid character code (8 to 11 bits)
 static inline bool check2(byte a, byte b) {
@@ -111,8 +88,9 @@ static inline bool check4(byte a, byte b, byte c, byte d) {
     return false;
 }
 
-// Check that text is UTF8 valid. Exclude most ASCII control characters.
-// Return an error message or null.
+// Check that text is UTF8 valid. Exclude most ASCII control characters. Return
+// an error message or null. See
+// https://www.w3.org/International/questions/qa-forms-utf-8
 char const *utf8valid(char *s, int length) {
     byte a, b, c, d;
     for (int i = 0; i < length; i++) {

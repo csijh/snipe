@@ -43,7 +43,6 @@ static void ensureB(Buffer *b, int extra) {
 // insertions and deletions.
 
 static void pushL(Buffer *b, int opener) {
-    b->data[0] = opener;
     b->data[b->low++] = opener;
 }
 
@@ -93,13 +92,13 @@ static int getR(Buffer *b, int i) {
 // side of the cursor, from the ends of the text towards the cursor. The
 // inactive left brackets have been matched with partners to the left of the
 // cursor, and are stacked in the order their partners were found during
-// forward matching, allowing that matching to be undone. The inactive right
-// brackets are the mirror image. The brackets object also tracks the end of
-// the text, stored in each buffer, and the number of outdenters and indenters
-// on the current line, during forward matching of the line.
+// forward matching, which allows that matching to be undone. The inactive
+// right brackets are similar. The brackets object also tracks the cursor, the
+// end of the text (stored in each buffer), and the number of outdenters and
+// indenters on the current line, during forward matching of the line.
 struct brackets {
     Buffer active, inactive;
-    int end, outdenters, indenters;
+    int cursor, outdenters, indenters;
 };
 
 Brackets *newBrackets() {
@@ -131,7 +130,7 @@ static void markTwo(Text *t, int opener, int closer) {
     markOne(t, closer, good);
 }
 
-// Initialize counts. Pre-allocate buffers to avoid relocation during scanning.
+// Initialize. Pre-allocate buffers to avoid relocation during scanning.
 void startLine(Brackets *bs, Text *t, int lo, int hi) {
     int n = hi - lo;
     ensureB(&bs->active, n);
@@ -139,6 +138,7 @@ void startLine(Brackets *bs, Text *t, int lo, int hi) {
     bs->active.end += n;
     bs->inactive.end += n;
     bs->outdenters = bs->indenters = 0;
+    bs->cursor = hi;
 }
 
 // Check if the top opener matches the given kind of close bracket.
@@ -186,15 +186,16 @@ int indenters(Brackets *bs) {
     return bs->indenters;
 }
 
-void matchForward(Brackets *bs, Text *t, int lo, int hi) {
+static void matchForward(Brackets *bs, Text *t, int lo, int hi) {
     for (int i = lo; i < hi; i++) {
         if (isOpener(getK(t,i))) pushOpener(bs, t, i);
         else if (isCloser(getK(t,i))) matchCloser(bs, t, i);
     }
+    bs->cursor = hi;
 }
 
 // Undo forward matching between lo and hi.
-void clearForward(Brackets *bs, Text *t, int lo, int hi) {
+static void clearForward(Brackets *bs, Text *t, int lo, int hi) {
     for (int i = hi-1; i >= lo; i--) {
         if (isOpener(getK(t,i))) popOpener(bs, t);
         else if (isCloser(getK(t,i))) {
@@ -202,6 +203,7 @@ void clearForward(Brackets *bs, Text *t, int lo, int hi) {
             if (opener != MISSING) pushOpener(bs, t, opener);
         }
     }
+    bs->cursor = lo;
 }
 
 // Add a new closer, and re-highlight.
@@ -227,7 +229,8 @@ static int popCloser(Brackets *bs, Text *t) {
 static void matchOpener(Brackets *bs, Text *t, int opener) {
     int closer = popCloser(bs, t);
     pushR(&bs->inactive, closer);
-    markTwo(t, opener, closer);
+    if (closer == MISSING) markOne(t, opener, false);
+    else markTwo(t, opener, closer);
 }
 
 // Match backward.
@@ -236,10 +239,11 @@ static void matchBackward(Brackets *bs, Text *t, int lo, int hi) {
         if (isCloser(getK(t,i))) pushCloser(bs, t, i);
         else if (isOpener(getK(t,i))) matchOpener(bs, t, i);
     }
+    bs->cursor = lo;
 }
 
 // Undo the backward matching of brackets between lo and hi.
-void clearBackward(Brackets *bs, Text *t, int lo, int hi) {
+static void clearBackward(Brackets *bs, Text *t, int lo, int hi) {
     for (int i = lo; i < hi; i++) {
         if (isCloser(getK(t,i))) popCloser(bs, t);
         else if (isOpener(getK(t,i))) {
@@ -247,40 +251,27 @@ void clearBackward(Brackets *bs, Text *t, int lo, int hi) {
             if (closer != MISSING) pushCloser(bs, t, closer);
         }
     }
+    bs->cursor = hi;
 }
 
-//==============================================================================
-/*
-
-static void printTypes(Text *t) {
-    for (int i = 0; i < length(t); i++) printf("%c", visualType(getK(t,i)));
-    for (int i = length(t); i < high(t); i++) printf("_");
-    for (int i = high(t); i < max(t); i++) printf("%c", visualType(getK(t,i)));
-    printf("\n");
+void clearLine(Brackets *bs, Text *t, int lo, int hi) {
+    if (bs->cursor < lo || bs->cursor > hi) error("bad cursor position");
+    clearBackward(bs, t, bs->cursor, hi);
+    clearForward(bs, t, lo, bs->cursor);
 }
 
-void moveBrackets(Brackets *bs, Text *t, int p) {
-    if (p > bs->cursor) {
-        moveGap(t, bs->cursor);
-        clearBackward(bs, t, bs->cursor, p);
-        moveGap(t, p);
-        matchForward(bs, t, bs->cursor, p);
-        bs->cursor = p;
+void moveBrackets(Brackets *bs, Text *t, int cursor) {
+    int old = bs->cursor;
+    if (cursor < old) {
+        clearForward(bs, t, cursor, old);
+        matchBackward(bs, t, cursor, old);
     }
-    else {
-        moveGap(t, bs->cursor);
-        clearForward(bs, t, p, bs->cursor);
-        moveGap(t, p);
-printBuffer("A active", bs->active);
-printBuffer("A inactv", bs->inactive);
-printTypes(t);
-        int gap = high(t) - length(t);
-printf("gap %d %d %d\n", gap, gap+p, gap+bs->cursor);
-        matchBackward(bs, t, gap+p, gap+bs->cursor);
-        bs->cursor = p;
+    else if (cursor > old) {
+        clearBackward(bs, t, old, cursor);
+        matchForward(bs, t, old, cursor);
     }
 }
-*/
+
 // ---------- Testing ----------------------------------------------------------
 #ifdef bracketsTest
 
@@ -304,44 +295,44 @@ static Text *convertIn(char *in) {
 }
 
 // Convert a brackets object and text into an output string.
-static char *convertOut(Brackets *bs, Text *t) {
-    char *out = malloc(lengthT(t)+1);
+static char *convertOut(Brackets *bs, Text *t, char *out) {
     out[lengthT(t)] = '\0';
     for (int i = 0; i < lengthT(t); i++) out[i] = ' ';
     for (int i = 0; i < bs->active.low; i++) {
         char letter = 'A' + i;
-        if ((getK(t,i) & Bad) != 0) letter = 'a' + i;
-        out[bs->active.data[i]] = letter;
+        int opener = getL(&bs->active,i);
+        if ((getK(t,opener) & Bad) != 0) letter = 'a' + i;
+        out[opener] = letter;
     }
-    for (int i = bs->active.max - 1; i >= bs->active.high; i--) {
-        int m = bs->active.max;
-        char letter = 'A' + (m - i - 1);
-        if ((getK(t,i) & Bad) != 0) letter = 'a' + (m - i - 1);
-        out[bs->active.data[i]] = letter;
+    for (int i = 0; i < lengthR(&bs->active); i++) {
+        char letter = 'A' + i;
+        int closer = getR(&bs->active,i);
+        if ((getK(t,closer) & Bad) != 0) letter = 'a' + i;
+        out[closer] = letter;
     }
     int j = 0;
-    for (int i = 0; i < cursorT(t); i++) {
+    for (int i = 0; i < bs->cursor; i++) {
         if (! isCloser(getK(t,i))) continue;
         int opener = getL(&bs->inactive, j);
         char letter = 'Z' - j;
         if ((getK(t,i) & Bad) != 0) letter = 'z' - j;
-        out[opener] = letter;
+        if (opener != MISSING) out[opener] = letter;
         out[i] = letter;
         j++;
     }
     j = 0;
-    for (int i = lengthT(t) - 1; i >= cursorT(t); i--) {
+    for (int i = lengthT(t) - 1; i >= bs->cursor; i--) {
         if (! isOpener(getK(t,i))) continue;
         int closer = getR(&bs->inactive, j);
-        char letter = 'Z' + j;
-        if ((getK(t,i) & Bad) != 0) letter = 'z' + j;
+        char letter = 'Z' - j;
+        if ((getK(t,i) & Bad) != 0) letter = 'z' - j;
         out[i] = letter;
-        out[closer] = letter;
+        if (closer != MISSING) out[closer] = letter;
         j++;
     }
     return out;
 }
-
+/*
 static void printBuffer(char *name, Buffer *b) {
     printf("%s: ", name);
     for (int i = 0; i < b->low; i++) printf("%d ", b->data[i]);
@@ -349,114 +340,75 @@ static void printBuffer(char *name, Buffer *b) {
     for (int i = b->high; i < b->max; i++) printf(" %d", b->data[i]);
     printf("\n");
 }
-
-static void check(char *in, char *expect) {
-    Brackets *bs = newBrackets();
-    Text *t = convertIn(in);
-    int n = lengthT(t);
-    startLine(bs, t, 0, n);
-    matchForward(bs, t, 0, n);
-    printBuffer("a", &bs->active);
-    printBuffer("b", &bs->inactive);
-    char *out = convertOut(bs, t);
-    printf("out %s\n", out);
-    clearForward(bs, t, 0, n);
-    moveT(t, 0);
-    matchBackward(bs, t, 0, n);
-    printBuffer("i", &bs->inactive);
-    char *out2 = convertOut(bs, t);
-    printf("out2 %s\n", out2);
-
-
-    free(out2);
-    free(out);
-    freeText(t);
-    freeBrackets(bs);
-}
-
-
-// Each test is a string with ()[]{} for brackets, and
-// optionally | for the cursor. The string is scanned to the end, then the
-// cursor is moved back to the | position. The expected output has a letter for
-// each bracket. Active pairs are marked A, B, ... or a, b, ... if mismatched
-// or unmatched. Inactive pairs are marked Z, Y, ... or z, y, ... if mismatched
-// or unmatched.
-static char *tests[] = {
-    "()",
-    "ZZ",
-
-    ".()().",
-    ".ZZYY.",
-
-    ".()[].",
-    ".ZZYY.",
-
-    ".[()].",
-    ".YZZY.",
-
-    ".(].",
-    ".zz.",
-
-    ".).",
-    ".z.",
-
-    ".| ().",
-    ".  ZZ.",
-
-    ".( | ).",
-    ".X...X.",
-};
-static int ntests = (sizeof(tests) / sizeof(char *)) / 2;
-/*
-static void check(char *in, char *expect) {
-    Brackets *bs = newBrackets();
-    Text *t = convertIn(in);
-    int n = length(t);
-    startLine(bs, t, 0, n);
-    matchForward(bs, t, 0, n);
-    char *out = convertOut(bs, t);
-    clearForward(bs, t, 0, n);
-    moveGap(t, 0);
-    matchBackward(bs, t, high(t)-max(t), 0);
-    printBuffer("a", bs->active);
-    printBuffer("b", bs->inactive);
-    freeArray(out);
-    freeArray(t);
-    freeBrackets(bs);
-}
-
-// Do bracket matching on the whole of the input. If there is a cursor, move it
-// back to the start, then forward.
-
-    char out[n+1];
-    for (int i = 0; i < n; i++) out[i] = ' ';
-    out[n] = '\0';
-    int cursor = -1;
-    for (int i = 0; i < n; i++) if (in[i] == '|') cursor = i;
-    if (cursor >= 0) {
-        moveGap(t, n);
-printBuffer("a", bs->active);
-printBuffer("b", bs->inactive);
-        moveBrackets(bs, t, 1);
-printBuffer("c", bs->active);
-printBuffer("d", bs->inactive);
-        moveGap(t, 1);
-        moveBrackets(bs, t, cursor);
-        moveGap(t, cursor);
-    }
-    convertOut(bs, t, out);
-    freeArray(t);
-    freeBrackets(bs);
-    if (strcmp(out, expect) == 0) return;
+*/
+static void report(char *in, char *expect, char *out) {
     printf("Test failed. Input, expected output and actual output are:\n");
     printf("%s\n", in);
     printf("%s\n", expect);
     printf("%s\n", out);
     exit(1);
 }
-*/
+
+// Check that matching to the end, moving to the start, and moving to the cursor
+// gives the expected result.
+static void check(char *in, char *expect) {
+    Brackets *bs = newBrackets();
+    Text *t = convertIn(in);
+    int n = lengthT(t);
+    int cursor = strchr(in, '|') - in;
+    startLine(bs, t, 0, n);
+    matchForward(bs, t, 0, n);
+    moveBrackets(bs, t, 0);
+    moveBrackets(bs, t, cursor);
+    char *out = malloc(lengthT(t) + 1);
+    convertOut(bs, t, out);
+    if (strcmp(out,expect) != 0) report(in, expect, out);
+    free(out);
+    freeText(t);
+    freeBrackets(bs);
+}
+
+// Each test is a string with ()[]{} for brackets, and | for the cursor. The
+// expected output has a letter for each bracket. Active pairs are marked A,
+// B, ... or a, b, ... if mismatched or unmatched. Inactive pairs are marked Z,
+// Y, ... or z, y, ... if mismatched or unmatched.
+static char *tests[] = {
+    "( | )",
+    "A   A",
+
+
+
+    "()|",
+    "ZZ ",
+
+    "()()|",
+    "ZZYY ",
+
+    "()[]|",
+    "ZZYY ",
+
+    "[()]|",
+    "YZZY ",
+
+    "(]|",
+    "zz ",
+
+    ")|",
+    "z ",
+
+    "| ()",
+    "  ZZ",
+
+
+
+
+    "{( | }",
+    "Ab   A",
+};
+static int ntests = (sizeof(tests) / sizeof(char *)) / 2;
+
 int main() {
-    for (int i = 0; i < 1; i++) check(tests[2*i], tests[2*i+1]);
+    for (int i = 0; i < ntests; i++) check(tests[2*i], tests[2*i+1]);
     printf("Brackets module OK\n");
 }
 

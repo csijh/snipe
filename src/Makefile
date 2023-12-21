@@ -1,6 +1,8 @@
 # The modules and their dependencies. (Header files are not included, because
 # incremental compiling is not used. All the modules relevant to testing a
 # module are compiled together.)
+unicode = unicode.c
+file = file.c unicode.c
 array = array.c
 kinds = kinds.c
 text = text.c kinds.c

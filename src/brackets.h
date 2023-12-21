@@ -3,17 +3,20 @@
 
 // Brackets are matched forwards from the beginning of the text to the cursor,
 // and backwards from the end of the text to the cursor. Remaining surplus
-// brackets at the cursor are paired up inwards from the ends of the text
-// towards the cursor. As the cursor moves, bracket matching is undone and
-// re-done, which changes the highlighting of mismatched or unmatched brackets.
+// brackets at the cursor are paired inwards from the ends of the text towards
+// the cursor. As the cursor moves, bracket matching is undone and re-done,
+// which changes the highlighting of mismatched or unmatched brackets.
 typedef struct brackets Brackets;
 
 // Create or free a brackets object.
 Brackets *newBrackets();
 void freeBrackets(Brackets *bs);
 
-// Start processing a line that has been edited, between positions lo and hi.
-// Brackets should have been cleared from the line before the edit.
+// Just before an edit on the current line, clear it of brackets (backwards from
+// the cursor to the start, and forwards from the cursor to the end).
+void clearLine(Brackets *bs, Text *t, int lo, int hi);
+
+// Just after an edit on the current line, prepare for re-scanning.
 void startLine(Brackets *bs, Text *t, int lo, int hi);
 
 // Ask for the top opener while scanning a line (for bracket-sensitive rules).
@@ -32,14 +35,5 @@ void matchCloser(Brackets *bs, Text *t, int closer);
 int outdenters(Brackets *bs);
 int indenters(Brackets *bs);
 
-// Re-match brackets forwards between lo and hi (when scanning is not needed).
-void matchForward(Brackets *bs, Text *t, int lo, int hi);
-
-// Undo forward matching between lo and hi.
-void clearForward(Brackets *bs, Text *t, int lo, int hi);
-
-// (Re-)match brackets backwards between lo and hi.
-void matchForward(Brackets *bs, Text *t, int lo, int hi);
-
-// Undo backward matching between lo and hi.
-void clearBackward(Brackets *bs, Text *t, int lo, int hi);
+// Return the cursor to the right position after scanning, or track the cursor.
+void moveBrackets(Brackets *bs, Text *t, int cursor);
