@@ -6,7 +6,6 @@ file = file.c unicode.c
 array = array.c
 kinds = kinds.c
 text = text.c kinds.c
-
 brackets = brackets.c text.c kinds.c
 
 lines = lines.c text.c kinds.c

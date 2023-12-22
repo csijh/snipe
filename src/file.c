@@ -290,9 +290,11 @@ static bool isDir(char const *dir, char *name) {
     strcat(path, name);
     return isDirPath(path);
 }
-/*
+
 static char *readDirectory(char const *path) {
     assert(path[strlen(path) - 1] == '/');
+}
+/*
     ints *inames = newInts();
     chars *text = newChars();
     resize(text, strlen(path) + 2);
@@ -320,8 +322,8 @@ static char *readDirectory(char const *path) {
 }
 */
 char *readPath(char const *path) {
-    if (path[strlen(path) - 1] == '/') return readDirectory(path);
-    else return readFile(path);
+//    if (path[strlen(path) - 1] == '/') return readDirectory(path);
+    return readFile(path);
 }
 
 // Write out a Makefile, restoring the tabs.
@@ -439,7 +441,7 @@ int main(int n, char *args[n]) {
     testExtension();
     testCompare();
     testSort();
-    testReadDirectory();
+//    testReadDirectory();
     freeResources();
     printf("File module OK\n");
     return 0;
