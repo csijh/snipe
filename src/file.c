@@ -2,16 +2,19 @@
 
 // Find the path to the installation directory from args[0]. This appears to be
 // the only simple cross-platform technique which doesn't involve making an
-// installer. Also find the current working directory on startup,
+// installer. Also find the current working directory on startup.
+
+// The best cross-platform approach to paths appears to be to use / as a
+// separator exclusively. (Windows libraries accept them and always have. It is
+// only Windows programs which don't.). Then \ and / are both banned from
+// individual file or directory names.
 
 // Directory handling requires some Posix functions from unistd.h, dirent.h and
-// sys/stat.h. See http://pubs.opengroup.org/onlinepubs/9699919799/. Forward
-// slashes are used exclusively (which Windows libraries accept). File names
-// must not contain / or \.
+// sys/stat.h. See http://pubs.opengroup.org/onlinepubs/9699919799/.
 #define _POSIX_C_SOURCE 200809L
 #define _FILE_OFFSET_BITS 64
 #include "file.h"
-//#include "list.h"
+#include "array.h"
 #include "unicode.h"
 #include <stdio.h>
 #include <stdbool.h>
@@ -181,7 +184,7 @@ int sizeFile(char const *path) {
 }
 
 // Use binary mode, so that the number of bytes read equals the file size.
-static char *readFile(char const *path) {
+char *readFile(char const *path) {
     assert(path[strlen(path) - 1] != '/');
     int size = sizeFile(path);
     if (size < 0) { err("can't read", path); return NULL; }
@@ -234,55 +237,53 @@ static bool valid(char *name) {
     if (strchr(name, '\\') != NULL) return false;
     return true;
 }
-/*
+
 #ifndef _WIN32
 
-// Read directory entries into an array of names. Represent the strings as
-// indexes, in case the underlying character array moves. Leave space to add a
-// slash on the end of subdirectory names.
-static void readEntries(char const *path, ints *names, chars *text) {
+// Read directory entries into an array of names. Leave space to add a slash on
+// the end of subdirectory names.
+static char **readEntries(char const *path) {
     DIR *dir = opendir(path);
-    if (dir == NULL) { err("can't read dir", path); return; }
+    if (dir == NULL) { err("can't read dir", path); return NULL; }
+    char **names = newArray(sizeof(char *));
     struct dirent *entry;
     for (entry = readdir(dir); entry != NULL; entry = readdir(dir)) {
-        char *name = entry->d_name;
-        if (! valid(name)) continue;
-        int index = length(text);
-        resize(text, index + strlen(name) + 2);
-        strcpy(&C(text)[index], name);
-        int n = length(names);
-        resize(names, n + 1);
-        I(names)[n] = index;
+        if (! valid(entry->d_name)) continue;
+        char *name = malloc(strlen(entry->d_name) + 2);
+        strcpy(name, entry->d_name);
+        names = adjust(names, 1);
+        names[length(names) - 1] = name;
     }
     closedir(dir);
+    return names;
 }
 
 #else
 
 // For Windows, use the native UTF16 functions and convert to/from UTF8.
-static void readEntries(char const *path, ints *names, chars *text) {
+static char **readEntries(char const *path) {
     wchar_t wpath[2 * strlen(path)];
     utf8to16(path, wpath);
     _WDIR *dir = _wopendir(wpath);
-    if (dir == NULL) { err("can't read dir", path); return; }
+    if (dir == NULL) { err("can't read dir", path); return NULL; }
+    char **names = newArray(sizeof(char *));
     struct _wdirent *entry;
     for (entry = _wreaddir(dir); entry != NULL; entry = _wreaddir(dir)) {
         wchar_t *wname = entry->d_name;
-        char name[2 * wcslen(wname)];
-        utf16to8(wname, name);
-        if (! valid(name)) continue;
-        int index = length(text);
-        resize(text, index + strlen(name) + 2);
-        strcpy(&C(text)[index], name);
-        int n = length(names);
-        resize(names, n + 1);
-        I(names)[n] = index;
+        char name0[2 * wcslen(wname)];
+        utf16to8(wname, name0);
+        if (! valid(name0)) continue;
+        char *name = malloc(strlen(name0) + 2);
+        strcpy(name, name0);
+        names = adjust(names, 1);
+        names[length(names) - 1] = name;
     }
     _wclosedir(dir);
+    return names;
 }
 
 #endif
-*/
+
 // Check whether a given entry in a given directory is a subdirectory.
 static bool isDir(char const *dir, char *name) {
     char path[strlen(dir) + strlen(name) + 1];
@@ -291,39 +292,26 @@ static bool isDir(char const *dir, char *name) {
     return isDirPath(path);
 }
 
-static char *readDirectory(char const *path) {
+char *readDirectory(char const *path) {
     assert(path[strlen(path) - 1] == '/');
-}
-/*
-    ints *inames = newInts();
-    chars *text = newChars();
-    resize(text, strlen(path) + 2);
-    strcpy(C(text), path);
-    resize(inames, 1);
-    I(inames)[0] = 0;
-    readEntries(path, inames, text);
-    int count = length(inames);
-    char **names = malloc(count * sizeof(char *));
-    for (int i = 0; i < count; i++) names[i] = &C(text)[I(inames)[i]];
-    freeList(inames);
-    for (int i=1; i<count; i++) {
+    char **names = readEntries(path);
+    if (names == NULL) return NULL;
+    int count = length(names);
+    for (int i = 0; i < count; i++) {
         if (isDir(path, names[i])) strcat(names[i], "/");
     }
-    sort(count - 1, &names[1]);
-    char *result = malloc(length(text));
+    sort(count, names);
+    int total = 0;
+    for (int i = 0; i < count; i++) total += strlen(names[i]) + 1;
+    char *result = malloc(total + 1);
     result[0] = '\0';
     for (int i = 0; i < count; i++) {
         strcat(result, names[i]);
         strcat(result, "\n");
     }
-    free(names);
-    freeList(text);
+    for (int i = 0; i < count; i++) free(names[i]);
+    freeArray(names);
     return result;
-}
-*/
-char *readPath(char const *path) {
-//    if (path[strlen(path) - 1] == '/') return readDirectory(path);
-    return readFile(path);
 }
 
 // Write out a Makefile, restoring the tabs.
@@ -353,10 +341,10 @@ void writeFile(char const *path, int size, char data[size]) {
     fclose(file);
 }
 
+// ---------- Testing ----------------------------------------------------------
 #ifdef fileTest
-// Unit testing.
 
-// Test the program is being tested from snipe/src.
+// Test that the program is in snipe/src.
 static void testSnipe() {
     char *snipe = current + strlen(current) - 10;
     assert(strncmp(snipe, "snipe/src", 9) == 0);
@@ -428,7 +416,8 @@ static void testSort() {
 }
 
 static void testReadDirectory() {
-    char *text = readPath("../freetype/");
+    char *text = readDirectory("./");
+//    printf("%s", text);
     free(text);
 }
 
@@ -441,7 +430,7 @@ int main(int n, char *args[n]) {
     testExtension();
     testCompare();
     testSort();
-//    testReadDirectory();
+    testReadDirectory();
     freeResources();
     printf("File module OK\n");
     return 0;

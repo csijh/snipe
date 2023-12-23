@@ -2,8 +2,8 @@
 
 // File and directory handling. Find files relative to the installation
 // directory or current directory, and read or write files or directories. In
-// paths / is used exclusively as the separator. File names containing \ or /
-// are ignored and directory names have / at the end.
+// paths / is used exclusively as the separator, even on Windows. File names
+// containing \ or / are ignored and directory names have / at the end.
 #include <stdbool.h>
 
 // Find the installation directory and current working directory from args[0].
@@ -39,12 +39,16 @@ bool secure(const char *path);
 // Check that a file exists, and return its size or -1.
 int sizeFile(char const *path);
 
-// Read in the contents of a text file or directory. For a file, a final newline
-// is added, if necessary, plus a null terminator. For a directory, there is one
-// line per name including the full path and ../ in natural order, with slashes
-// on the end of the directory names. On failure, a message is printed and NULL
-// is returned.
-char *readPath(char const *path);
+// Read in the contents of a text file. The path must not end in a slash. A
+// final newline is added, if necessary, plus a null terminator. On failure, a
+// message is printed and NULL is returned.
+char *readFile(char const *path);
+
+// Read in the contents of a directory. The path must end with a slash. The
+// result has one line per name including ../ in natural order, with slashes on
+// the end of subdirectory names. On failure, a message is printed and NULL is
+// returned.
+char *readDirectory(char const *path);
 
 // Write the given data to the given file. On failure, a message is printed.
 void writeFile(char const *path, int size, char data[size]);

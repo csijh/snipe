@@ -1,16 +1,13 @@
 # The modules and their dependencies. (Header files are not included, because
 # incremental compiling is not used. All the modules relevant to testing a
 # module are compiled together.)
-unicode = unicode.c
-file = file.c unicode.c
 array = array.c
+unicode = unicode.c
+file = file.c unicode.c array.c
 kinds = kinds.c
 text = text.c kinds.c
 brackets = brackets.c text.c kinds.c
-
 lines = lines.c text.c kinds.c
-bytes = bytes.c
-tokens = tokens.c array.c
 
 # Debugging options (remove if not available)
 DEBUG = -fsanitize=address -fsanitize=undefined

@@ -1,0 +1,70 @@
+Syntax highlighting in allegro
+------------------------------
+ALLEGRO_USTR_INFO ui;
+ALLEGRO_USTR us = al_ref_buffer(&ui, pointer to token, size in bytes);
+al_draw_ustr(font, colour, x, y, flags=0, us);
+int pixelWidth = al_get_ustr_width(font, us);
+
+Allegro on Ubuntu
+-----------------
+sudo add-apt-repository ppa:allegro/5.2
+sudo apt update
+sudo apt install liballegro5-dev
+
+gcc -std=c11 -Wall -o demo1 demo2.c -lallegro -lallegro_font -lallegro_ttf
+
+Allegro om Windows MSYS2
+------------------------
+pacman -Ss allegro
+pacman -S mingw-w64-x86_64-allegro
+setbuf(stdout, 0);
+
+Allegro on Mac
+--------------
+brew install allegro
+POSSIBLY brew unlink allegro; brew install --HEAD allegro
+NEED -lallegro_main when compiling
+================================================================================
+Test case: UnicodeData.txt has 32840 lines, 1.8M bytes.
+For unicode graphemes, see
+https://docs.rs/unicode-segmentation/0.1.3/src/unicode_segmentation/.cargo/registry/src/github.com-1ecc6299db9ec823/unicode-segmentation-0.1.3/src/grapheme.rs.html
+And see ICU
+================================================================================
+Thoughts on multi-line strings for runway.
+
+Looking at JavaScript's templates: embeddings are in the full JS expression
+language. That means no simple scanning because the scanner must match up curly
+brackets and back-ticks. Also, it is not cross-language. Also, reuse has to be
+by embedding the template in a function to provide context. Most other systems
+provide an object for context. Also, there is no 'logic' (decisions and
+loops).
+
+Marko is interesting because it uses <> tags. Ready made XML conventions.
+<if>, <else>, <for> look reasonably natural. Args don't.
+Could add <elif> <put/> (but self-closing custom tags aren't valid HTML)
+
+Look at mustache. It is HTML-specific (e.g. by default escapes text). It
+has "logic-less" logic. But are {{#x}}...{{/x}} and {{^x}}...{{/x}} really
+better than <if x>...</if> <else x>...</else>? The fact that {{#x}} means both
+<if x> and <for x> makes it scripting-language specific (dynamic types). What
+does {{x}} become? Must use fixed tag name, so <put x/>. Maybe {{x.y}} = <put x
+y/> and {{.}} = <put>. Must look into partials/parents further.
+
+================================================================================
+Unicode:
+    Code points.
+    Not grapheme clusters? (Depends on font & font lib.)
+Scanning:
+    Want dynamic loading, but not regexes. Therefore current approach.
+    Escaped chars? Only as whole patterns, then can't have \10 inside a pattern.
+    No lookahead past newlines, then can re-start.
+    Where store state? Per line? In any continuation, including indents?
+Store:
+    Gap buffer still looks good, but need good API.
+    Store more per line.
+    Use row/col positions throughout.
+================================================================================
+TODO Remove POINT, SELECT from style flags. Remove START in favour of a single
+CONTINUE value for token boundaries. Add CONTINUE_GRAPHEME for grapheme
+boundaries. Add BAD as a flag so it can be removed again or displayed as a box,
+say.

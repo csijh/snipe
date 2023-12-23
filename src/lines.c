@@ -1,183 +1,133 @@
 // Snipe editor. Free and open source, see licence.txt.
+#include "lines.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <assert.h>
 
-// The places before the gap are normal
-// indexes. The places after the gap are relative to the end of the text, so
-// that they remain stable across insertions and deletions at the cursor. Text
-// insertions and deletions are monitored, to track the size of the text, and
-// make any necessary but usually minor adjustments to the gap position.
+// The lines are stored in a gap buffer as the index positions in the text just
+// after each newline. The indexes after the gap are relative to the end of the
+// text, so that they remain stable across insertions and deletions at the gap.
+// Text insertions and deletions are monitored, to track the size of the text,
+// move the gap, and add or remove newlines. The gap buffer is
+// 0..low..high..max, and the text is 0..end.
+struct lines { int low, high, max, end; int *data; };
 
-// The gap buffer is 0..low..high..max, and the text is 0..end.
-struct places Places { int low, high, max, end; int *data; };
+enum { MAX0 = 2, MUL = 3, DIV = 2 };
 
-// Create or free a places object.
-Places *newPlaces() {
-    int max0 = 2;
-    Places *ps = malloc(sizeof(Places));
-    int *data = malloc(max0 * sizeof(int));
-    *ps = (Places) { .low=0, .high=max0, .max=max0, .data=data };
-    return ps;
+// Create or free a lines object.
+Lines *newLines() {
+    Lines *ls = malloc(sizeof(Lines));
+    int *data = malloc(MAX0 * sizeof(int));
+    *ls = (Lines) { .low=0, .high=MAX0, .max=MAX0, .end=0, .data=data };
+    return ls;
 }
 
-void freePlaces(Places *ps) {
-    free(ps->data);
-    free(ps);
+void freeLines(Lines *ls) {
+    free(ls->data);
+    free(ls);
 }
 
-int sizeP(Places *ps) {
-    return ps->low + ps->max - ps->high;
+int sizeL(Lines *ls) {
+    return ls->low + ls->max - ls->high;
 }
 
-// Move the gap to place p. Change signs of places across the gap.
-static void move(Places *ps, int p) {
-    while (ps->low > 0 && ps->data[ps->low-1] > p) {
-        ps->data[--ps->high] = ps->data[--ps->low] - ps->end;
+int startL(Lines *ls, int row) {
+    if (row == 0) return 0;
+    else if (row <= ls->low) return ls->data[row - 1];
+    row = row + ls->high - ls->low;
+    if (row >= ls->max) row = ls->max - 1;
+    return ls->data[row - 1] + ls->end;
+}
+
+int endL(Lines *ls, int row) {
+    if (row < ls->low) return ls->data[row];
+    row = row + ls->high - ls->low;
+    if (row >= ls->max) row = ls->max - 1;
+    return ls->data[row] + ls->end;
+}
+
+int lengthL(Lines *ls, int row) {
+    return endL(ls, row) - startL(ls, row);
+}
+
+// Move the gap to position p. Change signs of indexes across the gap.
+static void moveL(Lines *ls, int p) {
+    while (ls->low > 0 && ls->data[ls->low-1] > p) {
+        ls->data[--ls->high] = ls->data[--ls->low] - ls->end;
     }
-    while (ps->high < ps->max && ps->end + ps->data[ps->high] <= p) {
-        ps->data[ps->low++] = ps->end + ps->data[ps->high];
+    while (ls->high < ls->max && ls->end + ls->data[ls->high] <= p) {
+        ls->data[ls->low++] = ls->data[ls->high] + ls->end;
     }
 }
 
-void editP(Places *ps, int p, int n) {
-    move(ps, p);
-    if (n < 0) {
-        int limit = p - n + 1;
-        if (ps->low > 0 && ps->data[ps->low-1] == p) limit = p - n;
-        while (ps->high < ps->max && ps->end + ps->data[ps->high] <= limit) {
-            ps->high++;
-        }
-    }
-    ps->end += n;
-}
-
-// Get the i'th place (non-negative).
-int getP(Places *ps);
-
-// Set the i'th Place.
-int setP(Places *ps);
-
-// Insert a place at position i.
-void insertP(Places *ps, int i, int p);
-
-// Delete the place at position i.
-void deleteP(Places *ps, int i);
-
-// ============================
-
-void freeBytes(Bytes *ps) {
-}
-
-int size(Bytes *ps) {
-}
-
-char get(Bytes *ps, int i) {
-    if (i < ps->low) return ps->data[i];
-    return ps->data[i + ps->high - ps->low];
-}
-
-void set(Bytes *ps, int i, char b) {
-    if (i < ps->low) ps->data[i] = b;
-    else ps->data[i + ps->high - ps->low] = b;
-}
-
-void move(Bytes *ps, int cursor) {
-    int low = ps->low, high = ps->high;
-    char *data = ps->data;
-    if (cursor < low) {
-        memmove(data + cursor + high - low, data + cursor, low - cursor);
-    }
-    else if (cursor > low) {
-        memmove(data + low, data + high, cursor - low);
-    }
-    ps->low = cursor;
-    ps->high = cursor + high - low;
-}
-
-static void ensure(Bytes *ps, int extra) {
-    int low = ps->low, high = ps->high, max = ps->max;
-    char *data = ps->data;
+// Make room for extra lines.
+static void ensureL(Lines *ls, int extra) {
+    int low = ls->low, high = ls->high, max = ls->max;
     int new = max;
-    while (new < low + max - high + extra) new = new * 3 / 2;
-    data = realloc(data, new);
+    while (new < low + max - high + extra) new = new * MUL / DIV;
+    ls->data = realloc(ls->data, new * sizeof(int));
     if (high < max) {
-        memmove(data + high + new - max, data + high, max - high);
+        memmove(ls->data + high + new - max, ls->data + high, max - high);
     }
-    ps->high = high + new - max;
-    ps->max = new;
-    ps->data = data;
+    ls->high = high + new - max;
+    ls->max = new;
 }
 
-void insert(Bytes *ps, int i, char *s, int n) {
-    if (ps->high - ps->low < n) ensure(ps, n);
-    move(ps, i);
-    memcpy(ps->data + ps->low, s, n);
-    ps->low += n;
+void insertL(Lines *ls, int p, char *s, int n) {
+    ls->end += n;
+    moveL(ls, p);
+    for (int i = 0; i < n; i++) if (s[i] == '\n') {
+        if (ls->low >= ls->high) ensureL(ls, 1);
+        ls->data[ls->low++] = p + i + 1;
+    }
 }
 
-void replace(Bytes *ps, int i, char *s, int n) {
-    move(ps, i + n);
-    memcpy(ps->data + i, s, n);
+void deleteL(Lines *ls, int p, char *s, int n) {
+    ls->end -= n;
+    moveL(ls, p);
+    p = p + n;
+    while (ls->high < ls->max && ls->data[ls->high] + ls->end <= p) {
+        ls->high--;
+    }
 }
-
-// Copy or copy-and-delete n bytes from index i into s.
-void copy(Bytes *ps, int i, char *s, int n) {
-    move(ps, i + n);
-    memcpy(s, ps->data + i, n);
-}
-
-void delete(Bytes *ps, int i, char *s, int n) {
-    move(ps, i + n);
-    memcpy(s, ps->data + i, n);
-    ps->low = i;
-}
-
-int cursor(Bytes *ps) {
-    return ps->low;
-}
-
-// Load a file (deleting any previous content) or save the content into a file.
-void load(Bytes *ps, char *path);
-void save(Bytes *ps, char *path);
 
 // ---------- Testing ----------------------------------------------------------
-#ifdef bytesTest
-
-// Check that a Bytes object matches a string.
-static bool eq(Bytes *ps, char *s) {
-    if (strlen(s) != ps->max) return false;
-    for (int i = 0; i < ps->max; i++) {
-        if (ps->low <= i && i < ps->high) { if (s[i] != '-') return false; }
-        else if (s[i] != ps->data[i]) return false;
-    }
-    return true;
-}
-
-// Test gap buffer with char items.
-static void test() {
-    Bytes *ps = newBytes();
-    ensure(ps, 10);
-    assert(eq(ps, "-------------"));
-    insert(ps, 0, "abcde", 5);
-    assert(eq(ps, "abcde--------"));
-    move(ps, 2);
-    assert(eq(ps, "ab--------cde"));
-    char out[10];
-    delete(ps, 1, out, 1);
-    assert(eq(ps, "a---------cde"));
-    assert(out[0] == 'b');
-    ensure(ps, 14);
-    assert(eq(ps, "a---------------cde"));
-    move(ps,3);
-    assert(eq(ps, "acd---------------e"));
-    insert(ps, 3, "xyz", 3);
-    assert(eq(ps, "acdxyz------------e"));
-    insert(ps, 1, "uvw", 3);
-    assert(eq(ps, "auvw---------cdxyze"));
-    freeBytes(ps);
-}
+#ifdef linesTest
 
 int main() {
-    test();
-    printf("Bytes module OK\n");
+    setbuf(stdout, NULL);
+    Lines *ls = newLines();
+    assert(sizeL(ls) == 0);
+    insertL(ls, 0, "ab\n", 3);
+    assert(sizeL(ls) == 1);
+    insertL(ls, 3, "cde\n", 4);
+    assert(sizeL(ls) == 2);
+    insertL(ls, 7, "fghi\n", 5);
+    assert(sizeL(ls) == 3);
+    assert(startL(ls, 0) == 0);
+    assert(endL(ls, 0) == 3);
+    assert(lengthL(ls, 0) == 3);
+    assert(startL(ls, 1) == 3);
+    assert(endL(ls, 1) == 7);
+    assert(lengthL(ls, 1) == 4);
+    assert(startL(ls, 2) == 7);
+    assert(endL(ls, 2) == 12);
+    assert(lengthL(ls, 2) == 5);
+    moveL(ls, 0);
+    assert(sizeL(ls) == 3);
+    assert(startL(ls, 0) == 0);
+    assert(endL(ls, 0) == 3);
+    assert(lengthL(ls, 0) == 3);
+    assert(startL(ls, 1) == 3);
+    assert(endL(ls, 1) == 7);
+    assert(lengthL(ls, 1) == 4);
+    assert(startL(ls, 2) == 7);
+    assert(endL(ls, 2) == 12);
+    assert(lengthL(ls, 2) == 5);
+    freeLines(ls);
+    printf("Lines module OK\n");
+    return 0;
 }
 
 #endif
