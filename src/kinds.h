@@ -2,19 +2,24 @@
 #include <stdbool.h>
 
 // Each byte of source text has a corresponding byte containing a kind. The
-// first byte of a token is taggeded with the token's type, and the remaining
+// first byte of a token is tagged with the token's type, and the remaining
 // bytes are tagged with None. Special tags are:
 //
-//   None     marks token bytes after the first
 //   Gap      marks a space or newline or indent as a separator
-//   Bad      a flag for a mismatched bracket, unclosed quote, or illegal token
+//            also used to indicate the normal background style
+//   Caret    background style for the caret
+//   Select   background style for selections
+//   None     marks token bytes after the first
+//            also used to indicate the background style for errors
+//   Bad      a reversible flag for a mismatched bracket, unclosed quote,
+//            or illegal token, converted to None
 //
-// Bracket kindss come in matching pairs, with a B or E suffix.
+// Bracket kinds come in matching pairs, with a B or E suffix.
 
 enum kind {
-    None, Gap, Alternative, Block, Comment, Declaration, Error, Function, Group,
-    H, Identifier, Jot, Keyword, L, Mark, Note, Operator, Property, Quote,
-    Round, Square, Tag, Unary, Value, W, X, Y, Z,
+    Gap, Select, Caret, None, Alternative, Block, Comment, Declaration, Error,
+    Function, Group, H, Identifier, Jot, Keyword, L, Mark, Note, Operator,
+    Property, Quote, Round, Square, Tag, Unary, Value, W, X, Y, Z,
 
     QuoteB, Quote2B, CommentB, Comment2B, TagB, RoundB, Round2B, SquareB,
     Square2B, GroupB, Group2B, BlockB, Block2B,

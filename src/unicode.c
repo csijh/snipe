@@ -1,4 +1,5 @@
 // The Snipe editor is free and open source, see licence.txt.
+#include "unicode.h"
 #include "string.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,7 +10,7 @@
 
 // See https://nullprogram.com/blog/2017/10/06/, without assuming that the input
 // is padded.
-extern inline int getUTF8(char const *s, int *plength) {
+extern inline Character getUTF8(char const *s) {
     static const char lengths[] = {
         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
         0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 3, 3, 4, 0
@@ -19,8 +20,7 @@ extern inline int getUTF8(char const *s, int *plength) {
     int len = lengths[b[0] >> 3];
     int ch = b[0] & masks[len];
     for (int i = 1; i < len; i++) ch = (ch << 6) | (b[i] & 0x3F);
-    *plength = len;
-    return ch;
+    return (Character) { .code = ch, .length = len };
 }
 
 void putUTF8(unsigned int code, char *s) {
@@ -145,9 +145,9 @@ void utf16to8(wchar_t const *ws, char *s) {
 void utf8to16(char const *s, wchar_t *ws) {
     int out = 0;
     for (int i = 0; i < strlen(s); ) {
-        int len;
-        int ch = getUTF8(&s[i], &len);
-        i += len;
+        Character cp = getUTF8(&s[i]);
+        int ch = cp.code;
+        i += cp.length;
         if (ch < 0x10000) ws[out++] = (wchar_t) ch;
         else {
             ch = ch - 0x10000;
@@ -162,9 +162,8 @@ void utf8to16(char const *s, wchar_t *ws) {
 
 static void testGetUTF8() {
     char *s = "\xE2\x80\x8C";
-    int len;
-    assert(getUTF8(s, &len) == 0x200C);
-    assert(len == 3);
+    Character cp = getUTF8(s);
+    assert(cp.code == 0x200C && cp.length == 3);
 }
 
 static void testCheck2() {
