@@ -1,3 +1,14 @@
+Grapheme clusters
+-----------------
+A cursor should be moved left or right by a grapheme cluster, not by a byte or a
+code point. There is an official grapheme cluster boundary algorithm. But,
+according to the Unicode standard, "grapheme clusters can only provide an
+approximation..." and cursor movement needs to be "based on information
+supplied by the lower-level text rendering engine and font". Allegro's ttf
+addon can apparently only handle combining glyphs which are drawn on top of
+previous glyphs. (Nor does it appear to support bidirectionality.) Therefore,
+display metrics are used to determine cursor movement.
+================================================================================
 Syntax highlighting in allegro
 ------------------------------
 ALLEGRO_USTR_INFO ui;
@@ -29,42 +40,3 @@ Test case: UnicodeData.txt has 32840 lines, 1.8M bytes.
 For unicode graphemes, see
 https://docs.rs/unicode-segmentation/0.1.3/src/unicode_segmentation/.cargo/registry/src/github.com-1ecc6299db9ec823/unicode-segmentation-0.1.3/src/grapheme.rs.html
 And see ICU
-================================================================================
-Thoughts on multi-line strings for runway.
-
-Looking at JavaScript's templates: embeddings are in the full JS expression
-language. That means no simple scanning because the scanner must match up curly
-brackets and back-ticks. Also, it is not cross-language. Also, reuse has to be
-by embedding the template in a function to provide context. Most other systems
-provide an object for context. Also, there is no 'logic' (decisions and
-loops).
-
-Marko is interesting because it uses <> tags. Ready made XML conventions.
-<if>, <else>, <for> look reasonably natural. Args don't.
-Could add <elif> <put/> (but self-closing custom tags aren't valid HTML)
-
-Look at mustache. It is HTML-specific (e.g. by default escapes text). It
-has "logic-less" logic. But are {{#x}}...{{/x}} and {{^x}}...{{/x}} really
-better than <if x>...</if> <else x>...</else>? The fact that {{#x}} means both
-<if x> and <for x> makes it scripting-language specific (dynamic types). What
-does {{x}} become? Must use fixed tag name, so <put x/>. Maybe {{x.y}} = <put x
-y/> and {{.}} = <put>. Must look into partials/parents further.
-
-================================================================================
-Unicode:
-    Code points.
-    Not grapheme clusters? (Depends on font & font lib.)
-Scanning:
-    Want dynamic loading, but not regexes. Therefore current approach.
-    Escaped chars? Only as whole patterns, then can't have \10 inside a pattern.
-    No lookahead past newlines, then can re-start.
-    Where store state? Per line? In any continuation, including indents?
-Store:
-    Gap buffer still looks good, but need good API.
-    Store more per line.
-    Use row/col positions throughout.
-================================================================================
-TODO Remove POINT, SELECT from style flags. Remove START in favour of a single
-CONTINUE value for token boundaries. Add CONTINUE_GRAPHEME for grapheme
-boundaries. Add BAD as a flag so it can be removed again or displayed as a box,
-say.

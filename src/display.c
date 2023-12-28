@@ -8,13 +8,23 @@
 #include <allegro5/allegro_ttf.h>
 // #include <allegro5/allegro_primitives.h>
 
-// A cell records, for a glyph drawn at a particular row-column position, the
-// byte position in the line, the horizontal pixel position across the screen,
-// and the UTF8 byte-length and last code point of the glyph. A grapheme is
-// taken to be a Unicode code point.
-struct cell { int bytes, pixels, code, length; };
-typedef struct cell cell;
+// TODO:
+// al_draw_glyph
+// al_get_glyph_width
+// (al_get_glyph_dimensions)
+// al_get_glyph_advance
+// al_hold_bitmap_drawing(true)    before draw page
+// al_hold_bitmap_drawing(false)   after
 
+// A cell records, for a grapheme drawn at a particular row-column position, the
+// byte position in the line, the horizontal pixel position across the screen,
+// and the last code point to be drawn at that position. This supports
+// conversion from (x,y) pixel coordinates to (row,col) text positions, and
+// moving the cursor or editing left or right by one 'character'. The only type
+// of grapheme supported by Allegro's ttf addon appears to be where glyphs have
+// a zero advance between them.
+struct cell { int bytes, pixels, code; };
+typedef struct cell Cell;
 
 // A display object represents the main window, with layout measurements. The
 // display is a viewport of size rows x cols onto a notional grid of characters
@@ -32,6 +42,7 @@ struct display {
     int rows, cols;
     int charWidth, lineHeight, pad;
     cell **grid;
+    int lastCode, byteCol;
 };
 
 // Solarized colours, see https://ethanschoonover.com/solarized/
@@ -111,10 +122,10 @@ static void setTheme(Display *d, shade *theme) {
 }
 
 // Create a new (rows,cols) grid of cells, to record character positions.
-static cell **newGrid(Display *d) {
+static Cell **newGrid(Display *d) {
     int h = d->rows, w = d->cols;
-    cell **grid = malloc(h * sizeof(cell *) + h * (w+1) * sizeof(cell));
-    cell *matrix = (cell *) (grid + h);
+    Cell **grid = malloc(h * sizeof(Cell *) + h * (w+1) * sizeof(cell));
+    Cell *matrix = (Cell *) (grid + h);
     for (int r = 0; r < h; r++) grid[r] = &matrix[r * (w+1)];
     return grid;
 }
@@ -176,32 +187,59 @@ static void drawRectangle(Display *d, int c, int x, int y, int w, int h) {
     al_reset_clipping_rectangle();
 }
 
-void drawCaret(Display *d, int row, int col) {
+static void drawCaret(Display *d, int row, int col) {
     int y = row * d->lineHeight;
     int x = d->grid[row][col].pixels - 1;
-    drawRectangle(d,12,x,y,1,d->lineHeight);
-//    frame(d);
+    drawRectangle(d, Caret, x, y, 1, d->lineHeight);
 }
 
-// Draw a grapheme.
-static void drawGrapheme(Display *d, int row, int col, char *s, char *k) {
+static void drawGlyph(Display *d, int x, int y, int fg, int bg, int code) {
+    if (bg != Normal) drawRectangle(d, bg, x, y, width, d->lineHeight);
+    al_draw_glyph(d->font, d->theme[fg], x, y, code);
+}
+
+
+// Draw a glyph. Return true to indicate a column increase.
+static bool drawGlyph(Display *d, int row, int col, char *s, char *k, int p) {
+    Character ch = getUTF8(&s[p]);
+    Cell *cell = &d->grid[row][col];
+    int advance = al_get_glyph_advance(d->font, cell->code, ch.code);
+    if (advance == 0) {
+
+    }
+
+
+    bool result = true;
+
+
+
+    // if row>0 && advance==0, col = col -1.
+    // if overwrite, don't update cell.
+
+
     cell *last = &d->grid[row][col-1];
-    cell *this = &d->grid[row][col];
     if (row == 0) this->bytes = 0;
     else this->bytes = last->bytes + last->length;
-    Character ch = getUTF8(&s[this->bytes]);
-    this->code = ch.code;
-    this->length = ch.length;
-    if (row == 0) this->pixels = d->pad;
-    else this->pixels = last->pixels +
-        al_get_glyph_advance(d->font, last->code, ch.code);
+    int advance = -1;
+    if (row > 0) advance =
+    if (advance == 0) {
+        result = false;
+        last->bytes = this->bytes;
+        last->length += ch.length;
+        last->code = ch.code;
+    }
+    else {
+        this->code = ch.code;
+        this->length = ch.length;
+        if (row == 0) this->pixels = d->pad;
+        else this->pixels = last->pixels + advance;
+    }
     int fg = k[i] & 0x1F;
     int bg = (k[i] >> 5) & 0x03;
     bool caret = ((k[i] >> 7) & 0x01) != 0;
     int x = this->pixels, y = row * d->lineHeight;
     if (caret) drawCaret(d, row, col);
-    if (bg != 0) drawRectangle(d, bg, x, y, width, d->lineHeight);
-    al_draw_glyph(d->font, d->theme[fg], x, y, cp.code);
+    return result;
 }
 
 
