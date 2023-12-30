@@ -1,18 +1,18 @@
-// Snipe editor. Free and open source, see licence.txt.
+// The Snipe editor is free and open source. See licence.txt.
 #include <stdbool.h>
 
 // Each byte of source text has a corresponding byte containing a kind. The
-// first 26 kinds are token types. The Gap kind marks a space or newline or
-// indent as a separator. The More kind marks token bytes after the first. The
-// Normal, Select, Focus, Warn, Caret types specify background or caret styles,
-// so that the kinds up to Caret can be used to index themes. Bracket kinds
-// come in matching pairs, with a B or E suffix. Bad is used as a reversible
-// flag for mismatched or unmatched brackets.
+// first 26 kinds are token types (with some unused). The Gap kind marks a
+// space or newline or indent as a separator. The More kind marks token bytes
+// after the first. The kinds Background...Caret represent background styles,
+// so that kinds up to Caret can be used as indexes into a theme. Bracket kinds
+// have matching pairs, with a removable B, 2B, E or 2E suffix. The Bad kind is
+// used as a removable flag for mismatched or unmatched brackets.
 enum kind {
-    Alternative, Block, Comment, Declaration, Error, Function, Group,
-    H, Identifier, Jot, Keyword, L, Mark, Note, Operator, Property, Quote,
-    Round, Square, Tag, Unary, Value, W, X, Y, Z,
-    Gap, Normal = Gap, More, Select = More, Focus, Warn, Caret,
+    Alternative, Block, Comment, Declaration, Error, Function, Group, H,
+    Identifier, Jot, Keyword, L, Mark, Note, Operator, Property, Quote, Round,
+    Square, Tag, Unary, Value, W, X, Y, Z, Gap, More,
+    Ground = Gap, Select = More, Focus, Warn, Caret,
 
     QuoteB, Quote2B, CommentB, Comment2B, TagB, RoundB, Round2B, SquareB,
     Square2B, GroupB, Group2B, BlockB, Block2B,
@@ -28,8 +28,11 @@ typedef unsigned char Kind;
 // Return the full name of the kind.
 char *kindName(Kind k);
 
+// Find a kind from its name (or a prefix, except for brackets).
+Kind findKind(char const *name);
+
 // For visualization purposes, return the first letter of the kind name. Return
-// it in lower case if it is a mismatched bracket. Return None as a minus sign,
+// it in lower case if it is a mismatched bracket. Return More as a minus sign,
 // and Gap as a space.
 char visualKind(Kind k);
 
@@ -56,15 +59,16 @@ bool isPostfix(Kind k);
 // A style is a byte derived from a kind for display purposes. The bracket types
 // with B or E or 2B or 2E suffixes are replaced by the versions without
 // suffixes, to provide 5 bits of foreground information. Two bits indicate a
-// background (Normal, ..., Warn). The Bad flag is converted into a Warn
+// background (Gap, ..., Warn). The Bad flag is converted into a Warn
 // background. A final bit indicates the presence of a caret.
 typedef unsigned char Style;
 
-// Convert a kind to a style, converting bracket types and the Bad flag.
+// Get a style from a kind, converting bracket types and adding the Warn
+// background for the Error kind or the Bad flag.
 Style toStyle(Kind k);
 
 // Add a background indication to a style (unless Warn is already set).
-Style addBackground(Kind k);
+Style addBackground(Style s, Kind k);
 
 // Add a caret flag to a style.
 Style addCaret(Style s);

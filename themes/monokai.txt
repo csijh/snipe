@@ -1,30 +1,37 @@
-POINT       #F8F8F0
-SELECT      #49483E
-GAP         #272822
-COMMENT     #75715E
-WORD        #F8F8F2
-KEY         #F92672
-RESERVED    #66D9EF
-SIGN        #F8F8F2
-OP          #F8F8F2
-NUMBER      #AE81FF
-STRING      #E6DB74
-ID          #F8F8F2
-PROPERTY    #F8F8F2
-FUNCTION    #A6E22E
-BAD         #F92672
+# Monokai theme
 
-// Built-in constant #AE81FF
-// User-defined constant #AE81FF
-// Storage #F92672
-// Storage Type italic
-// Class underline #A6E22E
-// Inherited class italic underline #A6E22E
-// argument italic #FD971F
-// Tag #F92672
-// tag attribute #A6E22E
-// Library function #66D9EF
-// Library constant #66D9EF
-// Library class/type italic #66D9EF
-// invalid background #F92672 foreground #F8F8F0
-// deprecated background #AE81FF foreground #F8F8F0
+#           =   #000000 black
+#           =   #212117 black2
+Ground      =   #282923 black3
+Function    =   #67D8EF blue
+Select      =   #555449 grey
+#           =   #FD9621 orange
+#           =   #9F570F orange2
+Focus       =   #FFE894 orange3
+Value       =   #AC80FF purple
+#           =   #F83535 red
+Key         =   #F92472 red2
+Round       =   #F7F7F7 white
+Caret       =   #F8F8F1 white2
+Id          =   #F8F8F2 white3
+Quote       =   #E7DB74 yellow
+#           =   #A6E22C yellow2
+#           =   #D0D0C3 yellow3
+#           =   #3E3D32 yellow4
+Comment     =   #74705D yellow5
+
+Decl        =   Function
+Tag         =   Key
+Alt         =   Key
+Warn        =   Key
+Square      =   Round
+Group       =   Round
+Block       =   Round
+Error       =   Caret
+Prop        =   Id
+Op          =   Id
+Unary       =   Id
+Mark        =   Id
+Jot         =   Id
+Property    =   Quote
+Note        =   Comment

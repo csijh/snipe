@@ -1,41 +1,34 @@
-POINT    #93a1a1 base1
-SELECT   #eee8d5 base2
-GAP      #002b36 base03
-COMMENT  #586e75 base01
-WORD     #839496 base0
-KEY      #859900 green
-RESERVED #cb4b16 orange
-SIGN     #839496 base0
-OP       #839496 base0
-NUMBER   #2aa198 cyan
-STRING   #2aa198 cyan
-ID       #839496 base0
-PROPERTY #839496 base0
-FUNCTION #268bd2 blue
-BAD      #dc322f red
+# See http://ethanschoonover.com/solarized/
+# dark:  base03 base02 base01 base0  base1
+# light: base3  base2  base1  base00 base01
 
-// TODO: format can be:
-// name hex list-of-letters
-// name is ignored, upper case letters are token types, lower case are bgs
+Ground      =   #002b36 base03
+Select      =   #073642 base02
+Comment     =   #586e75 base01
+#           =   #657b83 base00
+Mark        =   #839496 base0
+Round       =   #93a1a1 base1
+Caret       =   #eee8d5 base2
+Warn        =   #fdf6e3 base3
+#           =   #b58900 yellow
+Alt         =   #cb4b16 orange
+Error       =   #dc322f red
+#           =   #d33682 magenta
+#           =   #6c71c4 violet
+Function    =   #268bd2 blue
+Value       =   #2aa198 cyan
+Key         =   #859900 green
 
-// See http://ethanschoonover.com/solarized
-//
-// #002b36 base03
-// #073642 base02
-// #586e75 base01
-// #657b83 base00
-// #839496 base0
-// #93a1a1 base1
-// #eee8d5 base2
-// #fdf6e3 base3
-// #b58900 yellow
-// #cb4b16 orange
-// #dc322f red
-// #d33682 magenta
-// #6c71c4 violet
-// #268bd2 blue
-// #2aa198 cyan
-// #859900 green
-//
-// dark:  base03 base02 base01 base0  base1
-// light: base3  base2  base1  base00 base01
+Note        =   Comment
+Op          =   Mark
+Unary       =   Mark
+Jot         =   Mark
+Id          =   Mark
+Prop        =   Mark
+Square      =   Round
+Group       =   Round
+Block       =   Round
+Quote       =   Value
+Decl        =   Key
+Tag         =   Key
+Focus       =   Select

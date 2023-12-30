@@ -27,28 +27,6 @@ typedef struct token { unsigned char style, length; } token;
 // index into the current theme. Each style constant has a one-letter
 // abbreviation as well as a full name. The comments refer to dark solarised.
 
-//base03, base02, base01, base00, base0, base1, base2, base3,
-//yellow, orange, cyan, blue, red, magenta, violet, green
-
-enum style {
-    G=0x00, GAP=G,          // base03, default background
-    M=0x10, MARK=M,         // base02 background, add to selected bytes
-    W=0x70, WARN=W,         // base3 inverted background (add to warnings)
-    H=0x0C, HERE=H,         // cursor colour
-    B=0x0C, BAD=B,          // red (optionally add WARN)
-    C=0x02, COMMENTED=C,    // base01
-    Q=0x0A, QUOTED=Q,       // cyan
-    E=0x0B, ESCAPED=E,      // blue
-    S=0x04, SIGN=S,         // base0
-    V=0x0D, VALUE=V,        // magenta
-    K=0x0F, KEYWORD=K,      // green
-    T=0x0B, TYPE=T,         // blue
-    R=0x09, RESERVED=R,     // orange
-    I=0x04, ID=I,           // base0
-    P=0x08, PROPERTY=P,     // yellow
-    F=0x0E, FUNCTION=F,     // violet
-    O=0x04, OP=O,           // base0
-};
 
 // A row/col pair. A row is a zero-based line number relative to the top of the
 // display, and a col is a zero-based byte position within the text of the line.
@@ -72,8 +50,6 @@ void *getHandle(Display *d);
 
 // Draw some text from its UTF8 bytes and their styles.
 void drawPage(Display *d, char *bytes, style *styles);
-
-void drawCaret(Display *d, int row, int col);
 
 // Convert from (x,y) pixel coordinates to (row,col) document coordinates.
 rowCol findPosition(Display *d, int x, int y);

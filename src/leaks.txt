@@ -1,0 +1,5 @@
+leak:/lib/x86_64-linux-gnu/libGLX_mesa.so.0
+leak:/usr/lib/x86_64-linux-gnu/dri/i965_dri.so
+leak:/usr/lib/x86_64-linux-gnu/dri/crocus_dri.so
+leak:/lib/x86_64-linux-gnu/libxcb.so.1
+leak:/lib/x86_64-linux-gnu/libX11.so.6

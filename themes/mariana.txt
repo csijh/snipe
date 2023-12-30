@@ -1,0 +1,37 @@
+# Mariana theme
+
+#           =   #000000 black
+Function    =   #6699CC blue
+#           =   #5C99D6 blue-vibrant
+Focus       =   #596673 blue2
+Ground      =   #303841 blue3
+#           =   #647382 blue4
+#           =   #5FB4B4 blue5
+Comment     =   #A6ACB9 blue6
+Quote       =   #99C794 green
+#           =   #333333 grey
+Caret       =   #F9AE58 orange
+#           =   #EE932B orange2
+#           =   #FAC761 orange3
+Key         =   #C695C6 pink
+Warn        =   #EC5F66 red
+Op          =   #F97B58 red2
+Mark        =   #FFFFFF white
+#           =   #F7F7F7 white2
+#           =   #D8DEE9 white3
+
+Select      =   Focus
+Note        =   Comment
+Prop        =   Comment
+Value       =   Caret
+Alt         =   Key
+Decl        =   Key
+Id          =   Warn
+Tag         =   Warn
+Unary       =   Op
+Jot         =   Mark
+Round       =   Mark
+Square      =   Mark
+Group       =   Mark
+Block       =   Mark
+Error       =   Mark

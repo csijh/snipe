@@ -6,11 +6,10 @@
 #include <allegro5/allegro.h>
 #include <allegro5/allegro_font.h>
 #include <allegro5/allegro_ttf.h>
-// #include <allegro5/allegro_primitives.h>
 
 // TODO:
 // al_draw_glyph
-// al_get_glyph_width
+// (al_get_glyph_width)
 // (al_get_glyph_dimensions)
 // al_get_glyph_advance
 // al_hold_bitmap_drawing(true)    before draw page
@@ -37,48 +36,41 @@ struct display {
 //    handler *h;
     ALLEGRO_DISPLAY *display;
     ALLEGRO_FONT *font;
-    ALLEGRO_COLOR theme[16];
+    ALLEGRO_COLOR theme[Caret+1];
     int width, height;
     int rows, cols;
-    int charWidth, lineHeight, pad;
-    cell **grid;
-    int lastCode, byteCol;
+    int rowHeight, colWidth, pad;
+    Cell **grid;
+    int oldBg, oldFg, oldCode, byteCol;
 };
 
-// Solarized colours, see https://ethanschoonover.com/solarized/
-const unsigned int
-    base03  = 0x002b36,
-    base02  = 0x073642,
-    base01  = 0x586e75,
-    base00  = 0x657b83,
-    base0   = 0x839496,
-    base1   = 0x93a1a1,
-    base2   = 0xeee8d5,
-    base3   = 0xfdf6e3,
-    yellow  = 0xb58900,
-    orange  = 0xcb4b16,
-    cyan    = 0x2aa198,
-    blue    = 0x268bd2,
-    red     = 0xdc322f,
-    magenta = 0xd33682,
-    violet  = 0x6c71c4,
-    green   = 0x859900;
-
-// Solarized-light theme. See // https://ethanschoonover.com/solarized/. Base3
-// is the normal background, base2 highlighted background, base1 comments,
-// base00 normal text, base01 emphasized text.
-shade solLight[16] = {
-    base3, base2, base1, base0, base00, base01, base02, base03, yellow, orange,
-    cyan, blue, red, magenta, violet, green
-};
-
-// Solarized-dark theme. See // https://ethanschoonover.com/solarized/. Base03
-// is the normal background, base02 highlighted background, base01 comments,
-// base0 normal text, base1 emphasized text.
-shade solDark[16] = {
-    base03, base02, base01, base00, base0, base1, base2, base3, yellow, orange,
-    cyan, blue, red, magenta, violet, green
-};
+static void loadTheme(Display *d, char *path) {
+    for (int k = 0; k < Caret; k++) d->theme[k].a = 0;
+    ALLEGRO_CONFIG *cfg = al_load_config_file(path);
+    ALLEGRO_CONFIG_ENTRY *entry;
+    char const *key = al_get_first_config_entry(cfg, NULL, &entry);
+    for ( ; key != NULL; key = al_get_next_config_entry(&entry)) {
+        char const *value = al_get_config_value(cfg, NULL, key);
+        Kind k = findKind(key);
+        if (k > Caret) { printf("Bad theme key %s\n", key); continue; }
+        if (value[0] == '#') {
+            int col = (int) strtol(&value[1], NULL, 16);
+            d->theme[k] = al_map_rgb((col>>16)&0xFF, (col>>8)&0xFF, col&0xFF);
+        }
+        else {
+            Kind prev = findKind(value);
+            if (k > Caret)  { printf("Bad theme value %s\n", value); continue; }
+            d->theme[k] = d->theme[prev];
+        }
+    }
+    for (int k = 0; k < Caret; k++) {
+        if (d->theme[k].a != 0) continue;
+        char *name = kindName(k);
+        if (strlen(name) == 1) continue;
+        printf("No theme entry for %s\n", name);
+    }
+    al_destroy_config(cfg);
+}
 
 // Give an error message and stop.
 static void crash(char const *message) {
@@ -98,33 +90,10 @@ static void try(bool b, char const *fmt, ...) {
     exit(EXIT_FAILURE);
 }
 
-/*
-Display *newDisplay() {
-    if(! al_init()) crash("Failed to initialize Allegro.");
-    al_init_font_addon();
-    al_init_ttf_addon();
-    ALLEGRO_DISPLAY *d = al_create_display(890,530);
-    if (! d) crash("Failed to create display.");
-    ALLEGRO_FONT *font = al_load_ttf_font("../fonts/NotoSansMono-Regular.ttf",18,0);
-    if (! font) crash("Could not load font.");
-    al_clear_to_color(al_map_rgb(0,0x2b,0x36));
-    ALLEGRO_COLOR fg = al_map_rgb(0x83,0x94,0x96);
-
-}
-*/
-
-// Set up an array of colours.
-static void setTheme(Display *d, shade *theme) {
-    for (int i = 0; i < 16; i++) {
-        shade c = theme[i];
-        d->theme[i] = al_map_rgb((c>>16)&0xFF, (c>>8)&0xFF, c&0xFF);
-    }
-}
-
 // Create a new (rows,cols) grid of cells, to record character positions.
 static Cell **newGrid(Display *d) {
     int h = d->rows, w = d->cols;
-    Cell **grid = malloc(h * sizeof(Cell *) + h * (w+1) * sizeof(cell));
+    Cell **grid = malloc(h * sizeof(Cell *) + h * (w+1) * sizeof(Cell));
     Cell *matrix = (Cell *) (grid + h);
     for (int r = 0; r < h; r++) grid[r] = &matrix[r * (w+1)];
     return grid;
@@ -133,6 +102,7 @@ static Cell **newGrid(Display *d) {
 // Create a new display, with allegro and its font and ttf addons.
 Display *newDisplay() {
     Display *d = malloc(sizeof(Display));
+    loadTheme(d, "../themes/solarized-dark.txt");
     try(al_init(), "Failed to initialize Allegro.");
     al_init_font_addon();
     al_init_ttf_addon();
@@ -143,19 +113,18 @@ Display *newDisplay() {
     ALLEGRO_FONT *font2 = al_load_ttf_font(fontFile2, 18, 0);
     try(d->font != NULL, "Failed to load '%s'.", fontFile2);
     al_set_fallback_font(d->font, font2);
-    d->charWidth = al_get_text_width(d->font, "n");
-    d->lineHeight = al_get_font_line_height(d->font);
+    d->colWidth = al_get_text_width(d->font, "n");
+    d->rowHeight = al_get_font_line_height(d->font);
     d->rows = 24;
     d->cols = 80;
     d->pad = 4;
-    d->width = d->pad + d->cols * d->charWidth + d->pad;
-    d->height = d->rows * d->lineHeight;
+    d->width = d->pad + d->cols * d->colWidth + d->pad;
+    d->height = d->rows * d->rowHeight;
     d->grid = newGrid(d);
     al_set_new_display_option(ALLEGRO_VSYNC, 1, ALLEGRO_SUGGEST);
     al_set_new_display_flags(ALLEGRO_WINDOWED | ALLEGRO_RESIZABLE);
     d->display = al_create_display(d->width, d->height);
     try(d->display != NULL, "Failed to create display.");
-    setTheme(d, solLight);
 //    d->h = newHandler(d->display);
     return d;
 }
@@ -172,7 +141,7 @@ void *getHandle(Display *d) {
 }
 
 void clear(Display *d) {
-    al_clear_to_color(d->theme[0]);
+    al_clear_to_color(d->theme[Ground]);
 }
 
 void frame(Display *d) {
@@ -181,24 +150,52 @@ void frame(Display *d) {
 
 // Draw a filled rectangle (without using the primitives addon). Use a
 // temporarily small clipping window.
-static void drawRectangle(Display *d, int c, int x, int y, int w, int h) {
+static void drawRectangle(ALLEGRO_COLOR c, int x, int y, int w, int h) {
     al_set_clipping_rectangle(x, y, w, h);
-    al_clear_to_color(d->theme[c]);
+    al_clear_to_color(c);
     al_reset_clipping_rectangle();
 }
 
-static void drawCaret(Display *d, int row, int col) {
-    int y = row * d->lineHeight;
-    int x = d->grid[row][col].pixels - 1;
-    drawRectangle(d, Caret, x, y, 1, d->lineHeight);
+// Draw a caret before the glyph at (x,y).
+static void drawCaret(Display *d, int x, int y) {
+    drawRectangle(d->theme[Caret], x-1, y, 1, d->rowHeight);
 }
 
-static void drawGlyph(Display *d, int x, int y, int fg, int bg, int code) {
-    if (bg != Normal) drawRectangle(d, bg, x, y, width, d->lineHeight);
-    al_draw_glyph(d->font, d->theme[fg], x, y, code);
+// Draw a background from the glyph at (x,y) to the screen width.
+static void drawBackground(Display *d, int bg, int x, int y) {
+    drawRectangle(d->theme[bg], x, y, (d->width-x), d->rowHeight);
 }
 
+// Draw a glyph given its Unicode code point, with possible preceding caret and
+// change of background. Change the background back to the default after \n.
+static void drawGlyph(Display *d, int x, int y, int code, int style) {
+    int fg = foreground(style), bg = background(style);
+    bool caret = hasCaret(style);
+    if (fg == More) { fg = d->oldFg; bg = d->oldBg; }
+    if (caret) drawCaret(d, x, y);
+    if (bg != d->oldBg) drawBackground(d, bg, x, y);
+    if (code != '\n') al_draw_glyph(d->font, d->theme[fg], x, y, code);
+    else if (bg != Ground) drawBackground(d, Ground, x + d->colWidth, y);
+}
 
+// When drawing a row, x is the pixel position across the screen, col is the
+// cell position in the grid. and i is the byte position in the text.
+void drawRow(Display *d, int row, char *bytes, Style *styles) {
+    d->oldCode = ALLEGRO_NO_KERNING;
+    int x = d->pad, y = row * d->rowHeight, col = 0, i;
+    for (i = 0; i==0 || bytes[i-1] != '\n'; ) {
+        Character cp = getUTF8(&bytes[i]);
+        int advance = al_get_glyph_advance(d->font, d->oldCode, cp.code);
+        x = x + advance;
+        drawGlyph(d, x, y, cp.code, styles[i]);
+        i = i + cp.length;
+        d->oldCode = cp.code;
+    }
+    // Get advance from oldCode
+    // if advance > 0, inc col and fill cell
+}
+
+/*
 // Draw a glyph. Return true to indicate a column increase.
 static bool drawGlyph(Display *d, int row, int col, char *s, char *k, int p) {
     Character ch = getUTF8(&s[p]);
@@ -217,7 +214,7 @@ static bool drawGlyph(Display *d, int row, int col, char *s, char *k, int p) {
     // if overwrite, don't update cell.
 
 
-    cell *last = &d->grid[row][col-1];
+    Cell *last = &d->grid[row][col-1];
     if (row == 0) this->bytes = 0;
     else this->bytes = last->bytes + last->length;
     int advance = -1;
@@ -237,33 +234,33 @@ static bool drawGlyph(Display *d, int row, int col, char *s, char *k, int p) {
     int fg = k[i] & 0x1F;
     int bg = (k[i] >> 5) & 0x03;
     bool caret = ((k[i] >> 7) & 0x01) != 0;
-    int x = this->pixels, y = row * d->lineHeight;
+    int x = this->pixels, y = row * d->rowHeight;
     if (caret) drawCaret(d, row, col);
     return result;
 }
-
-
+*/
+/*
 // When drawing a line, x is the pixel position across the screen, col is the
 // cell position in the grid. and i is the byte position in the text.
-void drawLine(Display *d, int row, int n, char *bytes, unsigned char *tags) {
+void drawLine(Display *d, int row, int n, char *bytes, unsigned char *styles) {
     Character cp = getUTF8(&bytes[0]);
-    int x = d->pad, y = row * d->lineHeight, col = 0, i;
+    int x = d->pad, y = row * d->rowHeight, col = 0, i;
     for (i = 0; bytes[i] != '\n'; ) {
         if (col >= d->cols) {
             // TODO: continuation markers.
             row++;
             x = d->pad;
-            y = row * d->lineHeight;
+            y = row * d->rowHeight;
             col = 0;
         }
         Character next = getUTF8(&bytes[i+cp.length]);
         int width = al_get_glyph_advance(d->font, cp.code, next.code);
         if (width < 3) printf("w %d %d to %d\n", width, cp.code, next.code);
-        d->grid[row][col] = (cell) { .bytes = i, .pixels = x };
-        int bg = (tags[i] >> 4) & 0x0F;
-        int fg = tags[i] & 0x0F;
+        d->grid[row][col] = (Cell) { .bytes = i, .pixels = x };
+        int bg = (styles[i] >> 4) & 0x0F;
+        int fg = styles[i] & 0x0F;
         if (bg != 0) {
-            drawRectangle(d,bg,x,y,width,d->lineHeight);
+            drawRectangle(d,bg,x,y,width,d->rowHeight);
         }
         al_draw_glyph(d->font, d->theme[fg], x, y, cp.code);
         oldFg = fg;
@@ -272,50 +269,55 @@ void drawLine(Display *d, int row, int n, char *bytes, unsigned char *tags) {
         i = i + cp.length;
         cp = next;
     }
-    d->grid[row][col] = (cell) { .bytes = i, .pixels = x };
+    d->grid[row][col] = (Cell) { .bytes = i, .pixels = x };
     for (col++; col <= d->cols; col++) {
         d->grid[row][col] = d->grid[row][col-1];
     }
 }
 
-void drawPage(Display *d, char *bytes, style *tags) {
+void drawPage(Display *d, char *bytes, style *styles) {
     clear(d);
     for (int r = 0; r < d->rows; r++) {
-        drawLine(d, r, bytes, tags);
+        drawLine(d, r, bytes, styles);
         while (*bytes != '\n' && *bytes != '\0') {
             bytes++;
-            tags++;
+            styles++;
         }
         if (*bytes == '\0') break;
         bytes++;
-        tags++;
+        styles++;
     }
     drawCaret(d, 3, 5);
     frame(d);
 }
 
 rowCol findPosition(Display *d, int x, int y) {
-    int row = y / d->lineHeight, col = 0;
+    int row = y / d->rowHeight, col = 0;
     for (int c = 1; c <= d->cols; c++) {
         if (x > d->grid[row][c].pixels) col = c;
     }
     return (rowCol) { row, col };
 }
-
-event nextEvent(Display *d) { return getNextEvent(d->h); }
-char *eventText(Display *d) { return getEventText(d->h); }
-int eventX(Display *d) { return getEventX(d->h); }
-int eventY(Display *d) { return getEventY(d->h); }
+*/
+//event nextEvent(Display *d) { return getNextEvent(d->h); }
+//char *eventText(Display *d) { return getEventText(d->h); }
+//int eventX(Display *d) { return getEventX(d->h); }
+//int eventY(Display *d) { return getEventY(d->h); }
 
 #ifdef displayTest
 
+enum {I=Identifier, R=Round, V=Value, M=Mark, G=Gap, Q=Quote, C=Comment};
+enum { v = Value + ((Warn - Ground) << 5) };
+enum { i = Identifier + ((Select - Ground) << 5) };
+
+static char *line1 = "id(12,COM) = 'xyz' 12. high // note\n";
+static Style styles1[] =
+    { I,I,R,V,V,M,V,V,V,M,G,M,G,Q,Q,Q,Q,Q,G,v,v,v,G,i,i,i,i,G,C,C,C,C,C,C,C,G };
+/*
 // styles for bad tokens, selected text, continuation byte or combiner
 enum { b = 0x2c, h = 0x14, c = 0xFF };
 
 // Different fg and bg colours.
-static char *line1 = "id(12,COM) = 'xyz' 12. high // note\n";
-static unsigned char styles1[] =
-    { 4,4,4,8,8,4,7,7,7,4,4,4,4,9,9,9,9,9,4,b,b,b,4,h,h,h,h,4,1,1,1,1,1,1,1,4 };
 static token words[] = {
     {I,2},{S,1},{V,2},{S,1},{C,3},{S,1},{G,1},{S,1},
     {G,1},{Q,5},{G,1},{B,3},{G,1},{M,0},{I,4},{D,0},{G,1},{C,7},{N,1}};
@@ -335,10 +337,13 @@ static unsigned char styles3[] = {
 static char *line4 = "␀␁␂␃␄␅␆␇␈␉␡\n";
 static unsigned char styles4[] = {
     4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4 };
-
+*/
 int main() {
     Display *d = newDisplay();
     clear(d);
+    drawRow(d, 0, line1, styles1);
+    frame(d);
+    /*
     drawLine(d,0,line1,styles1);
     drawLine(d,1,line2,styles2);
     drawLine(d,2,line3,styles3);
@@ -356,7 +361,8 @@ int main() {
     drawCaret(d, 0, 0);
     frame(d);
 //    drawPage(d, text, styles);
-    al_rest(3);
+    */
+    al_rest(10);
     freeDisplay(d);
     al_uninstall_system();
     return 0;

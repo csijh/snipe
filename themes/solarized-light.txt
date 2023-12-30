@@ -1,17 +1,34 @@
-// See http://ethanschoonover.com/solarized/#usage-development
+# See http://ethanschoonover.com/solarized/
+# dark:  base03 base02 base01 base0  base1
+# light: base3  base2  base1  base00 base01
 
-_            #fdf6e3 // base3  background
-!            #eee8d5 // base2  selection background
-@            #073642 // base02 inverted background
-# < >        #93a1a1 // base1  dim text
-I P W S +    #657b83 // base00 normal text
-( ) [ ] { }  #657b83 // base00
-|            #586e75 // base01 strong text
-K            #b58900 // yellow
-R            #cb4b16 // orange
-N ' "        #2aa198 // cyan
-F            #268bd2 // blue
-?            #dc322f // red
-             #d33682 // magenta
-             #6c71c4 // violet
-             #859900 // green
+Ground      =   #fdf6e3 base3
+Select      =   #eee8d5 base2
+Comment     =   #93a1a1 base1
+#           =   #839496 base0
+Mark        =   #657b83 base00
+Round       =   #657b83 base00
+Caret       =   #586e75 base01
+Warn        =   #073642 base02
+#           =   #b58900 yellow
+Alt         =   #cb4b16 orange
+Error       =   #dc322f red
+#           =   #d33682 magenta
+#           =   #6c71c4 violet
+Function    =   #268bd2 blue
+Value       =   #2aa198 cyan
+Key         =   #859900 green
+
+Note        =   Comment
+Op          =   Mark
+Unary       =   Mark
+Jot         =   Mark
+Id          =   Mark
+Prop        =   Mark
+Square      =   Round
+Group       =   Round
+Block       =   Round
+Quote       =   Value
+Decl        =   Key
+Tag         =   Key
+Focus       =   Select
