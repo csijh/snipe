@@ -66,7 +66,7 @@ string-matching rule.</p>
 
 <p>A rule has a base state name, a list of patterns to match, and a target state
 name, all separated by spaces. A state name is a lower case word, possibly
-including digits. A pattern is any sequence of non-space characters. When the
+including digits. A pattern is a sequence of non-space characters. When the
 scanner is in the base state of a rule and one of the patterns appears next in
 the input, the scanner moves past the matched characters to include them in the
 token currently being scanned, and goes into the target state. For
@@ -120,10 +120,8 @@ to be matched without being included in the current token. For example:</p>
 <p>In the <code>id</code> state, which presumably recognizes identifier tokens,
 if the next character in the source text is an open round bracket, the current
 token is given the type <code>Function</code> instead of <code>Id</code>. That
-allows a function name to be highlighted differently when it appears as
-<code>f()</code> say. (It is not possible, though, to look ahead past a
-space to recognise <code>f ()</code> in the same way.) A lookahead pattern can
-also be a range:</p>
+allows a function name to be highlighted differently when it appears as <code>f
+()</code> say. A lookahead pattern can also be a range:</p>
 
 <pre>dot \0..9 float
 </pre>
@@ -132,8 +130,20 @@ also be a range:</p>
 character, if a digit appears next in the source text, the scanner goes to the
 <code>float</code> state without moving past the digit.</p>
 
-<p>A lookahead pattern <code>\s</code> matches a space and <code>\n</code>
-matches a newline. For example:</p>
+<p>The backslash character is also used for these escape sequences:</p>
+
+<pre>\s       space
+\n       newline
+\b       backslash
+\e       empty separator
+</pre>
+
+<p>These allow a space or a newline to be included in a pattern. The
+<code>\e</code> escape is used to separate a backslash from a letter, when
+needed, so the pattern <code>\\en</code> is a lookahead for the letter
+<code>n</code>. Escape sequences take precedence over lookaheads, so
+<code>\n</code> is a non-lookahead pattern which matches a newline. For
+example:</p>
 
 <pre>id \s \n start Id
 </pre>
@@ -142,34 +152,13 @@ matches a newline. For example:</p>
 the input, the identifier is given type <code>Id</code> and the scanner goes to
 the <code>start</code> state.</p>
 
-<p>Spaces and newlines cannot be included in tokens, but are handled
-automatically. Matching a <code>\s</code> or <code>\n</code> pattern has the
-side effect of marking the space or newline as a separator and moving past
-it.</p>
-
 <p>If a lookahead pattern matches when the current token is empty, and the rule
 has a type, the type is ignored. For example:</p>
 
 <pre>start \s \n start Sign
 </pre>
 
-<p>A rule containing <code>\s</code> or <code>\n</code> should normally have a
-type, to terminate any current token before a separator. However, if a rule like
-<code>start</code> can only ever occur at the start of a token, no type is
-needed, because it would always be ignored. For example, the above
-<code>Sign</code> type can be omitted:</p>
-
-<pre>start \s \n start
-</pre>
-
-<p>A pattern beginning with two backslashes such as <code>\\u</code> is a
-non-lookahead pattern matching a string such as <code>\u</code> starting with a
-single backslash. A pattern beginning with three backslashes such as
-<code>\\\u</code> is a lookahead for a string such as <code>\u</code> starting
-with a single backslash. A backslash anywhere else in a pattern stands for
-itself. A pattern <code>\</code> consisting of just a backslash is treated as
-an abbreviation for a range, effectively equivalent to
-<code>\n \s \!..~</code>, matching any character as a lookahead.</p>
+<hr/>
 
 <p>Brackets are automatically matched. Bracket tokens have a suffix
 <code>B</code> (for begin) if they are opening brackets or <code>E</code>

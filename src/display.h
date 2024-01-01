@@ -71,7 +71,7 @@ int getEvent(Display *d);
 int charPosition(Display *d, int x, int y);
 
 // Create an image of a line from its row number, text, and style info.
-void drawLine(Display *d, int row, int n, char *line, unsigned char *styles);
+//void drawLine(Display *d, int row, int n, char *line, unsigned char *styles);
 
 // Make recent changes appear on screen, with a vertical sync delay.
 void showFrame(Display *d);

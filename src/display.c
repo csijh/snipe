@@ -7,22 +7,13 @@
 #include <allegro5/allegro_font.h>
 #include <allegro5/allegro_ttf.h>
 
-// TODO:
-// al_draw_glyph
-// (al_get_glyph_width)
-// (al_get_glyph_dimensions)
-// al_get_glyph_advance
-// al_hold_bitmap_drawing(true)    before draw page
-// al_hold_bitmap_drawing(false)   after
-
 // A cell records, for a grapheme drawn at a particular row-column position, the
-// byte position in the line, the horizontal pixel position across the screen,
-// and the last code point to be drawn at that position. This supports
-// conversion from (x,y) pixel coordinates to (row,col) text positions, and
-// moving the cursor or editing left or right by one 'character'. The only type
-// of grapheme supported by Allegro's ttf addon appears to be where glyphs have
-// a zero advance between them.
-struct cell { int bytes, pixels, code; };
+// byte position in the line, and the horizontal pixel position across the
+// screen. This supports conversion from (x,y) pixel coordinates to
+// (row,col) text positions, and moving the cursor or editing left or right by
+// one 'character'. The only type of grapheme supported by Allegro's ttf addon
+// appears to be where glyphs have a zero advance between them.
+struct cell { int bytes, pixels; };
 typedef struct cell Cell;
 
 // A display object represents the main window, with layout measurements. The
@@ -41,7 +32,7 @@ struct display {
     int rows, cols;
     int rowHeight, colWidth, pad;
     Cell **grid;
-    int oldBg, oldFg, oldCode, byteCol;
+    int oldBg, oldFg, oldCode;
 };
 
 static void loadTheme(Display *d, char *path) {
@@ -99,7 +90,7 @@ static Cell **newGrid(Display *d) {
     return grid;
 }
 
-// Create a new display, with allegro and its font and ttf addons.
+// Create a new display, with fonts, theme and ttf addons.
 Display *newDisplay() {
     Display *d = malloc(sizeof(Display));
     loadTheme(d, "../themes/solarized-dark.txt");
@@ -135,7 +126,9 @@ void freeDisplay(Display *d) {
     al_destroy_font(d->font);
     al_destroy_display(d->display);
     free(d);
+    al_uninstall_system();
 }
+
 void *getHandle(Display *d) {
     return d->display;
 }
@@ -186,12 +179,12 @@ void drawRow(Display *d, int row, char *bytes, Style *styles) {
     for (i = 0; i==0 || bytes[i-1] != '\n'; ) {
         Character cp = getUTF8(&bytes[i]);
         int advance = al_get_glyph_advance(d->font, d->oldCode, cp.code);
+        if (advance < 3) printf("%d %d %d\n", row, i, advance);
         x = x + advance;
         drawGlyph(d, x, y, cp.code, styles[i]);
         i = i + cp.length;
         d->oldCode = cp.code;
     }
-    // Get advance from oldCode
     // if advance > 0, inc col and fill cell
 }
 
@@ -306,65 +299,50 @@ rowCol findPosition(Display *d, int x, int y) {
 
 #ifdef displayTest
 
+// Convert character to style, for testing.
+static Style convert(char ch) {
+    switch (ch) {
+    case 'I': return Identifier; case 'R': return Round; case 'V': return Value;
+    case 'M': return Mark; case 'G': return Gap; case 'Q': return Quote;
+    case 'C': return Comment;
+    case 'v': return Value + ((Warn - Ground) << 5);
+    case 'i': return Identifier + ((Select - Ground) << 5);
+    default: return Identifier;
+    }
+}
+
+// Abbreviated styles for testing
 enum {I=Identifier, R=Round, V=Value, M=Mark, G=Gap, Q=Quote, C=Comment};
 enum { v = Value + ((Warn - Ground) << 5) };
 enum { i = Identifier + ((Select - Ground) << 5) };
 
-static char *line1 = "id(12,COM) = 'xyz' 12. high // note\n";
-static Style styles1[] =
-    { I,I,R,V,V,M,V,V,V,M,G,M,G,Q,Q,Q,Q,Q,G,v,v,v,G,i,i,i,i,G,C,C,C,C,C,C,C,G };
-/*
-// styles for bad tokens, selected text, continuation byte or combiner
-enum { b = 0x2c, h = 0x14, c = 0xFF };
-
 // Different fg and bg colours.
-static token words[] = {
-    {I,2},{S,1},{V,2},{S,1},{C,3},{S,1},{G,1},{S,1},
-    {G,1},{Q,5},{G,1},{B,3},{G,1},{M,0},{I,4},{D,0},{G,1},{C,7},{N,1}};
+static char *line1 =   "id(12,COM) = 'xyz' 12. high // note\n";
+static char *styles1 = "IIRVVMVVVMGMGQQQQQGvvvGiiiiGCCCCCCCG";
 
 // Eight 2-byte and four 3-byte characters
-static char *line2 = "æ í ð ö þ ƶ ə β ᴈ ῷ ⁑ €\n";
-static unsigned char styles2[] = {
-    4,c,4,4,c,4,4,c,4,4,c,4,4,c,4,4,c,4,4,c,4,4,c,4,4,c,c,4,4,c,c,4,4,c,c,4,4,c,
-c,4 };
+static char *line2 =   "æ í ð ö þ ƶ ə β ᴈ ῷ ⁑ €\n";
+static char *styles2 = "IIGIIGIIGIIGIIGIIGIIGIIGIIIGIIIGIIIGIIIG";
 
 // A two-byte e character, and an e followed by a two-byte combiner
-static char *line3 = "Raphaël Raphaël\n";
-static unsigned char styles3[] = {
-    4,4,4,4,4,4,c,4,4,4,4,4,4,4,4,c,c,4,4 };
+static char *line3 =   "Raphaël Raphaël\n";
+static char *styles3 = "IIIIIIIIGIIIIIIIIIG";
 
-// Visible control characters.
-static char *line4 = "␀␁␂␃␄␅␆␇␈␉␡\n";
-static unsigned char styles4[] = {
-    4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4 };
-*/
+static void drawLine(Display *d, int row, char *line, char *styles) {
+    Style s[strlen(styles) + 1];
+    for (int i = 0; i < strlen(styles); i++) s[i] = convert(styles[i]);
+        drawRow(d, row, line, s);
+}
+
 int main() {
     Display *d = newDisplay();
     clear(d);
-    drawRow(d, 0, line1, styles1);
+    drawLine(d, 0, line1, styles1);
+    drawLine(d, 1, line2, styles2);
+    drawLine(d, 2, line3, styles3);
     frame(d);
-    /*
-    drawLine(d,0,line1,styles1);
-    drawLine(d,1,line2,styles2);
-    drawLine(d,2,line3,styles3);
-    drawLine(d,3,line4,styles4);
-    drawCaret(d, 0, 0);
-    frame(d);
-//    drawPage(d, text, styles);
-    al_rest(20);
-    setTheme(d, solDark);
-    clear(d);
-    drawLine(d,0,line1,styles1);
-    drawLine(d,1,line2,styles2);
-    drawLine(d,2,line3,styles3);
-    drawLine(d,3,line4,styles4);
-    drawCaret(d, 0, 0);
-    frame(d);
-//    drawPage(d, text, styles);
-    */
     al_rest(10);
     freeDisplay(d);
-    al_uninstall_system();
     return 0;
 }
 
