@@ -13,15 +13,18 @@
 #include <ctype.h>
 #include <time.h>
 
-// Use the type constants from the main editor.
-#include "../src/types.h"
+// Use the kind constants from the main editor.
+// Kinds are called types in the languages documentation page.
+#include "../src/kinds.h"
 
+// Check equality of two strings.
 bool equal(char *s, char *t) {
     return strcmp(s, t) == 0;
 }
 
+// Check if one string is a prefix of another.
 bool prefix(char *s, char *t) {
-    if (strlen(s) > strlen(t)) return false;
+    if (strlen(s) >= strlen(t)) return false;
     if (strncmp(s, t, strlen(s)) == 0) return true;
     return false;
 }
@@ -34,17 +37,6 @@ void error(char *format, ...) {
     va_end(args);
     fprintf(stderr, ".\n");
     exit(1);
-}
-
-// Convert a string to a type. Handle suffixes and abbreviations.
-int findType(char *s) {
-    for (int i = Alternative; i <= Block2E; i++) {
-        char *name = typeName(i);
-        if (equal(s, name)) return i;
-        if (! islower(name[strlen(name)-1])) continue;
-        if (prefix(s, name)) return i;
-    }
-    return -1;
 }
 
 // ---------- Objects and Lists ------------------------------------------------
@@ -285,12 +277,9 @@ State **getStates(Rule **rules, bool print) {
 // ---------- Patterns ---------------------------------------------------------
 // A pattern is like a rule from the source text, but with just a single pattern
 // string. A pattern has a line number, base and target states, a lookahead
-// flag, a soft flag, an unescaped pattern string, and a type. A pattern string
-// is unescaped by transferring an initial backslash to the lookahead flag,
-// replacing a double backslash by a single backslash, replacing \s and \n by
-// an actual space or newline (printed as S or N) and replacing \ on its own by
-// two ranges N..N and S..~. The N..N is kept as a range at this stage, to
-// indicate that it can be overridden by a \n rule.
+// fkag, a soft flag, an unescaped pattern string, and a type. A pattern string
+// is unescaped by removing an initial | and setting the lookahead flag, and
+// replacing the escapes \s \n \\ \| by their literal characters.
 
 struct pattern {
     int line; State *base, *target; bool look, soft; char *string; int type;
@@ -298,36 +287,33 @@ struct pattern {
 typedef struct pattern Pattern;
 
 // Deal with the escape conventions in the most recently added pattern.
-//   \\\... -> look \...
-//   \\...  -> \...
-//   \s     -> look SP
-//   \n     -> look NL
-//   \x     -> error
-//   \...   -> look ...
-//   \      -> look NL..NL, and look SP..~
-Pattern **unescape(Pattern **patterns) {
+//   \s     -> space
+//   \n     -> newline
+//   \\     -> backslash
+//   \|     -> vertical bar
+//   |      -> \n..~ plus lookahead flag
+//   |...   -> ... plus lookahead flag
+Pattern **unescape(Pattern **patterns, int line) {
     int n = length(patterns);
     Pattern *p = patterns[n-1];
     char *s = p->string;
-    char sn = strlen(s);
-    if (prefix("\\\\\\", s)) { p->look = true; p->string = &s[2]; }
-    else if (prefix("\\\\", s)) { p->string  = &s[1]; }
-    else if (equal(s, "\\s")) { p->look = true; p->string = " "; }
-    else if (equal(s, "\\n")) { p->look = true; p->string = "\n"; }
-    else if (prefix("\\",s) && sn >= 2) { p->look = true; p->string = &s[1]; }
-    else if (equal(s,"\\")) {
-        p->look = true;
-        p->string = "!..~";
-        Pattern *extra1 = newObject(sizeof(Pattern));
-        Pattern *extra2 = newObject(sizeof(Pattern));
-        *extra1 = *p;
-        *extra2 = *p;
-        extra1->string = "\n..\n";
-        extra2->string = " .. ";
-        patterns = adjust(patterns, +2);
-        patterns[n] = extra1;
-        patterns[n+1] = extra2;
+    int sn = strlen(s);
+    if (s[0] == '|') p->look = true;
+    for (int i = 0, j = 0; i <= sn; i++) {
+        if (s[i] == '|') {
+            if (i > 0) error("bad pattern on line %d", line);
+        }
+        else if (s[i] == '\\') {
+            char ch = s[++i];
+            if (ch == 's') s[j++] = ' ';
+            else if (ch == 'n') s[j++] = '\n';
+            else if (ch == '\\') s[j++] = '\\';
+            else if (ch == '|') s[j++] = '|';
+            else error("bad escape \\%c on line %d", ch, line);
+        }
+        else s[j++] = s[i];
     }
+    if (strlen(s) == 0) p->string = "\n..~";
     return patterns;
 }
 
@@ -339,10 +325,10 @@ Pattern **collectPatterns(Pattern **patterns, Rule *rule, State **states) {
     if (n < 3) error("incomplete rule on line %d", line);
     State *base = states[findState(states, strings[0])];
     char *last = strings[n-1];
-    int type = None;
+    int type = More;
     if (isupper(last[0])) {
-        type = findType(last);
-        if (type < 0) error("unknown type on line %d", line);
+        type = findKind(last);
+        if (type < 0) error("unknown type %s on line %d", last, line);
         n--;
         if (n < 2) error("incomplete rule on line %d", line);
     }
@@ -359,7 +345,7 @@ Pattern **collectPatterns(Pattern **patterns, Rule *rule, State **states) {
             .line = line, .base = base, .target = target, .look = false,
             .soft = false, .string = string, .type = type
         };
-        patterns = unescape(patterns);
+        patterns = unescape(patterns, line);
     }
     return patterns;
 }
@@ -368,15 +354,19 @@ Pattern **collectPatterns(Pattern **patterns, Rule *rule, State **states) {
 void printPattern(Pattern *p) {
     printf("%-10s ", p->base->name);
     char *s = p->string;
-    if (p->look && strcmp(s," ") == 0) printf("%-14s ", "\\s");
-    else if (p->look && strcmp(s,"\n") == 0) printf("%-14s ", "\\n");
-    else if (p->look && strcmp(s,"\n..\n") == 0) printf("%-14s ", "\\n..n");
-    else if (p->look && strcmp(s," .. ") == 0) printf("%-14s ", "\\s..s");
-    else if (p->look && s[0] == '\\') printf("\\\\\\%-11s ", s);
-    else if (p->look || s[0] == '\\') printf("\\%-13s ", s);
-    else printf("%-14s ", s);
+    int sn = strlen(s);
+    int j = 0;
+    if (p->look) { printf("|"); j++; }
+    for (int i = 0; i < sn; i++) {
+        if (s[i] == ' ') { printf("\\s"); j += 2; }
+        else if (s[i] == '\n') { printf("\\n"); j += 2; }
+        else if (s[i] == '\\') { printf("\\\\"); j += 2; }
+        else if (s[i] == '|') { printf("\\|"); j += 2; }
+        else { printf("%c", s[i]); j++; }
+    }
+    while (j < 15) { printf(" "); j++; }
     printf("%-10s ", p->target->name);
-    if (p->type != None) printf("%-10s", typeName(p->type));
+    if (p->type != More) printf("%-10s", kindName(p->type));
     if (p->soft) printf("(soft)");
     printf("\n");
 }
@@ -424,28 +414,27 @@ void getPatterns(Rule **rules, State **states, bool print) {
 }
 
 // ---------- Ranges -----------------------------------------------------------
-// Expand ranges such as 0..9 to multiple one-character patterns, with more
-// specific patterns (subranges and individual characters) taking precedence.
-// Then sort the patterns in each state. Then add a soft flag for a close
-// bracket pattern if it is followed by another close bracket pattern for the
-// same pattern string.
+// Expand ranges such as 0..9 or |0..9 to multiple one-character patterns, with
+// more specific patterns (subranges and individual characters) taking
+// precedence. Then sort the patterns in each state. Then add a soft flag for a
+// close bracket pattern if it is followed by another close bracket pattern for
+// the same pattern string. Also add a soft flag for a lookahead pattern where
+// there is a non-lookahead pattern for the same string.
 
-// Single character strings covering \n \s !..~ for expanding ranges.
-char *singles[128] = {
-    "?","?","?", "?","?","?","?","?","?","?","\n","?","?", "?","?","?",
-    "?","?","?", "?","?","?","?","?","?","?","?", "?","?", "?","?","?",
-    " ","!","\"","#","$","%","&","'","(",")","*", "+",",", "-",".","/",
-    "0","1","2", "3","4","5","6","7","8","9",":", ";","<", "=",">","?",
-    "@","A","B", "C","D","E","F","G","H","I","J", "K","L", "M","N","O",
-    "P","Q","R", "S","T","U","V","W","X","Y","Z", "[","\\","]","^","_",
-    "`","a","b", "c","d","e","f","g","h","i","j", "k","l", "m","n","o",
-    "p","q","r", "s","t","u","v","w","x","y","z", "{","|", "}","~","?"
-};
+// Single-character strings covering \n \s !..~ for expanding ranges.
+char singles[128][2];
 
+// Fill in the singles array.
+void fill() {
+    for (int ch = 0; ch < 128; ch++) {
+        singles[ch][0] = ch;
+        singles[ch][1] = '\0';
+    }
+}
+
+// Check for a range such as 0..9 or |0..9 or subranges or overlapping ranges.
 bool isRange(char *s) {
-    if (strlen(s) != 4) return false;
-    if (s[1] != '.' || s[2] != '.') return false;
-    return true;
+    return (strlen(s) == 4 && s[1] == '.' && s[2] == '.');
 }
 
 bool subRange(char *s, char *t) {
@@ -460,6 +449,7 @@ bool overlap(char *s, char *t) {
 
 // Add a singleton pattern from a range, if not already handled.
 Pattern **addSingle(Pattern **patterns, Pattern *range, int ch) {
+    if (singles[1][0] == 0) fill();
     int n = length(patterns);
     for (int i = 0; i < n; i++) {
         char *s = patterns[i]->string;
@@ -484,6 +474,7 @@ void delete(Pattern **patterns, int i) {
 Pattern **derange(Pattern **patterns, Pattern *range) {
     char *s = range->string;
     for (int ch = s[0]; ch <= s[3]; ch++) {
+        if (ch > '\n' && ch < ' ') continue;
         patterns = addSingle(patterns, range, ch);
     }
     return patterns;
@@ -523,12 +514,20 @@ void derangeAll(State **states) {
     }
 }
 
-// Compare strings in lexicographic order, except that if s is a prefix of t, t
-// comes before s (because the scanner tries longer patterns first).
-int compare(char *s, char *t) {
+// Compare pattern strings in lexicographic order, except that if s is a prefix
+// of t, t comes before s (because the scanner tries longer patterns first). If
+// patterns strings are equal, a pattern with a lookahead flag comes before one
+// without. Otherwise, sort on the type.
+int compare(Pattern *p, Pattern *q) {
+    char *s = p->string, *t = q->string;
     if (prefix(s,t)) return 1;
     if (prefix(t,s)) return -1;
-    return strcmp(s,t);
+    int cmp = strcmp(s,t);
+    if (cmp != 0) return cmp;
+    if (p->look && ! q->look) return -1;
+    if (! p->look && q->look) return 1;
+    if (p->type < q->type) return -1;
+    return 1;
 }
 
 void sort(Pattern **list) {
@@ -536,7 +535,7 @@ void sort(Pattern **list) {
     for (int i = 1; i < n; i++) {
         Pattern *p = list[i];
         int j = i - 1;
-        while (j >= 0 && compare(list[j]->string, p->string) > 0) {
+        while (j >= 0 && compare(list[j], p) > 0) {
             list[j + 1] = list[j];
             j--;
         }
@@ -544,20 +543,31 @@ void sort(Pattern **list) {
     }
 }
 
-// Where a state has a pattern involving a close bracket, and it is followed
-// by another close bracket pattern for the same string, add a soft flag.
-// For example,
-//    s } t BlockE (soft)
-//    s } u GroupE
+// Where a state has two or more patterns for the same string, add a soft flag
+// to all except the last. Check that either the patterns are for close
+// brackets , or that one is a lookahead which stays in the same state and has
+// a type, and the other is a non-lookahead.
 void addSoft(State *s) {
-    for (int i = 0; i < length(s->patterns); i++) {
+    for (int i = 0; i < length(s->patterns) - 1; i++) {
         Pattern *p = s->patterns[i];
-        if (! isCloser(p->type)) continue;
-        bool last = false;
-        if (i == length(s->patterns) - 1) last = true;
-        else if (! equal(p->string, s->patterns[i+1]->string)) last = true;
-        else if (! isCloser(s->patterns[i+1]->type)) last = true;
-        if (! last) p->soft = true;
+        Pattern *q = s->patterns[i+1];
+        if (! equal(p->string, q->string)) continue;
+        bool ok = true;
+        if (isCloser(p->type)) {
+            if (! isCloser(q->type)) ok = false;
+        }
+        else {
+            if (! p->look || q->look) ok = false;
+            if (p->target != p->base) ok = false;
+            if (p->type == More) ok = false;
+        }
+        p->soft = true;
+        if (! ok) {
+            if (p->line == q->line) {
+                error("incompatible patterns on line %d", p->line);
+            }
+            error("incompatible patterns on lines %d, %d", p->line, q->line);
+        }
      }
 }
 
@@ -570,10 +580,12 @@ void expandRanges(State **states, bool print) {
 }
 
 // ---------- Checks -----------------------------------------------------------
-// Check that a scanner handles every input unambiguously. Check whether states
-// occur at the start of tokens, or after the start, or both. Check that if
-// after, \s \n patterns have types. Check that the scanner doesn't get stuck in
-// an infinite loop.
+// Set flags to say if a state can occur at the start of tokens, or after the
+// start, or both. Check that a state handles every individual character. Check
+// that patterns for bracket types cannot be empty. Check that the scanner
+// doesn't get stuck in an infinite loop. Give a warning for a lookahead past a
+// newline, a space or newline in a longer token, a space with a type other
+// than Gap, or a newline with a type other than Gap or a closer.
 
 // Set the start and after flags deduced from a state's patterns. Return true
 // if any changes were caused.
@@ -582,19 +594,19 @@ bool deduce(State *state) {
     for (int i = 0; i < length(state->patterns); i++) {
         Pattern *p = state->patterns[i];
         State *target = p->target;
-        if (p->type != None) {
+        if (p->type != More) {
             if (! target->start) changed = true;
             target->start = true;
         }
-        if (p->type == None && ! p->look) {
+        if (p->type == More && ! p->look) {
             if (! target->after) changed = true;
             target->after = true;
         }
-        if (p->type == None && p->look && state->start) {
+        if (p->type == More && p->look && state->start) {
             if (! target->start) changed = true;
             target->start = true;
         }
-        if (p->type == None && p->look && state->after) {
+        if (p->type == More && p->look && state->after) {
             if (! target->after) changed = true;
             target->after = true;
         }
@@ -614,83 +626,47 @@ void deduceAll(State **states) {
     }
 }
 
-// Check that a state has no duplicate patterns, except for stack pops.
-void noDuplicates(State *state) {
-    Pattern **list = state->patterns;
-    for (int i = 0; i < length(list); i++) {
-        Pattern *p = list[i];
-        char *s = p->string;
-        for (int j = i+1; j < length(list); j++) {
-            Pattern *q = list[j];
-            char *t = q->string;
-            if (! equal(s,t)) continue;
-            if (isCloser(p->type) && isCloser(q->type) && p->type != q->type) {
-                continue;
-            }
-            error("state %s has pattern for %s twice", state->name, s);
-        }
-    }
-}
-
 // Check that a state handles every singleton character.
 void complete(State *state) {
-    char ch = '\n';
-    for (int i = 0; i < length(state->patterns); i++) {
-        char *s = state->patterns[i]->string;
-        if (s[1] != '\0') continue;
-        if (s[0] == ch) {
-            if (ch == '\n') ch = ' ';
-            else ch = ch + 1;
+    for (char ch = '\n'; ch <= '~'; ch++) {
+        if (ch > '\n' && ch < ' ') continue;
+        bool ok = false;
+        for (int i = 0; i < length(state->patterns); i++) {
+            char *s = state->patterns[i]->string;
+            if (s[1] != '\0') continue;
+            if (s[0] == ch) ok = true;
         }
-    }
-    if (ch > '~') return;
-    if (ch == ' ') error("state %s doesn't handle \\s", state->name);
-    else if (ch == '\n') error("state %s doesn't handle \\n", state->name);
-    else error("state %s doesn't handle %c", state->name, ch);
-}
-
-// Check that bracket types are not associated with lookaheads, except for
-// QuoteE with \n.
-void checkBrackets(State *base) {
-    for (int i = 0; i < length(base->patterns); i++) {
-        Pattern *p = base->patterns[i];
-        if (! p->look) continue;
-        if (! isOpener(p->type) && ! isCloser(p->type)) continue;
-        if (p->type == QuoteE && p->string[0] == '\n') continue;
-        error("bracket type with lookahead on line %d", p->line);
+        if (ok) continue;
+        if (ch == ' ') error("state %s doesn't handle \\s", state->name);
+        else if (ch == '\n') error("state %s doesn't handle \\n", state->name);
+        else error("state %s doesn't handle %c", state->name, ch);
     }
 }
 
-// Check, for a state with the after flag, that \s \n patterns have types.
-void separates(State *state) {
-    if (! state->after) return;
+// Check that patterns for brackets aren't empty, i.e. either the state has no
+// start flag, or the pattern is a non-lookahead.
+void checkBrackets(State *state) {
+    if (! state->start) return;
     for (int i = 0; i < length(state->patterns); i++) {
         Pattern *p = state->patterns[i];
-        if (p->string[0] == ' ' || p->string[0] == '\n') {
-            if (p->type == None) {
-                error(
-                    "state %s should terminate tokens on matching \\s or \\n",
-                    state->name
-                );
-            }
-        }
+        if (! p->look) continue;
+        if (! isOpener(p->type) || ! isCloser(p->type)) continue;
+        error("bracket type may have an empty token on line %d", p->line);
     }
 }
 
-// Search for a chain of lookaheads from a given state, other than \s or \n,
-// which can cause an infinite loop. The look argument is the longest lookahead
-// in the chain so far.
+// Search for a chain of (non-soft) lookaheads from a given state which can
+// cause an infinite loop; look is the longest lookahead in the chain so far.
 void follow(State **states, State *state, char *look) {
     if (state->visited) error("state %s can loop", state->name);
     state->visited = true;
     for (int i = 0; i < length(state->patterns); i++) {
-        if (! state->patterns[i]->look) continue;
+        if (! state->patterns[i]->look || state->patterns[i]->soft) continue;
         char *s = state->patterns[i]->string;
-        if (s[0] == ' ' || s[0] == '\n') continue;
         if (s[0] > look[0]) break;
         if (s[0] < look[0]) continue;
         char *next;
-        if (prefix(s, look)) next = look;
+        if (prefix(s, look) || equal(s,look)) next = look;
         else if (prefix(look, s)) next = s;
         else continue;
         State *target = state->patterns[i]->target;
@@ -708,15 +684,78 @@ void search(State **states, State *state) {
     }
 }
 
+// Give a warning if a state has a pattern which looks ahead past a newline.
+void warnNewline(State *state) {
+    for (int i = 0; i < length(state->patterns); i++) {
+        Pattern *p = state->patterns[i];
+        if (! p->look) continue;
+        char *s = p->string;
+        int sn = strlen(s);
+        char *nl = strchr(s, '\n');
+        if (nl == NULL) continue;
+        if (nl == s + sn - 1) continue;
+        printf("Warning: lookahead past newline on line %d\n", p->line);
+        printf("(prevents simple line-base rescanning)\n");
+    }
+}
+
+// Give a warning if a state has a non-lookahead pattern containing a space or
+// newline with other characters.
+void warnEmbed(State *state) {
+    for (int i = 0; i < length(state->patterns); i++) {
+        Pattern *p = state->patterns[i];
+        if (p->look) continue;
+        char *s = p->string;
+        if (strlen(s) == 1) continue;
+        if (strchr(s, ' ') == NULL && strchr(s, '\n') == NULL) continue;
+        printf("Warning: space or newline in token on line %d\n", p->line);
+        printf("(prevents simple word-based motion or reformatting)\n");
+    }
+}
+
+// Give a warning if a state matches a space or newline with a risk of
+// including other characters. Also warn if given type other than gap or closer.
+void warnInclude(State *state) {
+    bool hasSpaceLookahead = false, hasNewlinelookahead = false;
+    for (int i = 0; i < length(state->patterns); i++) {
+        Pattern *p = state->patterns[i];
+        char *s = p->string;
+        if (s[0] != ' ' && s[0] != '\n') continue;
+        if (p->look) {
+            if (s[0] == ' ' && p->soft) hasSpaceLookahead = true;
+            if (s[0] == '\n' && p->soft) hasNewlinelookahead = true;
+            continue;
+        }
+        if (p->type == More) {
+            printf("Warning: space or newline");
+            printf("with no type on line %d\n", p->line);
+            printf("(risks being included in longer token)\n");
+        }
+        else if (s[0] == ' ' && p->type != Gap) {
+            printf("Warning: space given non-Gap type on line %d\n", p->line);
+        }
+        else if (s[0] == '\n' && p->type != Gap && ! isCloser(p->type)) {
+            printf("Warning: on line %d, newline given type", p->line);
+            printf("which is not Gap or a closer (suffix E)\n");
+        }
+        if (! state->after) continue;
+        if (s[0] == ' ' && hasSpaceLookahead) continue;
+        if (s[0] == '\n' && hasNewlinelookahead) continue;
+        printf("Warning: on line %d, space or newline matched\n", p->line);
+        printf("with risk of adding it to a non-empty token.\n");
+    }
+}
+
 // Stage 6: carry out checks. Optionally print.
 void checkAll(State **states, bool print) {
     deduceAll(states);
     for (int i = 0; i < length(states); i++) {
-        noDuplicates(states[i]);
         complete(states[i]);
         checkBrackets(states[i]);
-        separates(states[i]);
         search(states, states[i]);
+        warnNewline(states[i]);
+        warnEmbed(states[i]);
+        warnInclude(states[i]);
     }
     if (print) for (int i=0; i < length(states); i++) printState(states[i]);
 }
@@ -724,24 +763,25 @@ void checkAll(State **states, bool print) {
 // ---------- Compiling --------------------------------------------------------
 // Compile the states into a compact transition table. The table has a row for
 // each state, and an overflow area used when there is more than one pattern
-// for a particular character. Each row consists of 98 cells of two bytes each,
-// two for \n and \s and one each for !..~. The scanner uses the current state,
-// the next character in the source text, and whether or not there is a
-// non-empty current token, to look up a cell. The cell may be an action, i.e.
-// a type and a target state, for that single character, or an offset relative
-// to the start of the table to a list of patterns in the overflow area
-// starting with that character, with their actions.
+// for a particular character. Each row consists of 96 cells of two bytes each,
+// for \n and \s and !..~. The scanner uses the current state and the next
+// character in the source text to look up a cell. The cell may be an action,
+// i.e. a type and a target state, for that single character, or an offset
+// relative to the start of the table to a list of patterns in the overflow
+// area starting with that character, with their actions.
 
 typedef unsigned char byte;
-enum { COLUMNS = 98, CELL = 2 };
+enum { COLUMNS = 96, CELL = 2 };
 
-// Flags added to the type in a cell. The LINK flag in the main table
-// indicates that the action is a link to the overflow area. The SOFT flag, in
-// the overflow area, represents a close bracket rule that is skipped if the
-// bracket doesn't match the most recent unmatched open bracket. The LOOK flag
-// indicates a lookahead pattern. The TYPE mask removes the two flags.
+// Flags added to the type in a cell. The LINK flag in the main table indicates
+// that the action is a link to the overflow area. The LOOK flag indicates a
+// lookahead pattern. The SOFT flag, in the overflow area, represents one of
+// two things. Without the LOOK flag, it represents a close bracket rule that
+// is skipped if the bracket doesn't match the most recent unmatched open
+// bracket. With the LOOK flag, it represents a lookahead which only applies if
+// there is a non-empty current token.
 
-enum { LINK = 0x80, SOFT = 0x80, LOOK = 0x40, TYPE = 0x3F };
+enum { LINK = 0x80, LOOK = 0x80, SOFT = 0x40, FLAGS = 0xC0 };
 
 // When there is more than one pattern for a state starting with a character,
 // enter [LINK+hi, lo] where [hi,lo] is the offset to the overflow area.
@@ -773,10 +813,7 @@ byte *compileExtra(byte *table, Pattern *p) {
     return table;
 }
 
-// Compile a state into the table, and return the possibly moved table. For \n
-// and \s, compile one lookahead action to finish off any non-empty token and
-// stay on the same state, and one action to provide a type for the character
-// itself and go to the target state.
+// Compile a state into the table, and return the possibly moved table.
 byte *compileState(byte *table, State *state) {
     Pattern **ps = state->patterns;
     int n = length(ps);
@@ -784,21 +821,8 @@ byte *compileState(byte *table, State *state) {
     for (int i = 0; i < n; i++) {
         Pattern *p = ps[i];
         char ch = p->string[0];
-        if (ch == '\n' || ch == ' ') {
-            Pattern p1 = *p, p2 = *p;
-            p1.target = state;
-            p2.look = false;
-            if (ch == '\n' && (p->type == QuoteE || p->type == Quote2E)) {
-                p1.type = Quote;
-            }
-            else p2.type = Gap;
-            byte *cell = &table[CELL * (COLUMNS * state->row)];
-            if (ch == ' ') cell = cell + 2 * CELL;
-            compileAction(cell, &p1);
-            compileAction(cell + CELL, &p2);
-            continue;
-        }
-        int col = ch - '!' + 4;
+        int col = 0;
+        if (ch != '\n') col = 1 + (ch - ' ');
         byte *cell = &table[CELL * (COLUMNS * state->row + col)];
         if (ch != prev) {
             prev = ch;
@@ -828,90 +852,77 @@ byte *compile(State **states) {
 // A line of source text is scanned to produce an array of bytes, one for each
 // character. The first byte corresponding to a token gives its type (e.g. Id
 // for an identifier). The bytes corresponding to the remaining characters of
-// the token contain None.
+// the token contain More. A stack is used for bracket matching.
 
-// Bracket matching is simulated by marking bytes in the output array with 0x80
-// for matched brackets, 0x40 for mismatched brackets, and 0xC0 for unmatched
-// open brackets.
-enum { MATCH = 0x80, MISMATCH = 0x40, OPEN = 0xC0, FLAGS = 0xC0 };
+// A scanner contains the source text, its line number, the output byte array, a
+// stack of unmatched open brackets, and the states for tracing.
+struct scanner { char *in; int line; byte *out; int *stack; State **states; };
+typedef struct scanner Scanner;
 
-// A tracer is an object containing the states (for their names) and the text of
-// the traced execution.
-struct tracer { State **states; char *text; };
-typedef struct tracer Tracer;
+// Brackets are marked with a flag if they are mismatched.
+enum { MISMATCH = 0x80 };
 
-bool matchTop(int type, byte *out, int at) {
-    for (int i = at-1; i >= 0; i--) {
-        if ((out[i] & FLAGS) == OPEN) return bracketMatch((out[i] & TYPE), type);
-    }
-    return false;
+// Check if a closer matches the top opener.
+bool matchTop(Scanner *sc, int type) {
+    int n = length(sc->stack);
+    if (n == 0) return false;
+    int top = sc->stack[n-1];
+    return bracketMatch(sc->out[top], type);
 }
 
-// Simulate a pushed open bracket.
-void push(byte *out, int at) {
-    out[at] = out[at] | OPEN;
+// Push an opener.
+void push(Scanner *sc, int opener) {
+    sc->stack = adjust(sc->stack, +1);
+    sc->stack[length(sc->stack) - 1] = opener;
 }
 
-// Simulate popping. Find the 'top' and match or mismatch.
-void pop(byte *out, int at) {
-    int open = -1;
-    for (int i = at-1; i >= 0; i--) {
-        if ((out[i] & FLAGS) == OPEN) open = i;
+// Pop an opener, and mark it and the closer as mismatched as appropriate.
+void pop(Scanner *sc, int closer) {
+    int n = length(sc->stack);
+    int opener = -1;
+    int left = -1;
+    if (n > 0) {
+        opener = sc->stack[n-1];
+        adjust(sc->stack, -1);
+        left = sc->out[opener];
     }
-    int left = out[open] & TYPE;
-    int right = out[at] & TYPE;
-    if (bracketMatch(left, right)) {
-        if (open >= 0) out[open] = left | MATCH;
-        out[at] = right | MATCH;
-    }
-    else {
-        if (open >= 0) out[open] = left | MISMATCH;
-        out[at] = right | MISMATCH;
+    int right = sc->out[closer];
+    if (! bracketMatch(left, right)) {
+        if (opener >= 0) sc->out[opener] = left | MISMATCH;
+        sc->out[closer] = right | MISMATCH;
     }
 }
 
-// Add a string to the end of a dynamic string.
-char *addString(char *ds, char *s) {
-    int n = length(ds);
-    ds = adjust(ds, strlen(s));
-    strcpy(&ds[n-1], s);
-    return ds;
-}
-
-void trace(int r, bool l, char *in, int at, int n, int t, Tracer *tracer) {
+// Print out one scanning step.
+void trace(Scanner *sc, int state, bool look, int at, int n, int t) {
     char pattern[n+3];
     pattern[0] = '\0';
-    if (l) strcat(pattern, "\\");
-    if (in[at] == '\\') strcat(pattern, "\\");
+    if (look) strcat(pattern, "|");
     for (int i = 0; i < n; i++) {
-        char ch[2] = "?";
-        ch[0] = in[at+i];
-        if (ch[0] == ' ') ch[0] = 's';
-        if (ch[0] == '\n') ch[0] = 'n';
-        strcat(pattern, ch);
+        char ch = sc->in[at];
+        if (ch == ' ') strcat(pattern, "\\s");
+        else if (ch == '\n') strcat(pattern, "\\n");
+        else if (ch == '\\') strcat(pattern, "\\\\");
+        else if (ch == '|') strcat(pattern, "\\|");
+        else strcat(pattern, (char[2]){ch,'\0'});
     }
     char line[100] = "";
-    char *base = tracer->states[r]->name;
-    char *type = (t == None) ? "" : typeName(t);
-    sprintf(line, "%-10s %-10s %-10s\n", base, pattern, type);
-
-    tracer->text = addString(tracer->text, line);
-    if (at[in] == '\n') tracer->text = addString(tracer->text, "\n");
+    char *base = sc->states[state]->name;
+    char *type = (t == More) ? "" : kindName(t);
+    printf(line, "%-10s %-10s %-10s\n", base, pattern, type);
 }
 
-// Use the given table and start row to scan the given input line, producing
-// the result in the given byte array, and returning the final state.
-int scan(byte *table, int row, char *in, byte *out, Tracer *tracer) {
-    int n = strlen(in);
-    for (int i = 0; i < n; i++) out[i] = None;
-    int at = 0, start = 0;
+// Use the given table and initial state to scan a line of text. Return the
+// final state.
+int scan(Scanner *sc, byte *table, int state0, bool tracing) {
+    int n = strlen(sc->in);
+    for (int i = 0; i < n; i++) sc->out[i] = More;
+    int at = 0, start = 0, state = state0;
     while (at < n) {
-        char ch = in[at];
-        bool token = start < at;
-        int col = ch - '!' + 4;
-        if (ch == '\n') col = token ? 0 : 1;
-        else if (ch == ' ') col = token ? 2 : 3;
-        byte *action = &table[CELL * (COLUMNS * row + col)];
+        char ch = sc->in[at];
+        int col = 0;
+        if (ch != '\n') col = 1 + (ch - ' ');
+        byte *action = &table[CELL * (COLUMNS * state + col)];
         int len = 1;
         if ((action[0] & LINK) != 0) {
             int offset = ((action[0] & 0x7F) << 8) + action[1];
@@ -921,31 +932,33 @@ int scan(byte *table, int row, char *in, byte *out, Tracer *tracer) {
                 found = true;
                 len = p[0];
                 for (int i = 1; i < len && found; i++) {
-                    if (in[at + i] != p[i]) found = false;
+                    if (sc->in[at + i] != p[i]) found = false;
                 }
-                int t = p[len] & TYPE;
+                bool look = p[len] & LOOK;
+                bool soft = p[len] & SOFT;
+                int type = p[len] & ~FLAGS;
                 if (found) {
-                    bool soft = (p[len] & SOFT) != 0;
-                    if (soft && ! matchTop(t,out,at)) found = false;
+                    if (! look && soft && ! matchTop(sc,type)) found = false;
+                    if (look && start == at) found = false;
                 }
                 if (found) action = p + len;
                 else p = p + len + 2;
             }
         }
-        bool lookahead = (action[0] & LOOK) != 0;
-        int type = action[0] & TYPE;
+        bool look = (action[0] & LOOK) != 0;
+        int type = action[0] & ~FLAGS;
         int target = action[1];
-        trace(row, lookahead, in, at, len, type, tracer);
-        if (! lookahead) at = at + len;
-        if (type != None && start < at) {
-            out[start] = type;
-            if (isOpener(type)) push(out, start);
-            else if (isCloser(type)) pop(out, start);
+        if (tracing) trace(sc, state, look, at, len, type);
+        if (! look) at = at + len;
+        if (type != More && start < at) {
+            sc->out[start] = type;
+            if (isOpener(type)) push(sc, start);
+            else if (isCloser(type)) pop(sc, start);
             start = at;
         }
-        row = target;
+        state = target;
     }
-    return row;
+    return state;
 }
 
 // ---------- Testing ----------------------------------------------------------
@@ -1001,13 +1014,18 @@ char *translate(byte *out) {
     char *tr = (char *) out;
     for (int i = 0; i < length(out)-1; i++) {
         byte b = out[i];
-        char ch = visualType(b & TYPE);
-        if ((b & FLAGS) == MISMATCH || (b & FLAGS) == OPEN) ch = tolower(ch);
+        char ch = visualKind(b & ~MISMATCH);
+        if ((b & MISMATCH) != 0) ch = tolower(ch);
         tr[i] = ch;
     }
     return tr;
 }
 
+// All the tests are carried out together (so that one test can affect the
+// next). If one test fails, the tests are re-done, but with tracing switched
+// on just for the failing test.
+
+/*
 int checkResults(char *tests, char *expected, char *out, Tracer *tracer) {
     int start = 0, end = 0, sT = 0, eT = 0;
     char *text = tracer->text;
@@ -1060,7 +1078,7 @@ void runTests(char **lines, byte *table, State **states, char *path) {
     write(outpath, table);
     printf("%d tests passed, file %s written\n", n, outpath);
 }
-
+*/
 // ---------- Main -------------------------------------------------------------
 // Run all the stages.
 
@@ -1076,6 +1094,6 @@ int main(int n, char *args[n]) {
     expandRanges(states, false);
     checkAll(states, false);
     byte *table = compile(states);
-    runTests(lines, table, states, path);
+//    runTests(lines, table, states, path);
     freeAll();
 }

@@ -14,7 +14,7 @@ start   _Atomic _Bool _Complex _Generic _Imaginary      type
 start   bool char double float int long                 type
 start   short signed unsigned void                      type
 type    a..z A..Z 0..9 _ \\U \\u                        id
-type    \                                               start Decl
+type    |                                               start Decl
 
 // Other keywords. Include false, true from <stdbool.h>. The key states check
 // for added characters. The enum and struct keywords cause bracket checking.
@@ -26,25 +26,25 @@ start   return sizeof static switch true typedef union          key
 start   volatile while                                          key
 start   enum struct                                             key1
 key     a..z A..Z 0..9 _ \\U \\u                                id
-key     \                                                       start Key
+key     |                                                       start Key
 key1    a..z A..Z 0..9 _ \\U \\u                                id
-key1    \                                                       decl Key
+key1    |                                                       decl Key
 
 // Identifiers
 
 start   a..z A..Z _ \\U \\u        id
 id      a..z A..Z 0..9 _ \\U \\u   id
-id      \                          start Id
+id      |                          start Id
 
 // Operators and signs. A + or - is marked infix, even though it can be prefix,
 // because it is far more likely to indicate a continuation line than to be the
 // start of a statement.
 
-start   ++ -- ! ~                                   start Unary
-start   != %= % && &= & *= * += + -= - /= / ?       start Op
-start   <<= << <= < == >= >>= >> > ^= ^ |= || |     start Op
-start   ## , ; : -> ...                             start Mark
-start   =                                           init  Op
+start   ++ -- ! ~                                       start Unary
+start   != %= % && &= & *= * += + -= - /= / ?           start Op
+start   <<= << <= < == >= >>= >> > ^= ^ \|= \|\| \|     start Op
+start   ## , ; : -> ...                                 start Mark
+start   =                                               init  Op
 
 // Brackets. By default { and } are block brackets. To help with semicolon
 // insertion, the opener { is marked as a group bracket instead, by the
@@ -61,94 +61,92 @@ start  )   start RoundE
 // Check for declaration brackets  enum {  or  struct {
 decl   {                           start GroupB
 decl   a..z A..Z _ \\U \\u         decl1
-decl   \s \n                       decl
-decl   \                           start
+decl   \s \n                       decl  Gap
+decl   |                           start
 
 // Check for  enum ID  or  struct ID
 decl1   a..z A..Z 0..9 _ \\U \\u   decl1
-decl1   \                          decl2 Id
+decl1   |                          decl2 Id
 
 // Check for  enum ID {  or  struct ID {
 decl2   {                          start GroupB
-decl2   \s \n                      decl2
-decl2   \                          start
+decl2   \s \n                      decl2 Gap
+decl2   |                          start
 
 // Check for initialiser brackets  = {
 init    {                          start GroupB
 init    (                          init1 Round2B
-init    \s \n                      init
-init    \                          start
+init    \s \n                      init  Gap
+init    |                          start
 
 // Check for   = (   or   = (struct
 init1   struct                     init1 Key
 init1   a..z A..Z _ \\U \\u        init2
-init1   \s \n                      init1
-init1   \                          start
+init1   \s \n                      init1 Gap
+init1   |                          start
 
 // Check for   = (ID   or   = (struct ID
 init2   a..z A..Z 0..9 _ \\U \\u   init2
-init2   \                          init3 Id
+init2   |                          init3 Id
 
 // Check for   = (ID)   or   = (struct ID)
 init3   )                          init4 Round2E
-init3   \s \n                      init3
-init3   \                          start
+init3   \s \n                      init3 Gap
+init3   |                          start
 
 // Check for   = (ID) {   or   = (struct ID) {
 init4   {                          start GroupB
-init4   \                          start
+init4   |                          start
 
 // A dot starts a number, or is an operator.
 
 start   .      dot
-dot     \0..9  decimal
-dot     \      start Op
+dot     |0..9  decimal
+dot     |      start Op
 
 // Character literals.
 
-start   '      char QuoteB
+start   '      char  QuoteB
 char    !..~   char
 char    \\'    char
-char    \s     char Quote
-char    \'     char2 Quote
-char    \n     start QuoteE
-char2   '      start QuoteE
-char2   \      start Error
+char    |\s    char  Quote
+char    \s     char  Gap
+char    |'     char  Quote
+char    '      start QuoteE
+char    |\n    char  Quote
+char    \n     start Quote2E
 
 // String literals. Allow joiners
 
-start     "      string QuoteB
+start     "      string  QuoteB
 string    !..~   string
 string    \\"    string
-string    \\\    string2 Quote
-string    \s     string Quote
-string    \"     string2 Quote
-string    \n     start QuoteE
-
-string2   \\     string3
-string2   "      start QuoteE
-string2   \      string
-string3   \n     string Mark
-string3   \s     string Quote
-string3   \      string
+string    |\s    string  Quote
+string    \s     string  Gap
+string    |"     string  Quote
+string    "      start   QuoteE
+string    |\n    string  Quote
+string    \n     start   Quote2E
 
 // One-line comment.
 
-start    //     note Note
+start    //     note  CommentB
 note     !..~   note
-note     \s     note Note
-note     \n     start Note
+note     |\s    note  Comment
+note     \s     note  Gap
+note     |\n    note  Comment
+note     \n     start CommentE
 
 // Multi-line comment.
 
-start     /*     comment CommentB
-comment   !..~   comment
-comment   \s \n  comment Comment
-comment   \/*    comment2 Comment
-comment   \*/    comment2 Comment
-comment2  /*     comment Error
-comment2  */     start CommentE
-comment2  \      start Error
+start     /*       comment CommentB
+comment   !..~     comment
+comment   |\s |\n  comment Comment
+comment   \s \n    comment Gap
+comment   |/*      comment Comment
+comment   /*       comment Error
+comment   |*/      comment Comment
+comment   */       start   CommentE
 
 // Numbers. There is no attempt to detect malformed numbers.
 start    0..9           decimal
@@ -156,42 +154,45 @@ start    0x 0X          hex
 decimal  0..9 .         decimal
 decimal  e+ e- E+ E-    decimal
 decimal  u U l L ll LL  decimal
-decimal  \              start Value
+decimal  |              start Value
 hex      0..9 .         hex
 hex      a..f A..F      hex
 hex      p+ p- P+ P-    hex
 hex      u U l L ll LL  hex
-hex      \              start Value
+hex      |              start Value
 
 // Reserved words. Preprocessor tokens are handled as normal tokens, except for
 // <filename> after #include.
 
 start     #                                 hash Alt
-hash      \s                                hash
+hash      \s                                hash Gap
 hash      include                           include Alt
 hash      define elif else endif error if   start Alt
 hash      ifdef ifndef line pragma undef    start Alt
-hash      \                                 start
+hash      |                                 start
 
-include   <                                 filename Quote
-include   \s                                include
-include   \                                 start
+include   <                                 filename QuoteB
+include   \s                                include Gap
+include   |                                 start
 
 filename  !..~                              filename
-filename  \>                                filename2 Quote
-filename  \s                                filename Quote
-filename  \n                                start Quote
+filename  |>                                filename Quote
+filename  >                                 start Quote
+filename  |\s                               filename Quote
+filename  \s                                filename Gap
+filename  |\n                               filename Quote
+filename  \n                                start Quote2E
 
-filename2 >                                 start Quote
-filename2 \                                 start Error
+// Backslash newline, e.g. in #define. Give the backslash type Sign to avoid
+// an unwanted newline. Handle Illegal characters and white space.
 
-// Backslash newline, e.g. in #define
+start |\\\n join
+join  \\    join  Sign
+join  \n    start Gap
+join  |     start Error
 
-start \\ start Mark
-
-// Illegal characters and white space.
-start     $ @ `   start Error
-start     \s \n   start
+start     \\ $ @ `   start Error
+start     \s \n      start Gap
 
 // ---------- Tests ------------------------------------------------------------
 // In the expected output for a test, the start of each token is marked by the
