@@ -86,6 +86,12 @@ void *adjust(void *a, int d) {
     return h + 1;
 }
 
+// Set the list length to 0.
+void clear(void *a) {
+    header *h = (header *) a - 1;
+    h->length = 0;
+}
+
 // Allocate a string or structure directly, and put it in the store.
 void *newObject(int bytes) {
     if (store == NULL) newStore();
@@ -275,14 +281,13 @@ State **getStates(Rule **rules, bool print) {
 }
 
 // ---------- Patterns ---------------------------------------------------------
-// A pattern is like a rule from the source text, but with just a single pattern
-// string. A pattern has a line number, base and target states, a lookahead
-// fkag, a soft flag, an unescaped pattern string, and a type. A pattern string
-// is unescaped by removing an initial | and setting the lookahead flag, and
-// replacing the escapes \s \n \\ \| by their literal characters.
+// A pattern object holds a single pattern from the source text, with supporting
+// information. It has an unescaped pattern string, a lookahead flag, a soft
+// flag, and the line number, base and target states and type from its rule.
+// A pattern object can be regarded as a one-pattern mini-rule.
 
 struct pattern {
-    int line; State *base, *target; bool look, soft; char *string; int type;
+    char *string; bool look, soft; int line; State *base, *target; int type;
 };
 typedef struct pattern Pattern;
 
@@ -350,9 +355,9 @@ Pattern **collectPatterns(Pattern **patterns, Rule *rule, State **states) {
     return patterns;
 }
 
-// Display a pattern.
-void printPattern(Pattern *p) {
-    printf("%-10s ", p->base->name);
+// Print a pattern string by putting back the escapes. Return the number of
+// characters printed.
+int printPattern(Pattern *p) {
     char *s = p->string;
     int sn = strlen(s);
     int j = 0;
@@ -364,6 +369,13 @@ void printPattern(Pattern *p) {
         else if (s[i] == '|') { printf("\\|"); j += 2; }
         else { printf("%c", s[i]); j++; }
     }
+    return j;
+}
+
+// Display a pattern as a mini-rule.
+void printPatternRule(Pattern *p) {
+    printf("%-10s ", p->base->name);
+    int j = printPattern(p);
     while (j < 15) { printf(" "); j++; }
     printf("%-10s ", p->target->name);
     if (p->type != More) printf("%-10s", kindName(p->type));
@@ -383,20 +395,21 @@ bool compatible(Pattern *p, Pattern *q) {
     return true;
 }
 
-// Print a state's patterns. After range expansion and sorting, a state may have
-// runs of many one-character patterns. Gather a run and print it as a range.
+// Print a state's patterns as mini-rules. After range expansion and sorting, a
+// state may have runs of many one-character patterns. Gather a run and print
+// it as a range.
 void printState(State *state) {
     Pattern **ps = state->patterns;
     for (int i = 0; i < length(ps); i++) {
         int j = i;
         while (j < length(ps)-1 && compatible(ps[j], ps[j+1])) j++;
-        if (j == i) printPattern(ps[i]);
+        if (j == i) printPatternRule(ps[i]);
         else {
             Pattern range = *ps[i];
             char string[7];
             sprintf(string, "%c..%c", ps[i]->string[0], ps[j]->string[0]);
             range.string = string;
-            printPattern(&range);
+            printPatternRule(&range);
             i = j;
         }
     }
@@ -432,7 +445,7 @@ void fill() {
     }
 }
 
-// Check for a range such as 0..9 or |0..9 or subranges or overlapping ranges.
+// Check for a range or subranges or overlapping ranges.
 bool isRange(char *s) {
     return (strlen(s) == 4 && s[1] == '.' && s[2] == '.');
 }
@@ -507,7 +520,7 @@ Pattern **derangeList(Pattern **patterns) {
     return patterns;
 }
 
-// Expand all ranges in all states. Optionally print.
+// Expand all ranges in all states.
 void derangeAll(State **states) {
     for (int i = 0; i < length(states); i++) {
         states[i]->patterns = derangeList(states[i]->patterns);
@@ -545,8 +558,8 @@ void sort(Pattern **list) {
 
 // Where a state has two or more patterns for the same string, add a soft flag
 // to all except the last. Check that either the patterns are for close
-// brackets , or that one is a lookahead which stays in the same state and has
-// a type, and the other is a non-lookahead.
+// brackets, or that one is a lookahead which stays in the same state and has a
+// type, and the other is a non-lookahead.
 void addSoft(State *s) {
     for (int i = 0; i < length(s->patterns) - 1; i++) {
         Pattern *p = s->patterns[i];
@@ -781,7 +794,7 @@ enum { COLUMNS = 96, CELL = 2 };
 // bracket. With the LOOK flag, it represents a lookahead which only applies if
 // there is a non-empty current token.
 
-enum { LINK = 0x80, LOOK = 0x80, SOFT = 0x40, FLAGS = 0xC0 };
+enum { LINK = 0x80, SOFT = 0x80, LOOK = 0x40, FLAGS = 0xC0 };
 
 // When there is more than one pattern for a state starting with a character,
 // enter [LINK+hi, lo] where [hi,lo] is the offset to the overflow area.
@@ -854,13 +867,30 @@ byte *compile(State **states) {
 // for an identifier). The bytes corresponding to the remaining characters of
 // the token contain More. A stack is used for bracket matching.
 
-// A scanner contains the source text, its line number, the output byte array, a
-// stack of unmatched open brackets, and the states for tracing.
-struct scanner { char *in; int line; byte *out; int *stack; State **states; };
+// A scanner contains the transition table, the input, expected output and
+// actual output, a stack of unmatched open brackets, the states and start and
+// length for tracing.
+struct scanner {
+    byte *table; char *in, *expect; byte *out; int *stack;
+    State **states; int trace, end;
+};
 typedef struct scanner Scanner;
 
 // Brackets are marked with a flag if they are mismatched.
 enum { MISMATCH = 0x80 };
+
+// Create scanner.
+Scanner *newScanner(byte *table, State **states) {
+    Scanner *sc = newObject(sizeof(Scanner));
+    sc->table = table;
+    sc->in = newList(1);
+    sc->expect = newList(1);
+    sc->out = newList(1);
+    sc->stack = newList(sizeof(int));
+    sc->states = states;
+    sc->trace = sc->end = -1;
+    return sc;
+}
 
 // Check if a closer matches the top opener.
 bool matchTop(Scanner *sc, int type) {
@@ -895,7 +925,7 @@ void pop(Scanner *sc, int closer) {
 
 // Print out one scanning step.
 void trace(Scanner *sc, int state, bool look, int at, int n, int t) {
-    char pattern[n+3];
+    char pattern[2*n+2];
     pattern[0] = '\0';
     if (look) strcat(pattern, "|");
     for (int i = 0; i < n; i++) {
@@ -906,27 +936,25 @@ void trace(Scanner *sc, int state, bool look, int at, int n, int t) {
         else if (ch == '|') strcat(pattern, "\\|");
         else strcat(pattern, (char[2]){ch,'\0'});
     }
-    char line[100] = "";
     char *base = sc->states[state]->name;
     char *type = (t == More) ? "" : kindName(t);
-    printf(line, "%-10s %-10s %-10s\n", base, pattern, type);
+    printf("%-10s %-10s %-10s\n", base, pattern, type);
 }
 
-// Use the given table and initial state to scan a line of text. Return the
-// final state.
-int scan(Scanner *sc, byte *table, int state0, bool tracing) {
-    int n = strlen(sc->in);
+// Use the given table and initial state to scan a source text.
+void scan(Scanner *sc) {
+    int n = length(sc->in);
     for (int i = 0; i < n; i++) sc->out[i] = More;
-    int at = 0, start = 0, state = state0;
+    int at = 0, start = 0, state = 0;
     while (at < n) {
         char ch = sc->in[at];
         int col = 0;
         if (ch != '\n') col = 1 + (ch - ' ');
-        byte *action = &table[CELL * (COLUMNS * state + col)];
+        byte *action = &sc->table[CELL * (COLUMNS * state + col)];
         int len = 1;
         if ((action[0] & LINK) != 0) {
             int offset = ((action[0] & 0x7F) << 8) + action[1];
-            byte *p = table + offset;
+            byte *p = sc->table + offset;
             bool found = false;
             while (! found) {
                 found = true;
@@ -937,8 +965,8 @@ int scan(Scanner *sc, byte *table, int state0, bool tracing) {
                 bool look = p[len] & LOOK;
                 bool soft = p[len] & SOFT;
                 int type = p[len] & ~FLAGS;
-                if (found) {
-                    if (! look && soft && ! matchTop(sc,type)) found = false;
+                if (found && soft) {
+                    if (! look && ! matchTop(sc,type)) found = false;
                     if (look && start == at) found = false;
                 }
                 if (found) action = p + len;
@@ -948,7 +976,9 @@ int scan(Scanner *sc, byte *table, int state0, bool tracing) {
         bool look = (action[0] & LOOK) != 0;
         int type = action[0] & ~FLAGS;
         int target = action[1];
-        if (tracing) trace(sc, state, look, at, len, type);
+        if (sc->trace <= at && at < sc->end) {
+            trace(sc, state, look, at, len, type);
+        }
         if (! look) at = at + len;
         if (type != More && start < at) {
             sc->out[start] = type;
@@ -958,7 +988,6 @@ int scan(Scanner *sc, byte *table, int state0, bool tracing) {
         }
         state = target;
     }
-    return state;
 }
 
 // ---------- Testing ----------------------------------------------------------
@@ -967,44 +996,30 @@ int scan(Scanner *sc, byte *table, int state0, bool tracing) {
 // is a test and one immediately following and starting with < is the expected
 // output.
 
-// Extract the tests from the source lines, as a single string with newlines.
-char *extractTests(char **lines) {
-    char *tests = newList(1);
+// Extract the tests and expected output from the source lines. Add a newline to
+// a test line. If the expected output line lacks a character for the type of
+// the newline, add a space.
+void extract(Scanner *sc, char **lines) {
     for (int i = 0; i < length(lines); i++) {
         if (lines[i][0] != '>') continue;
-        int n = strlen(lines[i]);
-        int to = length(tests);
-        tests = adjust(tests, +n);
-        strcpy(&tests[to], lines[i]+1);
-        tests[to+n-1] = '\n';
-    }
-    int n = length(tests);
-    tests = adjust(tests, +1);
-    tests[n] = '\0';
-    return tests;
-}
-
-// Extract expected outputs, make sure they line up with the tests.
-char *extractExpected(char *tests, char **lines) {
-    char *expected = newList(1);
-    for (int i = 0; i < length(lines); i++) {
-        if (lines[i][0] != '<') continue;
-        int n = strlen(lines[i]);
-        int to = length(expected);
-        expected = adjust(expected, +n);
-        strncpy(&expected[to], lines[i]+1, n);
-        int at = length(expected);
-        if (at > length(tests) || tests[at-1] != '\n') {
-            error("output doesn't line up on line %d", i+1);
+        if (i == length(lines) - 1 || lines[i+1][0] != '<') {
+            error("test without expected output on line %d", i+1);
         }
+        int p = length(sc->in);
+        int n = strlen(lines[i]);
+        sc->in = adjust(sc->in, n);
+        strncpy(&sc->in[p], lines[i]+1, n-1);
+        sc->in[p+n-1] = '\n';
+        int n1 = strlen(lines[i+1]);
+        if (n1 < n || n1 > n+1) {
+            error("expected output has wrong length on line %d", i+1);
+        }
+        sc->expect = adjust(sc->expect, n);
+        strncpy(&sc->expect[p], lines[i+1]+1, n1);
+        if (n1 == n) sc->expect[p+n-1] = ' ';
+
     }
-    int n = length(expected);
-    expected = adjust(expected, +1);
-    expected[n] = '\0';
-    if (length(expected) != length(tests)) {
-        error("test without output");
-    }
-    return expected;
+    sc->out = adjust(sc->out, length(sc->in));
 }
 
 // Translate the output bytes to characters, in place. An ordinary type becomes
@@ -1012,7 +1027,7 @@ char *extractExpected(char *tests, char **lines) {
 // unmatched brackets become lower case.
 char *translate(byte *out) {
     char *tr = (char *) out;
-    for (int i = 0; i < length(out)-1; i++) {
+    for (int i = 0; i < length(out); i++) {
         byte b = out[i];
         char ch = visualKind(b & ~MISMATCH);
         if ((b & MISMATCH) != 0) ch = tolower(ch);
@@ -1021,66 +1036,50 @@ char *translate(byte *out) {
     return tr;
 }
 
-// All the tests are carried out together (so that one test can affect the
-// next). If one test fails, the tests are re-done, but with tracing switched
-// on just for the failing test.
-
-/*
-int checkResults(char *tests, char *expected, char *out, Tracer *tracer) {
-    int start = 0, end = 0, sT = 0, eT = 0;
-    char *text = tracer->text;
-    int count = 0;
-    while (tests[end] != '\0') {
-        while (end == start || tests[end-1] != '\n') end++;
-        while (eT < sT+2 || text[eT-1] != '\n' || text[eT-2] != '\n') eT++;
-        for (int i = start; i < end-1; i++) {
-            if (expected[i] != (char)out[i]) {
-                printf("Test failed. "
-                    "Input, expected output and actual output are:\n");
-                printf("%.*s\n", end-start-1, &tests[start]);
-                printf("%.*s\n", end-start-1, &expected[start]);
-                printf("%.*s\n", end-start-1, &out[start]);
-                printf("\nTRACE:\n");
-                printf("%.*s", eT-sT, &text[sT]);
-                exit(1);
-            }
-        }
-        start = end;
-        sT = eT;
-        count++;
+// Check the scanner output against the expected output. Set the start and end
+// indexes of a failed test. Report it. Return success or failure.
+bool checkResults(Scanner *sc) {
+    char *out = translate(sc->out);
+    int fail = -1;
+    for (int i = 0; i < length(sc->in) && fail < 0; i++) {
+        if (out[i] == sc->expect[i]) continue;
+        fail = i;
     }
-    return count;
+    if (fail < 0) return true;
+    for (sc->trace = fail; sc->trace >= 0; sc->trace--) {
+        if (sc->trace == 0 || sc->in[sc->trace - 1] == '\n') break;
+    }
+    for (sc->end = sc->trace + 1; ; sc->end++) {
+        if (sc->in[sc->end-1] == '\n') break;
+    }
+    printf("Test failed. The input, expected output, "
+        "actual output, and trace are:\n\n");
+    printf(">%.*s\n", sc->end - sc->trace - 1, &sc->in[sc->trace]);
+    printf("<%.*s\n", sc->end - sc->trace, &sc->expect[sc->trace]);
+    printf("<%.*s\n\n", sc->end - sc->trace, &out[sc->trace]);
+    return false;
 }
+
+// Stage 8: Run the tests and check the results. If there is a failure, run the
+// tests again with tracing switched on for the failed test.
+bool runTests(Scanner *sc, char **lines) {
+    extract(sc, lines);
+    scan(sc);
+    bool ok = checkResults(sc);
+    if (ok) return true;
+    clear(sc->stack);
+    scan(sc);
+    return false;
+}
+
+// ---------- Main -------------------------------------------------------------
+// Run all the stages. On success, write out the table.
 
 void write(char *path, byte *table) {
     FILE *p = fopen(path, "wb");
     fwrite(table, length(table), 1, p);
     fclose(p);
 }
-
-// Stage 8: handle the tests (all at once). On success, write out the table.
-// On failure, write out the trace of the failed test.
-void runTests(char **lines, byte *table, State **states, char *path) {
-    char *tests = extractTests(lines);
-    char *expected = extractExpected(tests, lines);
-    byte *out = newList(1);
-    out = adjust(out, length(tests));
-    Tracer *tracer = newObject(sizeof(Tracer));
-    tracer->states = states;
-    tracer->text = newList(1);
-    adjust(tracer->text, +1);
-    tracer->text[0] = '\0';
-    scan(table, 0, tests, out, tracer);
-    int n = checkResults(tests, expected, translate(out), tracer);
-    char outpath[strlen(path)+1];
-    strcpy(outpath, path);
-    strcpy(outpath + strlen(path) - 4, ".bin");
-    write(outpath, table);
-    printf("%d tests passed, file %s written\n", n, outpath);
-}
-*/
-// ---------- Main -------------------------------------------------------------
-// Run all the stages.
 
 int main(int n, char *args[n]) {
     if (n != 2) error("usage: compile lang.txt");
@@ -1094,6 +1093,13 @@ int main(int n, char *args[n]) {
     expandRanges(states, false);
     checkAll(states, false);
     byte *table = compile(states);
-//    runTests(lines, table, states, path);
+    Scanner *sc = newScanner(table, states);
+    bool ok = runTests(sc, lines);
+    if (! ok) return 1;
+    char outpath[strlen(path)+1];
+    strcpy(outpath, path);
+    strcpy(outpath + strlen(path) - 4, ".bin");
+    write(outpath, table);
+    printf("Tests passed, file %s written\n", outpath);
     freeAll();
 }

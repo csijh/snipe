@@ -118,35 +118,34 @@ char    \n     start Quote2E
 
 // String literals. Allow joiners
 
-start     "      string  QuoteB
-string    !..~   string
-string    \\"    string
-string    |\s    string  Quote
-string    \s     string  Gap
-string    |"     string  Quote
-string    "      start   QuoteE
-string    |\n    string  Quote
-string    \n     start   Quote2E
+start   "           string  QuoteB
+string  !..~ \\"    string
+string  |\s |\n |"  string  Quote
+string  |\\\n       string2 Quote
+string  \s          string  Gap
+string  "           start   QuoteE
+string  \n          start   Quote2E
+
+string2 \\          string2 Sign
+string2 \n          string  Gap
+string2 |           string  Error
 
 // One-line comment.
 
-start    //     note  CommentB
-note     !..~   note
-note     |\s    note  Comment
-note     \s     note  Gap
-note     |\n    note  Comment
-note     \n     start CommentE
+start  //       note  CommentB
+note   !..~     note
+note   |\s |\n  note  Comment
+note   \s       note  Gap
+note   \n       start CommentE
 
 // Multi-line comment.
 
-start     /*       comment CommentB
-comment   !..~     comment
-comment   |\s |\n  comment Comment
-comment   \s \n    comment Gap
-comment   |/*      comment Comment
-comment   /*       comment Error
-comment   |*/      comment Comment
-comment   */       start   CommentE
+start     /*               comment CommentB
+comment   !..~             comment
+comment   |\s |\n |/* |*/  comment Comment
+comment   \s \n            comment Gap
+comment   /*               comment Error
+comment   */               start   CommentE
 
 // Numbers. There is no attempt to detect malformed numbers.
 start    0..9           decimal
@@ -237,21 +236,21 @@ start     \s \n      start Gap
 
 // Character literals, including unclosed at end of line
 > 'x' '\'' 'x
-< QQQ QQ-Q qQ
+< QQQ QQ-Q qQq
 
 // String literals, including unclosed
 > "hello world" "a\"b" "unclosed
-< QQ---- Q----Q QQ---Q qQ-------
+< QQ---- Q----Q QQ---Q qQ-------q
 
 // String literal with joiner
 > "hello \
-< QQ---- M
+< QQ---- S
 > world"
 < Q----Q
 
 // One line comment
 > n = 0; // note
-< I O VM N- N---
+< I O VM C- C---C
 
 // Numbers
 > 42 1.2e+3 4.5E-6 0x7f 0x7F 0x7c.def 0xa.bcp+d 0xaU 0xaL
@@ -267,11 +266,11 @@ start     \s \n      start Gap
 
 // Joiner
 > #define f(x) \
-< AA----- IRIR M
+< AA----- IRIR S
 
 // Illegal characters
 > $ @ `
-< W W W
+< E E E
 
 // Leading spaces
 >    x
@@ -310,10 +309,10 @@ start     \s \n      start Gap
 < D-- I-SS O G VM VM V-GM
 
 > char *s = "a\nb\0c\04d";
-< D--- OI O QQQ--Q--Q---QM
+< D--- OI O QQ----------QM
 
 > char *s = "\037e\038f\xffg";
-< D--- OI O QQ----Q----Q----QM
+< D--- OI O QQ--------------QM
 
 > obj.x, obj->x, f(x)
 < I--OIM I--M-IM IRIR
@@ -322,4 +321,4 @@ start     \s \n      start Gap
 < I O I   RIRM
 
 > s = "*/"//"; /* abc "*/"//";
-< I O QQ-QN-N- N- N-- N-------
+< I O QQ-QC-C- C- C-- C-------C
