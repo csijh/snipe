@@ -1,4 +1,4 @@
-// Snipe editor. Free and open source, see licence.txt.
+// The Snipe editor is free and open source. See licence.txt.
 
 // TODO: use 4 gap buffers.
 // Store an array of variable-length strings, e.g. the lines or tags of a file.

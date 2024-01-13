@@ -1,4 +1,4 @@
-// Snipe editor. Free and open source, see licence.txt.
+// The Snipe editor is free and open source. See licence.txt.
 #include "text.h"
 
 // Brackets are matched forwards from the beginning of the text to the cursor,

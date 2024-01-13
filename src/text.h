@@ -1,4 +1,4 @@
-// Snipe editor. Free and open source, see licence.txt.
+// The Snipe editor is free and open source. See licence.txt.
 #include "kinds.h"
 
 // Store the source text, with the bytes accessed using array-like indexes. For

@@ -1,5 +1,5 @@
-// Snipe event handling. Free and open source. See licence.txt.
-#include "events.h"
+// The Snipe editor is free and open source. See licence.txt.
+#include "event.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -77,7 +77,7 @@ void printEvent(event e, int x, int y, char const *t, char *end) {
     printf("%s", end);
 }
 
-#ifdef TESTevents
+#ifdef eventTest
 
 int main(int n, char const *args[]) {
     setbuf(stdout, NULL);

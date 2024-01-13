@@ -1,4 +1,4 @@
-// Snipe editor. Free and open source, see licence.txt.
+// The Snipe editor is free and open source. See licence.txt.
 // TODO: allow for variable width characters (e.g. Asian).
 // TODO: and carets (inserted bytes?, separate issue?)
 // TODO: decide how to access text (get(+-), ~ auto)
@@ -13,11 +13,6 @@
 
 // A display structure deals with the graphics aspects of the editor window.
 typedef struct display Display;
-
-// A shade is a colour stored in RGB format. A theme is an array of 16 shades,
-// where the background shades are among the first 8.
-typedef unsigned int shade;
-typedef shade *theme;
 
 // A token is a fragment of text with a style and a length.
 typedef struct token { unsigned char style, length; } token;
@@ -44,9 +39,6 @@ typedef unsigned char style;
 Display *newDisplay();
 
 void freeDisplay(Display *d);
-
-// Get a display handle, of a type which depends on the graphics library.
-void *getHandle(Display *d);
 
 // Draw some text from its UTF8 bytes and their styles.
 void drawPage(Display *d, char *bytes, style *styles);

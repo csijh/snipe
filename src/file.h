@@ -1,4 +1,4 @@
-// The Snipe editor is free and open source, see licence.txt.
+// The Snipe editor is free and open source. See licence.txt.
 
 // File and directory handling. Find files relative to the installation
 // directory or current directory, and read or write files or directories. In

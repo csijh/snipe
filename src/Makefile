@@ -1,4 +1,5 @@
 # The modules and their dependencies.
+check = check.c
 array = array.c
 unicode = unicode.c
 file = file.c unicode.c array.c
@@ -6,7 +7,9 @@ kinds = kinds.c
 text = text.c kinds.c
 brackets = brackets.c text.c kinds.c
 lines = lines.c text.c kinds.c
-display = display.c unicode.c kinds.c
+event = event.c
+handler = handler.c event.c unicode.c check.c
+display = display.c kinds.c $(handler)
 
 # Allegro libraries (-lallegro_main needed for OSX)
 allegro = -lallegro -lallegro_main -lallegro_font -lallegro_ttf

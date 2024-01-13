@@ -1,5 +1,7 @@
-// Snipe event handling. Free and open source. See licence.txt.
+// The Snipe editor is free and open source. See licence.txt.
 #include "handler.h"
+#include "unicode.h"
+#include "check.h"
 #include <allegro5/allegro.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,44 +14,47 @@ struct handler {
     ALLEGRO_TIMER *timer;
     char text[8]; int x, y;
     bool mouseButtonDown, shiftDown, ctrlDown;
+    int touchPoint;
 };
 
 handler *newHandler(void *window) {
-    handler *es = malloc(sizeof(handler));
-    es->window = window;
-    es->queue = al_create_event_queue();
-    try(es->queue != 0, "failed to create Allegro event queue.");
-    try(al_install_keyboard(), "failed to initialize keyboard.");
-    try(al_install_mouse(), "failed to initialize mouse.");
-    try(al_install_touch_input(), "failed to initialize touchpad.");
-    al_register_event_source(es->queue, al_get_display_event_source(window));
-    al_register_event_source(es->queue, al_get_keyboard_event_source());
-    al_register_event_source(es->queue, al_get_mouse_event_source());
-    es->timer = al_create_timer(2.0);
-    try(es->timer != NULL, "failed to create Allegro timer.");
-    al_register_event_source(es->queue, al_get_timer_event_source(es->timer));
+    handler *h = malloc(sizeof(handler));
+    h->window = window;
+    h->queue = al_create_event_queue();
+    check(h->queue != 0, "Failed to create Allegro event queue.");
+    check(al_install_keyboard(), "Failed to initialize keyboard.");
+    check(al_install_mouse(), "failed to initialize mouse.");
+    check(al_install_touch_input(), "failed to initialize touchpad");
+    al_register_event_source(h->queue, al_get_display_event_source(window));
+    al_register_event_source(h->queue, al_get_keyboard_event_source());
+    al_register_event_source(h->queue, al_get_mouse_event_source());
+    al_register_event_source(h->queue, al_get_touch_input_event_source());
+    h->timer = al_create_timer(2.0);
+    check(h->timer != NULL, "failed to create Allegro timer.");
+    al_register_event_source(h->queue, al_get_timer_event_source(h->timer));
 //    al_set_mouse_emulation_mode(ALLEGRO_MOUSE_EMULATION_TRANSPARENT);
-    al_start_timer(es->timer);
-    es->mouseButtonDown = es->shiftDown = es->ctrlDown = false;
-    return es;
+    al_start_timer(h->timer);
+    h->mouseButtonDown = h->shiftDown = h->ctrlDown = false;
+    h->touchPoint = 0;
+    return h;
 }
 
-void freeHandler(handler *es) {
-    al_destroy_timer(es->timer);
-    al_destroy_event_queue(es->queue);
+void freeHandler(handler *h) {
+    al_destroy_timer(h->timer);
+    al_destroy_event_queue(h->queue);
     al_uninstall_touch_input();
     al_uninstall_mouse();
     al_uninstall_keyboard();
-    free(es);
+    free(h);
 }
 
-char *getEventText(handler *es) { return es->text; }
-int getEventX(handler *es) { return es->x; }
-int getEventY(handler *es) { return es->y; }
+char *getEventText(handler *h) { return h->text; }
+int getEventX(handler *h) { return h->x; }
+int getEventY(handler *h) { return h->y; }
 
 // Convert a non-text Allegro keycode into an event. Handle C_SPACE, C_0... and
 // keypad keys.
-static event nonText(handler *es, bool shift, bool ctrl, int code) {
+static event nonText(handler *h, bool shift, bool ctrl, int code) {
     int offset = shift ? (ctrl ? 3 : 1) : (ctrl ? 2 : 0) ;
     if (code >= ALLEGRO_KEY_A && code <= ALLEGRO_KEY_Z) {
         return C_A + (code - ALLEGRO_KEY_A) * 4 + offset;
@@ -60,7 +65,7 @@ static event nonText(handler *es, bool shift, bool ctrl, int code) {
     if (code >= ALLEGRO_KEY_PAD_0 && code <= ALLEGRO_KEY_PAD_9) {
         if (ctrl) return C_0 + (code - ALLEGRO_KEY_PAD_0);
         else {
-            putUTF8('0' + (code - ALLEGRO_KEY_PAD_0), es->text);
+            putUTF8('0' + (code - ALLEGRO_KEY_PAD_0), h->text);
             return TEXT;
         }
     }
@@ -99,7 +104,7 @@ static event nonText(handler *es, bool shift, bool ctrl, int code) {
         case ALLEGRO_KEY_PAD_ENTER: return ENTER + offset;
         default: return IGNORE;
     }
-    putUTF8(ch, es->text);
+    putUTF8(ch, h->text);
     return TEXT;
 }
 
@@ -108,7 +113,7 @@ static event nonText(handler *es, bool shift, bool ctrl, int code) {
 // needed unless actually tracking a long key press. (The 'feature' that
 // C_A..C_Z produce unichar 1..26 isn't used, because it mucks up C_ENTER etc.
 // and KEYPAD keys must explicitly be sent to nonText.)
-static event keyboard(handler *es, ALLEGRO_EVENT *ae) {
+static event keyboard(handler *h, ALLEGRO_EVENT *ae) {
     int ch = ae->keyboard.unichar;
     int code = ae->keyboard.keycode;
     int mod = ae->keyboard.modifiers;
@@ -128,109 +133,125 @@ static event keyboard(handler *es, ALLEGRO_EVENT *ae) {
             if (ch == ' ') return C_SPACE;
             return IGNORE;
         }
-        putUTF8(ch, es->text);
+        putUTF8(ch, h->text);
         return TEXT;
     }
-    else return nonText(es, shift, ctrl, code);
+    else return nonText(h, shift, ctrl, code);
 }
 
 // Either mouse movement or scroll wheel.
-static event mouseMove(handler *es, ALLEGRO_EVENT *ae) {
+static event mouseMove(handler *h, ALLEGRO_EVENT *ae) {
     if (ae->mouse.dz != 0) {
-        es->y = ae->mouse.z;
+        h->y = ae->mouse.dz;
         return SCROLL;
     }
-    es->x = ae->mouse.x;
-    es->y = ae->mouse.y;
-    if (es->mouseButtonDown) return DRAG;
+    h->x = ae->mouse.x;
+    h->y = ae->mouse.y;
+    if (h->mouseButtonDown) return DRAG;
     else return IGNORE;
 }
 
 // Ignore all buttons except first, for now.
-static event mouseButton(handler *es, ALLEGRO_EVENT *ae, bool down) {
+static event mouseButton(handler *h, ALLEGRO_EVENT *ae, bool down) {
     if (ae->mouse.button != 1) return IGNORE;
-    es->mouseButtonDown = down;
-    printf("shift down %d\n", es->shiftDown);
-    if (down && es->shiftDown && es->ctrlDown) return SC_CLICK;
-    if (down && es->shiftDown) return S_CLICK;
-    if (down && es->ctrlDown) return SC_CLICK;
+    h->mouseButtonDown = down;
+    if (down && h->shiftDown && h->ctrlDown) return SC_CLICK;
+    if (down && h->shiftDown) return S_CLICK;
+    if (down && h->ctrlDown) return C_CLICK;
     if (down) return CLICK;
-    if (es->shiftDown && es->ctrlDown) return SC_DRAG;
-    if (es->shiftDown) return S_DRAG;
-    if (es->ctrlDown) return C_DRAG;
+    if (h->shiftDown && h->ctrlDown) return SC_DRAG;
+    if (h->shiftDown) return S_DRAG;
+    if (h->ctrlDown) return C_DRAG;
     return DRAG;
 }
 
 // Track shift and ctrl keys being pressed.
-static event trackModifiersDown(handler *es, ALLEGRO_EVENT *ae) {
+static event trackModifiersDown(handler *h, ALLEGRO_EVENT *ae) {
     if (ae->keyboard.keycode == ALLEGRO_KEY_LSHIFT ||
         ae->keyboard.keycode == ALLEGRO_KEY_RSHIFT) {
-        es->shiftDown = true;
+        h->shiftDown = true;
     }
     if (ae->keyboard.keycode == ALLEGRO_KEY_LCTRL ||
         ae->keyboard.keycode == ALLEGRO_KEY_RCTRL) {
-        es->ctrlDown = true;
+        h->ctrlDown = true;
     }
     return IGNORE;
 }
 
 // Track shift and ctrl keys being released.
-static event trackModifiersUp(handler *es, ALLEGRO_EVENT *ae) {
+static event trackModifiersUp(handler *h, ALLEGRO_EVENT *ae) {
     if (ae->keyboard.keycode == ALLEGRO_KEY_LSHIFT ||
         ae->keyboard.keycode == ALLEGRO_KEY_RSHIFT) {
-        es->shiftDown = false;
+        h->shiftDown = false;
     }
     if (ae->keyboard.keycode == ALLEGRO_KEY_LCTRL ||
         ae->keyboard.keycode == ALLEGRO_KEY_RCTRL) {
-        es->ctrlDown = false;
+        h->ctrlDown = false;
     }
     return IGNORE;
 }
 
-event getNextEvent(handler *es) {
+event getNextEvent(handler *h) {
     ALLEGRO_EVENT ae;
-    al_wait_for_event(es->queue, &ae);
+    al_wait_for_event(h->queue, &ae);
     switch(ae.type) {
         case ALLEGRO_EVENT_DISPLAY_CLOSE:
             return QUIT;
         case ALLEGRO_EVENT_DISPLAY_RESIZE:
-            al_acknowledge_resize(es->window);
+            al_acknowledge_resize(h->window);
+            return RESIZE;
+        case ALLEGRO_EVENT_DISPLAY_EXPOSE:
+        case ALLEGRO_EVENT_DISPLAY_FOUND:
+        case ALLEGRO_EVENT_DISPLAY_SWITCH_IN:
             return FRAME;
+        case ALLEGRO_EVENT_DISPLAY_SWITCH_OUT:
+            h->shiftDown = h->ctrlDown = h->mouseButtonDown = false;
+            return IGNORE;
         case ALLEGRO_EVENT_TIMER:
             printf("tick\n");
             return IGNORE;
         case ALLEGRO_EVENT_KEY_CHAR:
-            return keyboard(es, &ae);
+            return keyboard(h, &ae);
         case ALLEGRO_EVENT_KEY_DOWN:
-            return trackModifiersDown(es, &ae);
+            return trackModifiersDown(h, &ae);
         case ALLEGRO_EVENT_KEY_UP:
-            return trackModifiersUp(es, &ae);
+            return trackModifiersUp(h, &ae);
         case ALLEGRO_EVENT_MOUSE_AXES:
-            return mouseMove(es, &ae);
+            return mouseMove(h, &ae);
         case ALLEGRO_EVENT_MOUSE_BUTTON_DOWN:
-            return mouseButton(es, &ae, true);
+            return mouseButton(h, &ae, true);
         case ALLEGRO_EVENT_MOUSE_BUTTON_UP:
-            return mouseButton(es, &ae, false);
+            return mouseButton(h, &ae, false);
+        case ALLEGRO_EVENT_MOUSE_ENTER_DISPLAY:
+            return FOCUS;
+        case ALLEGRO_EVENT_MOUSE_LEAVE_DISPLAY:
+            return DEFOCUS;
+        case ALLEGRO_EVENT_TOUCH_BEGIN:
+            h->touchPoint = ae.touch.y;
+            return IGNORE;
+        case ALLEGRO_EVENT_TOUCH_MOVE:
+            h->y = ae.touch.y - h->touchPoint;
+            h->touchPoint = ae.touch.y;
+            return SCROLL;
         default:
 //            printf("e %d\n", ae.type);
             return IGNORE;
     }
 }
 
-#ifdef TESThandler
+#ifdef handlerTest
 
 int main(int n, char const *args[]) {
     setbuf(stdout, NULL);
-    try(al_init(), "Failed to initialize Allegro.");
+    check(al_init(), "Failed to initialize Allegro.");
     al_set_new_display_flags(ALLEGRO_WINDOWED | ALLEGRO_RESIZABLE);
     ALLEGRO_DISPLAY *window = al_create_display(400, 300);
-    try(window != NULL, "Failed to create window.");
+    check(window != NULL, "Failed to create window.");
     handler *h = newHandler(window);
     bool running = true;
     while (running) {
         event e = getNextEvent(h);
         if (e == QUIT) running = false;
-        else if (e == FRAME) printf("FRAME\n");
         else if (e == TEXT) printf("TEXT %s\n", getEventText(h));
         else if (e == SCROLL) printf("SCROLL %d\n", getEventY(h));
         else if (e == CLICK) {

@@ -1,11 +1,16 @@
 // C language definition, based on the C11 standard.
 
 // It is assumed that there are no digraphs or trigraphs (or that they are
-// handled by some form of preprocessing). Line joiners (i.e. backslash before
-// newline) are assumed to occur only between tokens (e.g. in #define) or
-// in strings (even though concatenation of adjacent strings can be used).
+// handled by some form of preprocessing).
 
-// -----------------------------------------------------------------------------
+// Backslash newline, as a line joiner. This is assumed to occur only between tokens
+// (e.g. in #define) or in strings. Give the backslash type Sign to avoid
+// unwanted semicolons.
+
+start |\\\n join
+join  \\    join  Sign
+join  \n    start Gap
+join  |     start Error
 
 // Keywords which are types or related to types. Include bool from <stdbool.h>.
 // The type state checks for added characters which make the token an id.
@@ -34,6 +39,7 @@ key1    |                                                       decl Key
 
 start   a..z A..Z _ \\U \\u        id
 id      a..z A..Z 0..9 _ \\U \\u   id
+id      |( |\s(                    start Function
 id      |                          start Id
 
 // Operators and signs. A + or - is marked infix, even though it can be prefix,
@@ -182,13 +188,7 @@ filename  \s                                filename Gap
 filename  |\n                               filename Quote
 filename  \n                                start Quote2E
 
-// Backslash newline, e.g. in #define. Give the backslash type Sign to avoid
-// an unwanted newline. Handle Illegal characters and white space.
-
-start |\\\n join
-join  \\    join  Sign
-join  \n    start Gap
-join  |     start Error
+// Handle Illegal characters and white space.
 
 start     \\ $ @ `   start Error
 start     \s \n      start Gap
@@ -266,7 +266,7 @@ start     \s \n      start Gap
 
 // Joiner
 > #define f(x) \
-< AA----- IRIR S
+< AA----- FRIR S
 
 // Illegal characters
 > $ @ `
@@ -278,7 +278,7 @@ start     \s \n      start Gap
 
 // Mismatched brackets on two lines.
 > one (
-< I-- r
+< F-- r
 > two ]
 < I-- s
 
@@ -315,7 +315,7 @@ start     \s \n      start Gap
 < D--- OI O QQ--------------QM
 
 > obj.x, obj->x, f(x)
-< I--OIM I--M-IM IRIR
+< I--OIM I--M-IM FRIR
 
 > n = f   (x);
 < I O I   RIRM

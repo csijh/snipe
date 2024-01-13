@@ -1,4 +1,4 @@
-// Snipe editor. Free and open source, see licence.txt.
+// The Snipe editor is free and open source. See licence.txt.
 #include "brackets.h"
 #include "array.h"
 #include <stdio.h>

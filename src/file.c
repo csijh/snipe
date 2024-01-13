@@ -1,4 +1,4 @@
-// The Snipe editor is free and open source, see licence.txt.
+// The Snipe editor is free and open source. See licence.txt.
 
 // Find the path to the installation directory from args[0]. This appears to be
 // the only simple cross-platform technique which doesn't involve making an

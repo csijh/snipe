@@ -2,12 +2,12 @@
 #include <stdbool.h>
 
 // Each byte of source text has a corresponding byte containing a kind. The
-// first 26 kinds are token types (with some unused). The White kind marks a
+// first 26 kinds are token types (with some unused). The Gap kind marks a
 // space or newline or indent as a separator token. The More kind marks token
 // bytes after the first. The kinds Ground...Caret represent background styles,
 // so that kinds up to Caret can be used as indexes into a theme. Bracket kinds
-// have matching pairs, with a removable B, 2B, E or 2E suffix. The Bad kind is
-// used as a removable flag for mismatched or unmatched brackets.
+// have matching pairs, with a B, 2B, E or 2E suffix. The Bad kind is used as a
+// removable flag for mismatched or unmatched brackets.
 enum kind {
     Alternative, Bracket, Comment, Declaration, Error, Function, Gap, H,
     Identifier, J, Keyword, L, Mark, N, Operator, Property, Quote, R, Sign,
@@ -31,9 +31,9 @@ char *kindName(Kind k);
 // Find a kind from its name or unique prefix, or return -1.
 Kind findKind(char const *name);
 
-// For visualization purposes, return the first letter of the kind name. Return
-// it in lower case if it is a mismatched bracket. Return More as a minus sign,
-// and Gap as a space.
+// For visualization purposes, translate brackets to Quote, Comment or Bracket,
+// then return the first letter of the kind name. Return it in lower case if it
+// is a mismatched bracket. Return More as a minus sign, and Gap as a space.
 char visualKind(Kind k);
 
 // Check for an opening bracket kind, i.e. between FirstB and LastB.

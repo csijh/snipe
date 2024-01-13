@@ -1,4 +1,4 @@
-// Snipe editor. Free and open source, see licence.txt.
+// The Snipe editor is free and open source. See licence.txt.
 #include <limits.h>
 
 // Provide support for dynamic arrays, accessed directly as normal C arrays.

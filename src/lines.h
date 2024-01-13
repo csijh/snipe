@@ -1,4 +1,4 @@
-// Snipe editor. Free and open source, see licence.txt.
+// The Snipe editor is free and open source. See licence.txt.
 
 // Track lines in the text, indexed by row, i.e. zero-based line number.
 typedef struct lines Lines;

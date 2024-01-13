@@ -1,8 +1,5 @@
-// Snipe event handling. Free and open source. See licence.txt.
-// TODO: detect shift-click for select, ctrl-click for add cursor
-// TODO: touch scroll
-#include "events.h"
-#include "unicode.h"
+// The Snipe editor is free and open source. See licence.txt.
+#include "event.h"
 #include <stdbool.h>
 
 // Provide event handling, on behalf of the display module.

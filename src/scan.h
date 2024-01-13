@@ -1,4 +1,4 @@
-// Snipe editor. Free and open source, see licence.txt.
+// The Snipe editor is free and open source. See licence.txt.
 
 // Scanning gives a type to each token of text. The bytes of a token after the
 // first are marked with None. Bracket types come in matching opener and closer
