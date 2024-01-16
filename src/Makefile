@@ -9,7 +9,7 @@ brackets = brackets.c text.c kinds.c
 lines = lines.c text.c kinds.c
 event = event.c
 handler = handler.c event.c unicode.c check.c
-display = display.c kinds.c $(handler)
+display = display.c kinds.c array.c $(handler)
 
 # Allegro libraries (-lallegro_main needed for OSX)
 allegro = -lallegro -lallegro_main -lallegro_font -lallegro_ttf

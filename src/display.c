@@ -1,6 +1,7 @@
 // The Snipe editor is free and open source. See licence.txt.
 #include "display.h"
 #include "handler.h"
+#include "array.h"
 #include "check.h"
 #include "unicode.h"
 #include "text.h"
@@ -9,22 +10,28 @@
 #include <allegro5/allegro_font.h>
 #include <allegro5/allegro_ttf.h>
 
-// A cell records, for a grapheme drawn at a particular row-column position, the
-// byte position in the line, and the horizontal pixel position across the
-// screen. This supports conversion from (x,y) pixel coordinates to
-// (row,col) text positions, and moving the cursor or editing left or right by
-// one 'character'. The only type of grapheme supported by Allegro's ttf addon
-// appears to be a character followed by a combining character such as an
-// accent with a zero advance.
+// TODO: scroll a long line left/right according to cursor position.
+
+// A cell records, for a grapheme cluster drawn at a particular (row,column)
+// position, the byte position in the line, and the horizontal pixel position
+// across the screen. This supports conversion from (x,y) pixel coordinates
+// e.g. from a mouse click to (row, column) and then (line, byte-index) text
+// positions. It also supports e.g. moving the cursor left or right by one
+// grapheme cluster. (Grapheme clusters are THE units of text. The Unicode
+// standard has an algorithm for them, but that isn't used here because, as the
+// standard says, what matters more when text is displayed are the fonts and
+// the renderer. So, the currently used chain of fonts and allegro are used to
+// determine grapheme clusters. The only indication given by allegro seems to
+// be a zero advance for combining characters.)
 struct cell { int bytes, pixels; };
 typedef struct cell Cell;
 
-// A display object represents the main window, with layout measurements. Pad is
-// the number of pixels round the edge of the window. Scroll is the pixel
-// scroll position, from the overall top of the text, and scrollTarget is the
-// pixel position to aim for when smooth scrolling. Event handling is delegated
-// to a handler object.
-
+// A display object represents the main window. It has a separate handler for
+// events. The widow is (width x height) pixels, divided into (rows x cols)
+// cells of size (rowHeight x colWidth) and with pad pixels round the edge. The
+// first line of the file shown in the window is topLine, the number of pixels
+// of that line which don't appear because of scrolling is scrollPixels
+// (< rowHeight), and the target during smooth scrolling is scrollTarget.
 struct display {
     handler *h;
     ALLEGRO_DISPLAY *window;
@@ -33,6 +40,7 @@ struct display {
     int width, height;
     int rows, cols;
     int rowHeight, colWidth, pad;
+    int topLine, scrollPixels, scrollTarget;
     Cell **grid;
     int oldBg, oldFg, oldCode;
 };
@@ -85,7 +93,7 @@ Display *newDisplay() {
     check(al_init(), "Failed to initialize Allegro.");
     al_init_font_addon();
     al_init_ttf_addon();
-    char *fontFile1 = "../fonts/NotoSansMono-Regular.ttf";
+    char *fontFile1 = "../fonts/DejaVuSansMono.ttf";
     char *fontFile2 = "../fonts/NotoSansSymbols2-Regular.ttf";
     d->font = al_load_ttf_font(fontFile1, 18, 0);
     check(d->font != NULL, "failed to load '%s'", fontFile1);
@@ -141,6 +149,28 @@ static void drawCaret(Display *d, int x, int y) {
 // Draw a background from the glyph at (x,y) to the screen width.
 static void drawBackground(Display *d, int bg, int x, int y) {
     drawRectangle(d->theme[bg], x, y, (d->width - x), d->rowHeight);
+}
+
+// Work out the pixel position of each byte in a line. A byte which continues a
+// grapheme cluster is at the same position as its predecessor.
+static void measure(Display *d, char *bytes, int *pixels) {
+    int oldPos = d->pad;
+    int oldCode = ALLEGRO_NO_KERNING;
+    for (int i = 0; i < length(pixels); ) {
+        int code = bytes[i];
+        int len = 1;
+        if ((code & 0x80) != 0) {
+            Character cp = getUTF8(&bytes[i]);
+            code = cp.code;
+            len = cp.length;
+        }
+        pixels[i] = oldPos + al_get_glyph_advance(d->font, oldCode, code);
+        printf("%d %d %c\n", i, pixels[i], bytes[i]);
+        for (int j = i + 1; j < i + len; j++) pixels[j] = pixels[i];
+        oldCode = code;
+        oldPos = pixels[i];
+        i = i + len;
+    }
 }
 
 // Draw a glyph given its Unicode code point, with possible preceding caret and
@@ -242,11 +272,22 @@ static void drawLine(Display *d, int row, char *line, char *styles) {
 int main() {
     Display *d = newDisplay();
     clear(d);
+    int *pixels = newArray(sizeof(int));
+    pixels = adjust(pixels, strlen(line3));
+    measure(d, line3, pixels);
+    for (int i = 0; i < length(pixels); i++) printf("%d %d\n", i, pixels[i]);
+
+    int n = al_get_glyph_advance(d->font, 'e', 776);
+    printf("ad %d\n", n);
+    n = al_get_glyph_advance(d->font, 776, 'l');
+    printf("ad %d\n", n);
+
     drawLine(d, 0, line1, styles1);
     drawLine(d, 1, line2, styles2);
     drawLine(d, 2, line3, styles3);
     frame(d);
     al_rest(10);
+    freeArray(pixels);
     freeDisplay(d);
     return 0;
 }

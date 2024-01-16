@@ -86,6 +86,26 @@ than permanently stealing space from the text, and much larger than usual to
 make an easy target for the mouse. Line numbers should also be visible as an
 overlay.</p>
 
+<h2>Long lines</h2>
+
+<p>Most editors have an optional line length beyond which e.g. comments are
+wrapped. But the window width is an unavoidable line length, and there seems
+little point in having two. So, in Snipe, the window width <em>is</em> the
+line length for wrapping.</p>
+
+<p>What happens when a line of text is longer than the window width? This should
+be rare, but is occasionally more-or-less unavoidable. Editors have three
+approaches. One approach is to scroll the whole window left or right. While
+this seems logical, that scrolling is distracting, especially when it caused by
+just one ling line. A second approach is to display a long line on two rows on
+screen. This is ugly because the split point is rather arbitrary. It would be
+better to split the line manually at an aesthetically better place.</p>
+
+<p>A third approach, accepted by Snipe as a lesser evil, is to scroll just the
+line itself left or right, when the cursor goes past the edge of the window
+(with continuation indicators at the left or right end). This has the added
+advantage that it works well with non-mono-spaced fonts.</p>
+
 <h2>Line numbers</h2>
 
 <p>To go straight to a specific line number, the CTRL key is held down while the
