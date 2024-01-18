@@ -29,3 +29,6 @@ Quote       =   Value
 Decl        =   Key
 Tag         =   Key
 Focus       =   Select
+
+# TODO: font0 etc
+# TODO: w x h, pad

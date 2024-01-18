@@ -11,7 +11,7 @@
 struct header { int length, max, unit; void *align[]; };
 typedef struct header header;
 
-// Start small and multiply by 1.5:
+// Start small and multiply size by 1.5:
 enum { MAX0 = 2, MUL = 3, DIV = 2 };
 
 void *newArray(int unit) {
@@ -42,6 +42,14 @@ void *adjust(void *a, int d) {
     a = ensure(a, d);
     header *h = (header *) a - 1;
     h->length += d;
+    return h + 1;
+}
+
+// Change length to n.
+void *resize(void *a, int n) {
+    a = ensure(a, n - length(a));
+    header *h = (header *) a - 1;
+    h->length = n;
     return h + 1;
 }
 

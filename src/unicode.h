@@ -24,7 +24,3 @@ void utf16to8(wchar_t const *ws, char *s);
 
 // Convert a UTF8 string to a UTF16 string. (Allow twice the number of bytes.)
 void utf8to16(char const *s, wchar_t *ws);
-
-// Given two Unicode code points, use the given font to check whether the second
-// is a combiner, so that it continues the same grapheme cluster.
-bool combined(int code1, int code2, Font *font);

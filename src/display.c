@@ -10,56 +10,46 @@
 #include <allegro5/allegro_font.h>
 #include <allegro5/allegro_ttf.h>
 
-// TODO: scroll a long line left/right according to cursor position.
+// TODO: take fonts and measurements from (theme?) settings.
 
-// A cell records, for a grapheme cluster drawn at a particular (row,column)
-// position, the byte position in the line, and the horizontal pixel position
-// across the screen. This supports conversion from (x,y) pixel coordinates
-// e.g. from a mouse click to (row, column) and then (line, byte-index) text
-// positions. It also supports e.g. moving the cursor left or right by one
-// grapheme cluster. (Grapheme clusters are THE units of text. The Unicode
-// standard has an algorithm for them, but that isn't used here because, as the
-// standard says, what matters more when text is displayed are the fonts and
-// the renderer. So, the currently used chain of fonts and allegro are used to
-// determine grapheme clusters. The only indication given by allegro seems to
-// be a zero advance for combining characters.)
-struct cell { int bytes, pixels; };
-typedef struct cell Cell;
-
-// A display object represents the main window. It has a separate handler for
-// events. The widow is (width x height) pixels, divided into (rows x cols)
-// cells of size (rowHeight x colWidth) and with pad pixels round the edge. The
-// first line of the file shown in the window is topLine, the number of pixels
-// of that line which don't appear because of scrolling is scrollPixels
-// (< rowHeight), and the target during smooth scrolling is scrollTarget.
+// A display object represents the editor's main window. It is (width x height)
+// pixels, divided into (rows x cols) cells of size (rowHeight x colWidth) and
+// with (pad) pixels on the left and right edges. The number of rows displayed
+// may be (rows+1) because of scrolling. The number of columns is notional,
+// because the fonts may be proportional, and even monospaced fonts may have
+// exceptions. The first line of the file shown in the window is topRow, the
+// number of vertical pixels of that line which don't appear because of
+// scrolling is scrollHeight (< rowHeight), and the target during smooth
+// scrolling is scrollTarget. The pixels array stores the pixel positions of
+// the displayed text. There is a separate handler for events.
 struct display {
-    handler *h;
     ALLEGRO_DISPLAY *window;
-    ALLEGRO_FONT *font;
     ALLEGRO_COLOR theme[Caret+1];
+    ALLEGRO_FONT *font;
     int width, height;
     int rows, cols;
     int rowHeight, colWidth, pad;
-    int topLine, scrollPixels, scrollTarget;
-    Cell **grid;
-    int oldBg, oldFg, oldCode;
+    int topRow, scrollPixels, scrollTarget;
+    int **pixels;
+    handler *h;
 };
 
-static void loadTheme(Display *d, char *path) {
+// Create or replace the theme.
+static void newTheme(Display *d, char *path) {
     for (int k = 0; k < Caret; k++) d->theme[k].a = 0;
     ALLEGRO_CONFIG *cfg = al_load_config_file(path);
     ALLEGRO_CONFIG_ENTRY *entry;
     char const *key = al_get_first_config_entry(cfg, NULL, &entry);
     for ( ; key != NULL; key = al_get_next_config_entry(&entry)) {
         char const *value = al_get_config_value(cfg, NULL, key);
-        Kind k = findKind(key);
+        int k = findKind(key);
         if (k < 0 || k > Caret) { printf("Bad theme key %s\n", key); continue; }
         if (value[0] == '#') {
             int col = (int) strtol(&value[1], NULL, 16);
             d->theme[k] = al_map_rgb((col>>16)&0xFF, (col>>8)&0xFF, col&0xFF);
         }
         else {
-            Kind prev = findKind(value);
+            int prev = findKind(value);
             if (k < 0 || k > Caret)  {
                 printf("Bad theme value %s\n", value);
                 continue;
@@ -77,22 +67,17 @@ static void loadTheme(Display *d, char *path) {
     al_destroy_config(cfg);
 }
 
-// Create a new (rows,cols) grid of cells, to record character positions.
-static Cell **newGrid(Display *d) {
-    int h = d->rows, w = d->cols;
-    Cell **grid = malloc(h * sizeof(Cell *) + h * (w+1) * sizeof(Cell));
-    Cell *matrix = (Cell *) (grid + h);
-    for (int r = 0; r < h; r++) grid[r] = &matrix[r * (w+1)];
-    return grid;
-}
-
-// Create a new display, with fonts, theme and ttf addons.
+// Create a new display.
 Display *newDisplay() {
-    Display *d = malloc(sizeof(Display));
-    loadTheme(d, "../themes/solarized-dark.txt");
     check(al_init(), "Failed to initialize Allegro.");
     al_init_font_addon();
     al_init_ttf_addon();
+    Display *d = malloc(sizeof(Display));
+    al_set_new_display_option(ALLEGRO_VSYNC, 1, ALLEGRO_SUGGEST);
+    al_set_new_display_flags(ALLEGRO_WINDOWED | ALLEGRO_RESIZABLE);
+    check(d->window != NULL, "Failed to create display.");
+    newTheme(d, "../themes/solarized-dark.txt");
+    d->font = NULL;
     char *fontFile1 = "../fonts/DejaVuSansMono.ttf";
     char *fontFile2 = "../fonts/NotoSansSymbols2-Regular.ttf";
     d->font = al_load_ttf_font(fontFile1, 18, 0);
@@ -107,20 +92,18 @@ Display *newDisplay() {
     d->pad = 4;
     d->width = d->pad + d->cols * d->colWidth + d->pad;
     d->height = d->rows * d->rowHeight;
-    d->grid = newGrid(d);
-    al_set_new_display_option(ALLEGRO_VSYNC, 1, ALLEGRO_SUGGEST);
-    al_set_new_display_flags(ALLEGRO_WINDOWED | ALLEGRO_RESIZABLE);
+    d->pixels = newArray(sizeof(int *));
     d->window = al_create_display(d->width, d->height);
-    check(d->window != NULL, "Failed to create display.");
     d->h = newHandler(d->window);
     return d;
 }
 
 void freeDisplay(Display *d) {
     freeHandler(d->h);
-    free(d->grid);
     al_destroy_font(d->font);
     al_destroy_display(d->window);
+    for (int r = 0; r < length(d->pixels); r++) freeArray(d->pixels[r]);
+    freeArray(d->pixels);
     free(d);
     al_uninstall_system();
 }
@@ -146,17 +129,38 @@ static void drawCaret(Display *d, int x, int y) {
     drawRectangle(d->theme[Caret], x-1, y, 1, d->rowHeight);
 }
 
-// Draw a background from the glyph at (x,y) to the screen width.
-static void drawBackground(Display *d, int bg, int x, int y) {
-    drawRectangle(d->theme[bg], x, y, (d->width - x), d->rowHeight);
+// Draw a background for the glyph at (x,y).
+static void drawBackground(Display *d, int bg, int x, int y, int w) {
+    drawRectangle(d->theme[bg], x, y, w, d->rowHeight);
 }
 
-// Work out the pixel position of each byte in a line. A byte which continues a
-// grapheme cluster is at the same position as its predecessor.
-static void measure(Display *d, char *bytes, int *pixels) {
-    int oldPos = d->pad;
+// Draw a glyph given its Unicode code point, with possible preceding caret and
+// change of background. Change the background back to the default after \n.
+static void drawGlyph(Display *d, int x, int y, int w, int code, int style) {
+    int fg = foreground(style), bg = background(style);
+    bool caret = hasCaret(style);
+    if (caret) drawCaret(d, x, y);
+    if (bg != Ground) drawBackground(d, bg, x, y, w);
+    if (code != '\n') al_draw_glyph(d->font, d->theme[fg], x, y, code);
+}
+
+// Find the pixel positions of a row of text. This allows (x,y) window
+// coordinates to be converted to (line,index) text coordinates, allowing for
+// proportional fonts or occasional variations within monospaced fonts. Allegro
+// and its standard addons support Unicode characters, but not complex text
+// (no right-to-left text, no combiners, no grapheme clusters, no emojis), so
+// currently one character is one UTF-8 byte sequence, i.e. one code point. A
+// continuation byte is at the same position as its predecessor.
+static void measure(Display *d, int row, char *bytes) {
+    while (length(d->pixels) <= row) {
+        d->pixels = adjust(d->pixels, +1);
+        d->pixels[length(d->pixels) - 1] = newArray(sizeof(int));
+    }
+    d->pixels[row] = resize(d->pixels[row], length(bytes));
+    int *pixels = d->pixels[row];
+    int oldPos = 0;
     int oldCode = ALLEGRO_NO_KERNING;
-    for (int i = 0; i < length(pixels); ) {
+    for (int i = 0; i < length(bytes); ) {
         int code = bytes[i];
         int len = 1;
         if ((code & 0x80) != 0) {
@@ -164,8 +168,8 @@ static void measure(Display *d, char *bytes, int *pixels) {
             code = cp.code;
             len = cp.length;
         }
+        d->pixels[row] = resize(pixels, length(bytes));
         pixels[i] = oldPos + al_get_glyph_advance(d->font, oldCode, code);
-        printf("%d %d %c\n", i, pixels[i], bytes[i]);
         for (int j = i + 1; j < i + len; j++) pixels[j] = pixels[i];
         oldCode = code;
         oldPos = pixels[i];
@@ -173,33 +177,56 @@ static void measure(Display *d, char *bytes, int *pixels) {
     }
 }
 
-// Draw a glyph given its Unicode code point, with possible preceding caret and
-// change of background. Change the background back to the default after \n.
-static void drawGlyph(Display *d, int x, int y, int code, int style) {
-    int fg = foreground(style), bg = background(style);
-    bool caret = hasCaret(style);
-    if (fg == More) { fg = d->oldFg; bg = d->oldBg; }
-    if (caret) drawCaret(d, x, y);
-    if (bg != d->oldBg) drawBackground(d, bg, x, y);
-    if (code != '\n') al_draw_glyph(d->font, d->theme[fg], x, y, code);
-    else if (bg != Ground) drawBackground(d, Ground, x + d->colWidth, y);
+// Shift a row of text if necessary to make the (last) caret visible.
+static void shift(Display *d, int row, byte *styles) {
+    int *pixels = d->pixels[row];
+    int caret = 0;
+    for (int i = 0; i < length(styles); i++) {
+        if (hasCaret(styles[i])) caret = pixels[i];
+    }
+    int shift = 0;
+    for (int i = 0; i < length(pixels); i++) {
+        if (caret - pixels[i] <= d->width - 2 * d->pad) {
+            shift = pixels[i];
+            break;
+        }
+    }
+    for (int i = 0; i < length(pixels); i++) pixels[i] = pixels[i] - shift;
+}
+
+// Draw continuation markers in the left or right margins of a row.
+static void drawMarkers(Display *d, int row) {
+    int *pixels = d->pixels[row];
+    int y = row * d->rowHeight;
+    if (pixels[0] < 0) {
+        drawRectangle(d->theme[Warn], 0, y, d->pad, d->rowHeight);
+    }
+    if (pixels[length(pixels) - 1] > d->width-2*d->pad) {
+        drawRectangle(d->theme[Warn], d->width-d->pad, y, d->pad, d->rowHeight);
+    }
 }
 
 // When drawing a row, x is the pixel position across the screen, col is the
 // cell position in the grid. and i is the byte position in the text.
-void drawRow(Display *d, int row, char *bytes, Style *styles) {
-    d->oldCode = ALLEGRO_NO_KERNING;
-    int x = d->pad, y = row * d->rowHeight, col = 0, i;
-    d->grid[row][col] = (Cell) {x, 0};
-    for (i = 0; i==0 || bytes[i-1] != '\n'; ) {
-        Character cp = getUTF8(&bytes[i]);
-        int advance = al_get_glyph_advance(d->font, d->oldCode, cp.code);
-        x = x + advance;
-        drawGlyph(d, x, y, cp.code, styles[i]);
-        i = i + cp.length;
-        d->oldCode = cp.code;
-        if (advance > 0) d->grid[row][++col] = (Cell) { x, i };
+void drawRow(Display *d, int row, char *bytes, byte *styles) {
+    measure(d, row, bytes);
+    shift(d, row, styles);
+    int y = row * d->rowHeight;
+    for (int i = 0; i < length(bytes); ) {
+        int code = bytes[i];
+        int len = 1;
+        if ((code & 0x80) != 0) {
+            Character cp = getUTF8(&bytes[i]);
+            code = cp.code;
+            len = cp.length;
+        }
+        int x = d->pad + d->pixels[row][i];
+        int w = 0;
+        if (i < length(bytes)-1) w = d->pixels[row][i+1] - d->pixels[row][i];
+        drawGlyph(d, x, y, w, code, styles[i]);
+        i = i + len;
     }
+    drawMarkers(d, row);
 }
 
 /*
@@ -235,59 +262,77 @@ rowCol findPosition(Display *d, int x, int y) {
 #ifdef displayTest
 
 // Convert character to style, for testing.
-static Style convert(char ch) {
+static byte convert(char ch) {
     switch (ch) {
     case 'I': return Identifier; case 'B': return Bracket; case 'V': return Value;
     case 'M': return Mark; case 'G': return Gap; case 'Q': return Quote;
     case 'C': return Comment;
     case 'v': return Value + ((Warn - Ground) << 5);
     case 'i': return Identifier + ((Select - Ground) << 5);
+    case 'c': return Identifier + (1 << 7);
     default: return Identifier;
     }
 }
 
-// Abbreviated styles for testing
-enum {I=Identifier, B=Bracket, V=Value, M=Mark, G=Gap, Q=Quote, C=Comment};
-enum { v = Value + ((Warn - Ground) << 5) };
-enum { i = Identifier + ((Select - Ground) << 5) };
-
 // Different fg and bg colours.
-static char *line1 =   "id(12,COM) = 'xyz' 12. high // note\n";
-static char *styles1 = "IIBVVMVVVMGMGQQQQQGvvvGiiiiGCCCCCCCG";
+static char *line0 =   "id(12,COM) = 'xyz' 12. high // note\n";
+static char *styles0 = "IIBVVMVVVMGMGQQQQQGvvvGiiiiGCCCCCCCG";
 
 // Eight 2-byte and four 3-byte characters
-static char *line2 =   "æ í ð ö þ ƶ ə β ᴈ ῷ ⁑ €\n";
-static char *styles2 = "IIGIIGIIGIIGIIGIIGIIGIIGIIIGIIIGIIIGIIIG";
+static char *line1 =   "æ í ð ö þ ƶ ə β ᴈ ῷ ⁑ €\n";
+static char *styles1 = "IIGIIGIIGIIGIIGIIGIIGIIGIIIGIIIGIIIGIIIG";
 
 // A two-byte e character, and an e followed by a two-byte combiner
-static char *line3 =   "Raphaël Raphaël\n";
-static char *styles3 = "IIIIIIIIGIIIIIIIIIG";
+static char *line2 =   "Raphaël Raphaël\n";
+static char *styles2 = "IIIIIIIIGIIIIIIIIIG";
 
-static void drawLine(Display *d, int row, char *line, char *styles) {
-    Style s[strlen(styles) + 1];
-    for (int i = 0; i < strlen(styles); i++) s[i] = convert(styles[i]);
-        drawRow(d, row, line, s);
+// A line of exactly 80 characters.
+static char *line3 =
+    "1234567890123456789012345678901234567890\
+1234567890123456789012345678901234567890\n";
+static char *styles3 =
+    "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV\
+VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVG";
+
+// A line of 81 characters - should have an overflow marker.
+static char *line4 =
+    "1234567890123456789012345678901234567890\
+12345678901234567890123456789012345678901\n";
+static char *styles4 =
+    "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV\
+VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVG";
+
+// A line of 81 characters with end caret - should have an underflow marker.
+static char *line5 =
+    "1234567890123456789012345678901234567890\
+12345678901234567890123456789012345678901\n";
+static char *styles5 =
+    "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV\
+VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVc";
+
+static void drawLine(Display *d, int row, char *line, char *s) {
+    char *bytes = newArray(sizeof(char));
+    bytes = resize(bytes, strlen(line));
+    strncpy(bytes, line, length(bytes));
+    byte *styles = newArray(sizeof(char));
+    styles = resize(styles, length(bytes));
+    for (int i = 0; i < length(styles); i++) styles[i] = convert(s[i]);
+    drawRow(d, row, bytes, styles);
+    freeArray(styles);
+    freeArray(bytes);
 }
 
 int main() {
     Display *d = newDisplay();
     clear(d);
-    int *pixels = newArray(sizeof(int));
-    pixels = adjust(pixels, strlen(line3));
-    measure(d, line3, pixels);
-    for (int i = 0; i < length(pixels); i++) printf("%d %d\n", i, pixels[i]);
-
-    int n = al_get_glyph_advance(d->font, 'e', 776);
-    printf("ad %d\n", n);
-    n = al_get_glyph_advance(d->font, 776, 'l');
-    printf("ad %d\n", n);
-
-    drawLine(d, 0, line1, styles1);
-    drawLine(d, 1, line2, styles2);
-    drawLine(d, 2, line3, styles3);
+    drawLine(d, 0, line0, styles0);
+    drawLine(d, 1, line1, styles1);
+    drawLine(d, 2, line2, styles2);
+    drawLine(d, 3, line3, styles3);
+    drawLine(d, 4, line4, styles4);
+    drawLine(d, 5, line5, styles5);
     frame(d);
     al_rest(10);
-    freeArray(pixels);
     freeDisplay(d);
     return 0;
 }

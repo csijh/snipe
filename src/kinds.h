@@ -23,58 +23,57 @@ enum kind {
     FirstB = QuoteB, LastB = Block2B, FirstE = QuoteE, LastE = Block2E,
     Bad = 128
 };
-typedef int Kind;
 
 // Return the full name of the kind.
-char *kindName(Kind k);
+char *kindName(int kind);
 
 // Find a kind from its name or unique prefix, or return -1.
-Kind findKind(char const *name);
+int findKind(char const *name);
 
 // For visualization purposes, translate brackets to Quote, Comment or Bracket,
 // then return the first letter of the kind name. Return it in lower case if it
 // is a mismatched bracket. Return More as a minus sign, and Gap as a space.
-char visualKind(Kind k);
+char visualKind(int kind);
 
 // Check for an opening bracket kind, i.e. between FirstB and LastB.
-bool isOpener(Kind k);
+bool isOpener(int kind);
 
 // Check for a closing bracket kind, i.e. between FirstE and LastE.
-bool isCloser(Kind k);
+bool isCloser(int kind);
 
 // Check for a bracket, i.e. between FirstB and LastE.
-bool isBracket(Kind k);
+bool isBracket(int kind);
 
 // Check whether opening and closing brackets match.
-bool bracketMatch(Kind opener, Kind closer);
+bool bracketMatch(int opener, int closer);
 
 // Return whether a kind represents a prefix or infix token, preventing a
 // following auto-inserted semicolon.
-bool isPrefix(Kind k);
+bool isPrefix(int kind);
 
 // Return whether a kind represents a postfix or infix token, preventing a
 // preceding auto-inserted semicolon.
-bool isPostfix(Kind k);
+bool isPostfix(int kind);
 
 // A style is a byte derived from a kind for display purposes. The bracket types
 // with B or E or 2B or 2E suffixes are replaced by Quote, Comment, Tag or
 // Bracket, to provide 5 bits of foreground information. Two bits indicate a
 // background (Ground, ..., Warn). The Bad flag is converted into a Warn
 // background. A final bit indicates the presence of a caret.
-typedef int Style;
+typedef unsigned char byte;
 
 // Get a style from a kind, converting bracket types and adding the Warn
 // background for the Error kind or the Bad flag.
-Style toStyle(Kind k);
+byte toStyle(int kind);
 
 // Add a background indication to a style (unless Warn is already set).
-Style addBackground(Style s, Kind k);
+byte addBackground(byte s, int kind);
 
 // Add a caret flag to a style.
-Style addCaret(Style s);
+byte addCaret(byte s);
 
 // Get the foreground, background, or caret flag from a style
-Kind foreground(Style s);
-Kind background(Style s);
-bool hasCaret(Style s);
+int foreground(byte s);
+int background(byte s);
+bool hasCaret(byte s);
 

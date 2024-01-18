@@ -29,11 +29,11 @@ char *kindNames[64] = {
     [BlockE]="BlockE", [Block2E]="Block2E"
 };
 
-char *kindName(Kind k) {
+char *kindName(int k) {
     return kindNames[k];
 }
 
-Kind findKind(char const *name) {
+int findKind(char const *name) {
     for (int k = 0; k < LastE; k++) {
         char *s = kindNames[k];
         if (strcmp(name, s) == 0) return k;
@@ -43,7 +43,7 @@ Kind findKind(char const *name) {
     return -1;
 }
 
-char visualKind(Kind k) {
+char visualKind(int k) {
     bool bad = (k & Bad) != 0;
     k = k & ~Bad;
     if (k == More) return '-';
@@ -53,28 +53,28 @@ char visualKind(Kind k) {
     return k;
 }
 
-bool isBracket(Kind k) {
+bool isBracket(int k) {
     k = k & ~Bad;
     return FirstB <= k && k <= LastE;
 }
 
-bool isOpener(Kind k) {
+bool isOpener(int k) {
     k = k & ~Bad;
     return FirstB <= k && k <= LastB;
 }
 
-bool isCloser(Kind k) {
+bool isCloser(int k) {
     k = k & ~Bad;
     return FirstE <= k && k <= LastE;
 }
 
-bool bracketMatch(Kind opener, Kind closer) {
+bool bracketMatch(int opener, int closer) {
     opener = opener & ~Bad;
     closer = closer & ~Bad;
     return closer == opener + FirstE - FirstB;
 }
 
-bool isPrefix(Kind k) {
+bool isPrefix(int k) {
     k = k & ~Bad;
     switch (k) {
     case BlockB: case Block2B: case BlockE: case Block2E:
@@ -87,7 +87,7 @@ bool isPrefix(Kind k) {
     }
 }
 
-bool isPostfix(Kind k) {
+bool isPostfix(int k) {
     k = k & ~Bad;
     switch (k) {
     case BlockB: case Block2B: case GroupE: case Group2E: case Sign:
@@ -99,13 +99,13 @@ bool isPostfix(Kind k) {
 }
 
 // Assume Ground, Select, Focus, Warn are contiguous.
-Style addBackground(Style s, Kind k) {
+byte addBackground(byte s, int k) {
     assert(Ground <= k && k <= Warn);
     if ((s & 0x60) == 0) s = s + ((k - Ground) << 5);
     return s;
 }
 
-Style toStyle(Kind k) {
+byte toStyle(int k) {
     bool bad = (k & Bad) != 0;
     k = k & ~Bad;
     if (k >= FirstB) switch (k) {
@@ -124,20 +124,20 @@ Style toStyle(Kind k) {
 
 
 // Add a caret flag to a style.
-Style addCaret(Style s) {
+byte addCaret(byte s) {
     return s | 0x80;
 }
 
 // Get the foreground, background, or caret flag from a style
-Kind foreground(Style s) { return s & 0x1F; }
-Kind background(Style s) { return Ground + ((s >> 5) & 0x03); }
-bool hasCaret(Style s) { return (s & 0x80) != 0; }
+int foreground(byte s) { return s & 0x1F; }
+int background(byte s) { return Ground + ((s >> 5) & 0x03); }
+bool hasCaret(byte s) { return (s & 0x80) != 0; }
 
 // ---------- Testing ----------------------------------------------------------
 #ifdef kindsTest
 
 int main() {
-    for (Kind k = 0; k < LastE; k++) {
+    for (int k = 0; k < LastE; k++) {
         assert(kindNames[k] != NULL);
         if (k == More) {
             assert(toStyle(k) == k);

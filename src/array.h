@@ -18,6 +18,9 @@ int length(void *a);
 // Change length by d, which can be negative.
 void *adjust(void *a, int d);
 
+// Change length to n.
+void *resize(void *a, int n);
+
 // Pre-allocate to allow for d more items, so that future adjust calls up to
 // that amount don't move the array.
 void *ensure(void *a, int d);

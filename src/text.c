@@ -1,16 +1,16 @@
 // The Snipe editor is free and open source. See licence.txt.
 #include "text.h"
+#include "file.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
 #include <assert.h>
 
-// The text and kinds are stored in synchronized gap buffers. (Gap buffers are
-// difficult to beat for efficiency:
+// The text and kinds are stored in synchronized gap buffers. Gap buffers are
+// difficult to beat for simplicity and efficiency:
 //     https://coredumped.dev/2023/08/09/text-showdown-gap-buffers-vs-ropes/
-// Just as importantly, they are difficult to beat for simplicity.
-struct text { int low, high, max; char *chars; Kind *kinds; };
+struct text { int low, high, max; char *chars; byte *kinds; };
 
 // Initial size and expansion factor.
 enum { MAX0 = 2, MUL = 3, DIV = 2 };
@@ -18,7 +18,7 @@ enum { MAX0 = 2, MUL = 3, DIV = 2 };
 Text *newText() {
     Text *t = malloc(sizeof(Text));
     char *chars = malloc(MAX0);
-    Kind *kinds = malloc(MAX0);
+    byte *kinds = malloc(MAX0);
     *t = (Text) { .low=0, .high=MAX0, .max=MAX0, .chars=chars, .kinds=kinds };
     return t;
 }
@@ -27,6 +27,14 @@ void freeText(Text *t) {
     free(t->chars);
     free(t->kinds);
     free(t);
+}
+
+void load(Text *t, char *path) {
+    int size = sizeFile(path);
+    if (size < 0) {
+        printf("Unable to load file '%s'.\n", path);
+        return;
+    }
 }
 
 int lengthT(Text *t) {
@@ -38,7 +46,7 @@ char getT(Text *t, int i) {
     return t->chars[i + t->high - t->low];
 }
 
-Kind getK(Text *t, int i) {
+byte getK(Text *t, int i) {
     if (i < t->low) return t->kinds[i];
     return t->kinds[i + t->high - t->low];
 }
@@ -48,7 +56,7 @@ void setT(Text *t, int i, char c) {
     else t->chars[i + t->high - t->low] = c;
 }
 
-void setK(Text *t, int i, Kind k) {
+void setK(Text *t, int i, byte k) {
     if (i < t->low) t->kinds[i] = k;
     else t->kinds[i + t->high - t->low] = k;
 }
@@ -56,7 +64,7 @@ void setK(Text *t, int i, Kind k) {
 void moveT(Text *t, int cursor) {
     int low = t->low, high = t->high;
     char *chars = t->chars;
-    Kind *kinds = t->kinds;
+    byte *kinds = t->kinds;
     if (cursor < low) {
         memmove(chars + cursor + high - low, chars + cursor, low - cursor);
         memmove(kinds + cursor + high - low, kinds + cursor, low - cursor);
@@ -72,7 +80,7 @@ void moveT(Text *t, int cursor) {
 static void ensureT(Text *t, int extra) {
     int low = t->low, high = t->high, max = t->max;
     char *chars = t->chars;
-    Kind *kinds = t->kinds;
+    byte *kinds = t->kinds;
     int new = max;
     while (new < low + max - high + extra) new = new * MUL / DIV;
     chars = realloc(chars, new);
@@ -91,7 +99,7 @@ void insertT(Text *t, int i, char *s, int n) {
     if (t->high - t->low < n) ensureT(t, n);
     moveT(t, i);
     memcpy(t->chars + t->low, s, n);
-    memset(t->kinds + t->low, None, n);
+    memset(t->kinds + t->low, More, n);
     t->low += n;
 }
 
@@ -106,7 +114,7 @@ void copyT(Text *t, int i, char *s, int n) {
     memcpy(s, t->chars + i, n);
 }
 
-void copyK(Text *t, int i, Kind *s, int n) {
+void copyK(Text *t, int i, byte *s, int n) {
     moveT(t, i + n);
     memcpy(s, t->kinds + i, n);
 }

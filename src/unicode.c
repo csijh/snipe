@@ -8,12 +8,6 @@
 #include <wchar.h>
 #include <assert.h>
 
-// The same graphics library as the display and handler modules is used to query
-// fonts about grapheme clusters.
-#include <allegro5/allegro.h>
-#include <allegro5/allegro_font.h>
-#include <allegro5/allegro_ttf.h>
-
 // See https://nullprogram.com/blog/2017/10/06/. This variant doesn't assume
 // that the input is padded.
 extern inline Character getUTF8(char const *s) {
@@ -162,18 +156,6 @@ void utf8to16(char const *s, wchar_t *ws) {
         }
     }
     ws[out] = 0;
-}
-
-// The unit of text used in "character" motion, backspace etc. is not the byte
-// or the code point but the grapheme cluster. The Unicode standard has an
-// algorithm for breaking text into grapheme clusters but, as the standard
-// says, where text is displayed, what matters more are the fonts and the
-// renderer. So, the currently used font (actually a chain of fonts) and the
-// allegro ttf addon are used to determine combining characters. This function
-// assumes allegro itself has been initialised.
-bool combined(int code1, int code2, Font *f) {
-    ALLEGRO_FONT *font = (ALLEGRO_FONT *) f;
-    return al_get_glyph_advance(font, code1, code2) == 0;
 }
 
 // ---------- Testing ----------------------------------------------------------

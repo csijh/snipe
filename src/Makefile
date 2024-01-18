@@ -2,9 +2,9 @@
 check = check.c
 array = array.c
 unicode = unicode.c
-file = file.c unicode.c array.c
+file = file.c unicode.c array.c check.c
 kinds = kinds.c
-text = text.c kinds.c
+text = text.c kinds.c $(file)
 brackets = brackets.c text.c kinds.c
 lines = lines.c text.c kinds.c
 event = event.c

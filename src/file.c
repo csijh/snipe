@@ -14,6 +14,7 @@
 #define _POSIX_C_SOURCE 200809L
 #define _FILE_OFFSET_BITS 64
 #include "file.h"
+#include "check.h"
 #include "array.h"
 #include "unicode.h"
 #include <stdio.h>
@@ -31,12 +32,6 @@
 // The current working directory on startup, and the installation directory.
 static char *current = NULL;
 static char *install = NULL;
-
-// Give an error message and stop.
-static void crash(char const *message) {
-    fprintf(stderr, "%s\n", message);
-    exit(1);
-}
 
 // Get the current working directory, with trailing /.
 static void findCurrent() {
