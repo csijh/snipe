@@ -1,6 +1,6 @@
 # The modules and their dependencies.
-check = check.c
 array = array.c
+
 unicode = unicode.c
 file = file.c unicode.c array.c check.c
 kinds = kinds.c

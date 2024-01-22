@@ -29,12 +29,33 @@ void freeText(Text *t) {
     free(t);
 }
 
+static void ensureT(Text *t, int extra) {
+    int low = t->low, high = t->high, max = t->max;
+    char *chars = t->chars;
+    byte *kinds = t->kinds;
+    int new = max;
+    while (new < low + max - high + extra) new = new * MUL / DIV;
+    chars = realloc(chars, new);
+    kinds = realloc(kinds, new);
+    if (high < max) {
+        memmove(chars + high + new - max, chars + high, max - high);
+        memmove(kinds + high + new - max, kinds + high, max - high);
+    }
+    t->high = high + new - max;
+    t->max = new;
+    t->chars = chars;
+    t->kinds = kinds;
+}
+
 void load(Text *t, char *path) {
     int size = sizeFile(path);
     if (size < 0) {
         printf("Unable to load file '%s'.\n", path);
         return;
     }
+    t->low = 0;
+    t->high = t->max;
+    ensureT(t, size);
 }
 
 int lengthT(Text *t) {
@@ -75,24 +96,6 @@ void moveT(Text *t, int cursor) {
     }
     t->low = cursor;
     t->high = cursor + high - low;
-}
-
-static void ensureT(Text *t, int extra) {
-    int low = t->low, high = t->high, max = t->max;
-    char *chars = t->chars;
-    byte *kinds = t->kinds;
-    int new = max;
-    while (new < low + max - high + extra) new = new * MUL / DIV;
-    chars = realloc(chars, new);
-    kinds = realloc(kinds, new);
-    if (high < max) {
-        memmove(chars + high + new - max, chars + high, max - high);
-        memmove(kinds + high + new - max, kinds + high, max - high);
-    }
-    t->high = high + new - max;
-    t->max = new;
-    t->chars = chars;
-    t->kinds = kinds;
 }
 
 void insertT(Text *t, int i, char *s, int n) {

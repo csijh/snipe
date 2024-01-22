@@ -30,37 +30,61 @@ int length(void *a) {
     return h->length;
 }
 
-void *ensure(void *a, int d) {
+static void setLength(void *a, int n) {
     header *h = (header *) a - 1;
-    if (h->max >= h->length + d) return h + 1;
-    while (h->max < h->length + d) h->max = h->max * MUL / DIV;
+    h->length = n;
+}
+
+void *padTo(void *a, int n) {
+    header *h = (header *) a - 1;
+    if (h->max >= n) return a;
+    while (h->max < n) h->max = h->max * MUL / DIV;
     h = realloc(h, sizeof(header) + h->max * h->unit);
     return h + 1;
 }
 
-void *adjust(void *a, int d) {
-    a = ensure(a, d);
-    header *h = (header *) a - 1;
-    h->length += d;
-    return h + 1;
+void *padBy(void *a, int d) {
+    return padTo(a, length(a) + d);
 }
 
-// Change length to n.
-void *resize(void *a, int n) {
-    a = ensure(a, n - length(a));
-    header *h = (header *) a - 1;
-    h->length = n;
-    return h + 1;
+void *adjustTo(void *a, int n) {
+    a = padTo(a, n);
+    setLength(a, n);
+    return a;
 }
 
-void error(char *format, ...) {
+void *adjustBy(void *a, int d) {
+    a = padBy(a, d);
+    setLength(a, length(a) + d);
+    return a;
+}
+
+void error(char const *format, ...) {
     va_list args;
-    fprintf(stderr, "Error: ");
     va_start(args, format);
     vfprintf(stderr, format, args);
     va_end(args);
-    fprintf(stderr, ".\n");
-    exit(1);
+    fprintf(stderr, "\n");
+    exit(EXIT_FAILURE);
+}
+
+void check(bool ok, char const *fmt, ...) {
+    if (ok) return;
+    va_list args;
+    va_start(args, fmt);
+    vfprintf(stderr, fmt, args);
+    va_end(args);
+    fprintf(stderr, "\n");
+    exit(EXIT_FAILURE);
+}
+
+void *warn(char const *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    vfprintf(stderr, fmt, args);
+    va_end(args);
+    fprintf(stderr, "\n");
+    return NULL;
 }
 
 // ---------- Testing ----------------------------------------------------------
@@ -68,14 +92,14 @@ void error(char *format, ...) {
 
 static void testC() {
     char *a = newArray(1);
-    a = adjust(a, 10);
+    a = adjustBy(a, 10);
     for (int i = 0; i < 10; i++) a[i] = 42 + i;
     assert(length(a) == 10);
-    a = ensure(a, 100);
+    a = padBy(a, 100);
     assert(length(a) == 10);
     assert(a[0] == 42 && a[9] == 51);
     a[99] = 0;
-    adjust(a, -5);
+    adjustBy(a, -5);
     assert(length(a) == 5);
     assert(a[0] == 42 && a[4] == 46);
     freeArray(a);
@@ -83,14 +107,14 @@ static void testC() {
 
 static void testI() {
     int *a = newArray(sizeof(int));
-    a = adjust(a, 10);
+    a = adjustBy(a, 10);
     for (int i = 0; i < 10; i++) a[i] = 42 + i;
     assert(length(a) == 10);
-    a = ensure(a, 100);
+    a = padBy(a, 100);
     assert(length(a) == 10);
     assert(a[0] == 42 && a[9] == 51);
     a[99] = 0;
-    adjust(a, -5);
+    adjustBy(a, -5);
     assert(length(a) == 5);
     assert(a[0] == 42 && a[4] == 46);
     freeArray(a);

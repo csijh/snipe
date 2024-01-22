@@ -36,13 +36,11 @@ char *extension(char const *path);
 
 bool secure(const char *path);
 
-// Check that a file exists, and return its size or -1.
-int sizeFile(char const *path);
-
-// Read in the contents of a text file. The path must not end in a slash. A
-// final newline is added, if necessary, plus a null terminator. On failure, a
+// Read in the contents of a text file into the given array, returning the
+// possibly reallocated array. The path must not end in a slash. A final
+// newline is added, if necessary, but not a null terminator. On failure, a
 // message is printed and NULL is returned.
-char *readFile(char const *path);
+char *readFile(char const *path, char *content);
 
 // Read in the contents of a directory. The path must end with a slash. The
 // result has one line per name including ../ in natural order, with slashes on

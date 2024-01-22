@@ -78,7 +78,7 @@ Display *newDisplay() {
     check(d->window != NULL, "Failed to create display.");
     newTheme(d, "../themes/solarized-dark.txt");
     d->font = NULL;
-    char *fontFile1 = "../fonts/DejaVuSansMono.ttf";
+    char *fontFile1 = "../fonts/NotoSansMono-Regular.ttf";
     char *fontFile2 = "../fonts/NotoSansSymbols2-Regular.ttf";
     d->font = al_load_ttf_font(fontFile1, 18, 0);
     check(d->font != NULL, "failed to load '%s'", fontFile1);
@@ -282,9 +282,9 @@ static char *styles0 = "IIBVVMVVVMGMGQQQQQGvvvGiiiiGCCCCCCCG";
 static char *line1 =   "æ í ð ö þ ƶ ə β ᴈ ῷ ⁑ €\n";
 static char *styles1 = "IIGIIGIIGIIGIIGIIGIIGIIGIIIGIIIGIIIGIIIG";
 
-// A two-byte e character, and an e followed by a two-byte combiner
-static char *line2 =   "Raphaël Raphaël\n";
-static char *styles2 = "IIIIIIIIGIIIIIIIIIG";
+// A two-byte e character, and an e with a two-byte combiner that doesn't work.
+static char *line2 =   "ëë\n";
+static char *styles2 = "IIIIIIG";
 
 // A line of exactly 80 characters.
 static char *line3 =
@@ -328,6 +328,8 @@ int main() {
     drawLine(d, 0, line0, styles0);
     drawLine(d, 1, line1, styles1);
     drawLine(d, 2, line2, styles2);
+    for (int c = 0; c < length(d->pixels[2]); c++)
+        printf("%d %d %02x\n", c, d->pixels[2][c], line2[c]&0xFF);
     drawLine(d, 3, line3, styles3);
     drawLine(d, 4, line4, styles4);
     drawLine(d, 5, line5, styles5);

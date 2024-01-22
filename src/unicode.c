@@ -1,6 +1,5 @@
 // The Snipe editor is free and open source. See licence.txt.
 #include "unicode.h"
-#include "string.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -8,6 +7,25 @@
 #include <wchar.h>
 #include <assert.h>
 
+// See https://nullprogram.com/blog/2017/10/06/.
+extern inline int ulength(char const *s) {
+    static const char lengths[] = {
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 3, 3, 4, 0
+    };
+    unsigned char const *b = (unsigned char const *) s;
+    return lengths[b[0] >> 3];
+}
+
+extern inline int ucode(char const *s) {
+    static const int masks[] = {0x00, 0x7f, 0x1f, 0x0f, 0x07};
+    unsigned char const *b = (unsigned char const *) s;
+    int length = ulength(s);
+    int code = b[0] & masks[length];
+    for (int i = 1; i < length; i++) code = (code << 6) | (b[i] & 0x3F);
+    return code;
+}
+/*
 // See https://nullprogram.com/blog/2017/10/06/. This variant doesn't assume
 // that the input is padded.
 extern inline Character getUTF8(char const *s) {
@@ -22,7 +40,7 @@ extern inline Character getUTF8(char const *s) {
     for (int i = 1; i < len; i++) ch = (ch << 6) | (b[i] & 0x3F);
     return (Character) { .code = ch, .length = len };
 }
-
+*/
 void putUTF8(unsigned int code, char *s) {
     if (code < 0x7f) {
         s[0] = code;
@@ -145,9 +163,9 @@ void utf16to8(wchar_t const *ws, char *s) {
 void utf8to16(char const *s, wchar_t *ws) {
     int out = 0;
     for (int i = 0; i < strlen(s); ) {
-        Character cp = getUTF8(&s[i]);
-        int ch = cp.code;
-        i += cp.length;
+        int length = ulength(&s[i]);
+        int ch = ucode(&s[i], length);
+        i += length;
         if (ch < 0x10000) ws[out++] = (wchar_t) ch;
         else {
             ch = ch - 0x10000;
@@ -163,8 +181,9 @@ void utf8to16(char const *s, wchar_t *ws) {
 
 static void testGetUTF8() {
     char *s = "\xE2\x80\x8C";
-    Character cp = getUTF8(s);
-    assert(cp.code == 0x200C && cp.length == 3);
+    int length = ulength(s);
+    int code = ucode(s, length);
+    assert(length == 3 && code == 0x200C);
 }
 
 static void testCheck2() {

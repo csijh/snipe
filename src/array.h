@@ -1,11 +1,14 @@
 // The Snipe editor is free and open source. See licence.txt.
 #include <limits.h>
+#include <stdbool.h>
 
-// Provide support for dynamic arrays, accessed directly as normal C arrays.
-// These are mostly used for temporary storage of data while it is being moved
-// around. Care needs to be taken because an array might move because of
-// reallocation. To avoid problems, call ensure() to reallocate the array in
-// advance of passing it to a function.
+// Dynamic arrays, accessed directly as normal C arrays. Strings can be
+// represented without null terminators, using length instead of strlen. Care
+// needs to be taken because an array might move because of reallocation. To
+// pass an array to a function (a) make sure the function doesn't reallocate it
+// or (b) call padTo/padBy in advance or (c) return the array as the result or
+// (d) pass the array as a field of an owning object.
+typedef char *string;
 
 // Create an initially empty array of items of the given unit size. The elements
 // are assumed not to need more than pointer alignment. Free an array.
@@ -15,15 +18,19 @@ void freeArray(void *a);
 // The number of items in an array.
 int length(void *a);
 
-// Change length by d, which can be negative.
-void *adjust(void *a, int d);
+// Change length to n or by d, returning the possibly reallocated array.
+void *adjustTo(void *a, int n);
+void *adjustBy(void *a, int d);
 
-// Change length to n.
-void *resize(void *a, int n);
+// Pre-allocate to n items or by d items without changing the length.
+void *padTo(void *a, int n);
+void *padBy(void *a, int d);
 
-// Pre-allocate to allow for d more items, so that future adjust calls up to
-// that amount don't move the array.
-void *ensure(void *a, int d);
+// Report an error in printf style, adding a newline, and exit.
+void error(char const *format, ...);
 
-// Report an error in printf style, and exit.
-void error(char *format, ...);
+// Check a boolean. Print an error and exit if false.
+void check(bool ok, char const *format, ...);
+
+// Print a warning and return NULL.
+void *warn(char const *format, ...);

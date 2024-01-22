@@ -167,31 +167,23 @@ char *extension(char const *path) {
 
 static void err(char *e, char const *p) { printf("Error, %s: %s\n", e, p); }
 
-// Find the size of a text file, or -1.
-int sizeFile(char const *path) {
-    struct stat info;
-    int result = stat(path, &info);
-    if (result < 0) return -1;
-    if (! S_ISREG(info.st_mode)) return -1;
-    if (info.st_size >= INT_MAX) return -1;
-    int size = (int) info.st_size;
-    return size;
-}
-
 // Use binary mode, so that the number of bytes read equals the file size.
-char *readFile(char const *path) {
+char *readFile(char const *path, char *content) {
     assert(path[strlen(path) - 1] != '/');
-    int size = sizeFile(path);
-    if (size < 0) { err("can't read", path); return NULL; }
     FILE *file = fopen(path, "rb");
     if (file == NULL) { err("can't read", path); return NULL; }
-    char *data = malloc(size + 2);
-    int n = fread(data, 1, size, file);
-    if (n != size) { free(data); err("read failed", path); return NULL; }
-    if (n > 0 && data[n - 1] != '\n') data[n++] = '\n';
-    data[n] = '\0';
+    fseek(file, 0L, SEEK_END);
+    long size = ftell(file);
+    if (size > INT_MAX-2) { err("file too big:", path); return NULL; }
+    content = resize(content, size);
+    int n = fread(content, 1, size, file);
+    if (n != size) { err("read failed", path); return NULL; }
+    if (n > 0 && content[n - 1] != '\n') {
+        content = adjust(content, +1);
+        content[n] = '\n';
+    }
     fclose(file);
-    return data;
+    return content;
 }
 
 // Compare two strings in natural order.
