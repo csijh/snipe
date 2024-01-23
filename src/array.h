@@ -2,12 +2,15 @@
 #include <limits.h>
 #include <stdbool.h>
 
-// Dynamic arrays, accessed directly as normal C arrays. Strings can be
-// represented without null terminators, using length instead of strlen. Care
-// needs to be taken because an array might move because of reallocation. To
-// pass an array to a function (a) make sure the function doesn't reallocate it
-// or (b) call padTo/padBy in advance or (c) return the array as the result or
-// (d) pass the array as a field of an owning object.
+// Dynamic arrays, accessed directly as normal C arrays. Care needs to be taken
+// because an array might move because of reallocation. To pass an array to a
+// function: (a) make sure the function doesn't reallocate it or (b) call
+// padTo/padBy in advance or (c) return the array as the result or (d) pass the
+// array as a field of an owning object. The array module also provides error
+// and warning functions.
+
+// The string type indicates that the string is held in an array. The length()
+// call excludes the null terminator, as with strlen.
 typedef char *string;
 
 // Create an initially empty array of items of the given unit size. The elements

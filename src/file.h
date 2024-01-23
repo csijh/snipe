@@ -6,35 +6,24 @@
 // containing \ or / are ignored and directory names have / at the end.
 #include <stdbool.h>
 
-// Find the installation directory and current working directory from args[0].
-void findResources(char const *arg0);
+// Find the current working directory. Free the result with freeArray.
+char *findCurrent();
 
-// Free up resource path strings when shutting down.
-void freeResources(void);
+// Find the installation directory using the args[0] from main() and the current
+// working directory. Free the result with freeArray.
+char *findInstall(char const *arg0, char const *current);
 
-// Get the full path of a resource, given its / terminated installation
-// subdirectory, relative file name, and extension. The result string should
-// be freed as soon as it is no longer needed.
-char *resourcePath(char *directory, char *file, char *extension);
+// Make a path from a format and some pieces. The first piece must be absolute.
+// The format is used like sprintf, but producing an array. Free with freeArray.
+char *makePath(char const *format, ...);
 
-// Create an allocated path string from a slash terminated directory path and a
-// file name. Deal with the file being . or .. or an absolute file path.
-char *addPath(char const *path, char const *file);
-
-// Create an allocate string containing the parent directory of the given path.
+// Find the parent directory of the given path. Free with freeArray.
 char *parentPath(char const *path);
 
-// Expand a file name to a full path, relative to the current directory, if not
-// already absolute. Convert \ to / and add a training slash for a directory.
-// The result string should be freed as soon as it is no longer needed.
-char *fullPath(char const *file);
-
-// Find the extension of a filename or file path, without the dot. The result
-// is not newly allocated. It is a substring of the argument, or "directory",
-// or "makefile". It is "txt" if not recognized.
+// Find the extension of a filename or file path. The result is not newly
+// allocated. It is a substring of the argument, or ".txt" if not recognized,
+// or ".directory", or ".makefile".
 char *extension(char const *path);
-
-bool secure(const char *path);
 
 // Read in the contents of a text file into the given array, returning the
 // possibly reallocated array. The path must not end in a slash. A final
@@ -42,11 +31,12 @@ bool secure(const char *path);
 // message is printed and NULL is returned.
 char *readFile(char const *path, char *content);
 
-// Read in the contents of a directory. The path must end with a slash. The
-// result has one line per name including ../ in natural order, with slashes on
-// the end of subdirectory names. On failure, a message is printed and NULL is
-// returned.
-char *readDirectory(char const *path);
+// Read in the contents of a directory into the given array, returning the
+// possibly reallocated array. The path must end with a slash. The result has
+// one line per name including ../ in natural order, with slashes on the end of
+// subdirectory names. On failure, a message is printed and NULL is returned.
+char *readDirectory(char const *path, char *content);
 
 // Write the given data to the given file. On failure, a message is printed.
+// For a makefile, indents are converted to tabs.
 void writeFile(char const *path, int size, char data[size]);

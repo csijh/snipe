@@ -1,16 +1,14 @@
 // The Snipe editor is free and open source. See licence.txt.
+#include "styles.h"
 
-bool isOpener(int type) {
-    return FirstB <= type && type <= LastB;
-}
-
-bool isCloser(int type) {
-    return FirstE <= type && type <= LastE;
-}
-
-bool match(int opener, int closer) {
-    return closer == opener + FirstE - FirstB;
-}
+// A scanner contains the transition table for a language, the input, the
+// output, and a stack of unmatched open brackets. For tracing, it has the
+// expected output, the state names, and trace start and end indexes.
+struct scanner {
+    byte *table; char *in; byte *out; int *stack;
+    char *expect; char **stateNames; int trace, end;
+};
+typedef struct scanner Scanner;
 
 // The state transition table for a language comes from ../languages. The table
 // has one row per state. There are 98 columns, two for \n or \s according to
@@ -64,7 +62,7 @@ static inline bool matchTop(int *stack, byte *types, int closer) {
     int n = length(stack);
     if (n == 0) return false;
     int opener = types[stack[n-1]];
-    return match(opener, closer);
+    return bracketMatch(opener, closer);
 }
 
 // Push the position of an opening bracket on the stack (assuming enough room).
@@ -80,7 +78,7 @@ static inline void pop(int *stack, int atCloser, byte *types) {
     if (n == 0) { types[atCloser] |= Bad; return; }
     int atOpener = stack[n-1];
     adjust(stack, -1);
-    if (match(types[atOpener], types[atCloser])) return;
+    if (bracketMatch(types[atOpener], types[atCloser])) return;
     types[atOpener] |= Bad;
     types[atCloser] |= Bad;
 }

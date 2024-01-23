@@ -17,6 +17,8 @@ extern inline int ulength(char const *s) {
     return lengths[b[0] >> 3];
 }
 
+// If this is called straight after ulength, optimisation and cross-module
+// inlining compiler flags will cause the two ulength calls to be combined.
 extern inline int ucode(char const *s) {
     static const int masks[] = {0x00, 0x7f, 0x1f, 0x0f, 0x07};
     unsigned char const *b = (unsigned char const *) s;
@@ -25,43 +27,33 @@ extern inline int ucode(char const *s) {
     for (int i = 1; i < length; i++) code = (code << 6) | (b[i] & 0x3F);
     return code;
 }
-/*
-// See https://nullprogram.com/blog/2017/10/06/. This variant doesn't assume
-// that the input is padded.
-extern inline Character getUTF8(char const *s) {
-    static const char lengths[] = {
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 3, 3, 4, 0
-    };
-    static const int masks[] = {0x00, 0x7f, 0x1f, 0x0f, 0x07};
-    unsigned char const *b = (unsigned char const *) s;
-    int len = lengths[b[0] >> 3];
-    int ch = b[0] & masks[len];
-    for (int i = 1; i < len; i++) ch = (ch << 6) | (b[i] & 0x3F);
-    return (Character) { .code = ch, .length = len };
-}
-*/
-void putUTF8(unsigned int code, char *s) {
+
+int putUTF8(unsigned int code, char *s) {
     if (code < 0x7f) {
         s[0] = code;
         s[1] = '\0';
+        return 1;
     } else if (code < 0x7ff) {
         s[0] = 0xC0 | (code >> 6);
         s[1] = 0x80 | (code & 0x3F);
         s[2] = '\0';
+        return 2;
     } else if (code < 0xffff) {
         s[0] = 0xE0 | (code >> 12);
         s[1] = 0x80 | ((code >> 6) & 0x3F);
         s[2] = 0x80 | (code & 0x3F);
         s[3] = '\0';
+        return 3;
     } else if (code <= 0x10FFFF) {
         s[0] = 0xF0 | (code >> 18);
         s[1] = 0x80 | ((code >> 12) & 0x3F);
         s[2] = 0x80 | ((code >> 6) & 0x3F);
         s[3] = 0x80 | (code & 0x3F);
         s[4] = '\0';
+        return 4;
     } else {
         s[0] = '\0';
+        return 0;
     }
 }
 
@@ -132,7 +124,8 @@ char const *utf8valid(char *s, int length) {
     return NULL;
 }
 
-void utf16to8(wchar_t const *ws, char *s) {
+// UTF16 conversion functions are used for Windows directory handling.
+int utf16to8(wchar_t const *ws, char *s) {
     int n = wcslen(ws);
     int out = 0;
     for (int i = 0; i < n; i++) {
@@ -158,13 +151,14 @@ void utf16to8(wchar_t const *ws, char *s) {
         }
     }
     s[out] = '\0';
+    return out;
 }
 
-void utf8to16(char const *s, wchar_t *ws) {
+int utf8to16(char const *s, wchar_t *ws) {
     int out = 0;
     for (int i = 0; i < strlen(s); ) {
         int length = ulength(&s[i]);
-        int ch = ucode(&s[i], length);
+        int ch = ucode(&s[i]);
         i += length;
         if (ch < 0x10000) ws[out++] = (wchar_t) ch;
         else {
@@ -174,6 +168,7 @@ void utf8to16(char const *s, wchar_t *ws) {
         }
     }
     ws[out] = 0;
+    return out;
 }
 
 // ---------- Testing ----------------------------------------------------------
@@ -182,7 +177,7 @@ void utf8to16(char const *s, wchar_t *ws) {
 static void testGetUTF8() {
     char *s = "\xE2\x80\x8C";
     int length = ulength(s);
-    int code = ucode(s, length);
+    int code = ucode(s);
     assert(length == 3 && code == 0x200C);
 }
 

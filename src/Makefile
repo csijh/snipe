@@ -1,9 +1,11 @@
 # The modules and their dependencies.
 array = array.c
-
 unicode = unicode.c
-file = file.c unicode.c array.c check.c
-kinds = kinds.c
+file = file.c unicode.c array.c
+styles = styles.c
+
+scan = scan.c styles.c
+
 text = text.c kinds.c $(file)
 brackets = brackets.c text.c kinds.c
 lines = lines.c text.c kinds.c

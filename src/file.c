@@ -14,12 +14,12 @@
 #define _POSIX_C_SOURCE 200809L
 #define _FILE_OFFSET_BITS 64
 #include "file.h"
-#include "check.h"
 #include "array.h"
 #include "unicode.h"
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <limits.h>
 #include <string.h>
 #include <ctype.h>
@@ -29,23 +29,19 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-// The current working directory on startup, and the installation directory.
-static char *current = NULL;
-static char *install = NULL;
-
 // Get the current working directory, with trailing /.
-static void findCurrent() {
-    if (current != NULL) free(current);
-    long size = 100;
-    current = malloc(size);
-    while (getcwd(current, size) == NULL) {
-        size += 100;
-        current = realloc(current, size);
+char *findCurrent() {
+    char *current = newArray(sizeof(char));
+    current = adjustTo(current, 100);
+    while (getcwd(current, length(current)) == NULL) {
+        current = adjustBy(current, 100);
     }
     int n = strlen(current);
     for (int i = 0; i < n; i++) if (current[i] == '\\') current[i] = '/';
-    if (size < n + 2) current = realloc(current, n + 2);
+    current = padBy(current, 1);
     if (current[n - 1] != '/') strcat(current, "/");
+    current = adjustTo(current, strlen(current));
+    return current;
 }
 
 // Check whether a path is absolute. Allow for a Windows drive letter prefix.
@@ -56,25 +52,22 @@ static bool absolute(char const *path) {
     return false;
 }
 
-// Find the installation directory from args[0]. Free the previous value, so
-// that the function can be called multiple times for testing. If in the src
-// directory, use the parent.
-static void findInstall(char const *program) {
-    if (install != NULL) free(install);
-    int n = strlen(program) + 1;
-    install = malloc(n);
-    strcpy(install, program);
+// If in the src directory, use the parent.
+char *findInstall(char const *arg0, char const *current) {
+    char *install = newArray(sizeof(char));
+    int n = strlen(arg0) + 1;
+    install = adjustTo(install, n);
+    strcpy(install, arg0);
     for (int i = 0; i < n; i++) if (install[i] == '\\') install[i] = '/';
     if (! absolute(install)) {
         if (n >= 2 && install[0]=='.' && install[1]=='/') {
             memmove(install, install + 2, n - 2);
             n = n - 2;
         }
-        char *s = malloc(strlen(current) + n);
-        strcpy(s, current);
-        strcat(s, install);
-        free(install);
-        install = s;
+        int c = strlen(current);
+        install = adjustBy(install, c);
+        memmove(install + c, install, n);
+        strncpy(install, current, c);
     }
     char *suffix = strrchr(install, '/');
     assert(suffix != NULL);
@@ -83,54 +76,49 @@ static void findInstall(char const *program) {
     if (strcmp(install + n5, "/src/") == 0) {
         install[n5 + 1] = '\0';
     }
+    install = adjustTo(install, strlen(install));
+    return install;
 }
 
-void findResources(char const *program) {
-    findCurrent();
-    findInstall(program);
-}
-
-void freeResources() {
-    free(current);
-    free(install);
-}
-
-// Join two strings.
-static char *join(char const *s1, char const *s2) {
-    int len = strlen(s1) + strlen(s2) + 1;
-    char *s = malloc(len);
-    strcpy(s, s1);
-    strcat(s, s2);
-    return s;
+// Make a path from a format and some pieces. The first piece must be absolute.
+// The format is used like fprintf, but producing an array. Free with freeArray.
+char *makePath(char const *format, ...) {
+    char *path = newArray(sizeof(char));
+    va_list args;
+    va_start(args, format);
+    int n = vsnprintf(path, 0, format, args);
+    va_end(args);
+    path = adjustTo(path, n);
+    path = padBy(path, 1);
+    va_start(args, format);
+    vsnprintf(path, n+1, format, args);
+    va_end(args);
+    return path;
 }
 
 char *parentPath(char const *path) {
     int n = strlen(path);
     if (n > 0 && path[n - 1] == '/') n--;
     while (n > 0 && path[n - 1] != '/') n--;
-    char *s = malloc(n + 1);
+    char *s = newArray(sizeof(char));
+    s = adjustTo(s, n);
+    s = padBy(s, 1);
     strncpy(s, path, n);
     s[n] = '\0';
     return s;
 }
 
-char *addPath(char const *path, char const *file) {
-    if (strcmp(file, "..") == 0) return parentPath(path);
-    if (strcmp(file, "../") == 0) return parentPath(path);
-    if (strcmp(file, ".") == 0) file = "";
-    else if (strcmp(file, "./") == 0) file = "";
-    else if (absolute(file)) path = "";
-    return join(path, file);
-}
-
-char *resourcePath(char *d, char *f, char *e) {
-    if (install == NULL) crash("Must call findResources first");
-    char *p = malloc(strlen(install) + strlen(d) + strlen(f) + strlen(e) + 1);
-    strcpy(p, install);
-    strcat(p, d);
-    strcat(p, f);
-    strcat(p, e);
-    return p;
+char *extension(char const *path) {
+    int n = strlen(path);
+    if (n == 0) return ".txt";
+    if (path[n-1] == '/') return ".directory";
+    if (strcmp(&path[n-8], "Makefile") == 0) return ".makefile";
+    if (strcmp(&path[n-8], "makefile") == 0) return ".makefile";
+    char *ext = strrchr(path, '.');
+    if (ext == NULL) return ".txt";
+    char *slash = strrchr(path, '/');
+    if (ext < slash) return ".txt";
+    return ext;
 }
 
 // Check if a path represents a directory.
@@ -140,48 +128,23 @@ static bool isDirPath(const char *path) {
     return S_ISDIR(info.st_mode);
 }
 
-char *fullPath(char const *file) {
-    if (current == NULL) crash("Must call findResources first");
-    char *path = addPath(current, file);
-    if (isDirPath(path) && path[strlen(path) - 1] != '/') {
-        char *p = path;
-        path = join(path, "/");
-        free(p);
-    }
-    for (int i = 0; i < strlen(path); i++) if (path[i] == '\\') path[i] = '/';
-    return path;
-}
-
-char *extension(char const *path) {
-    int n = strlen(path);
-    if (n == 0) return "txt";
-    if (path[n-1] == '/') return "directory";
-    if (strcmp(&path[n-8], "Makefile") == 0) return "makefile";
-    if (strcmp(&path[n-8], "makefile") == 0) return "makefile";
-    char *ext = strrchr(path, '.');
-    if (ext == NULL) return "txt";
-    char *slash = strrchr(path, '/');
-    if (ext < slash) return "txt";
-    return ext + 1;
-}
-
-static void err(char *e, char const *p) { printf("Error, %s: %s\n", e, p); }
-
 // Use binary mode, so that the number of bytes read equals the file size.
 char *readFile(char const *path, char *content) {
     assert(path[strlen(path) - 1] != '/');
     FILE *file = fopen(path, "rb");
-    if (file == NULL) { err("can't read", path); return NULL; }
+    if (file == NULL) return warn("can't read", path);
     fseek(file, 0L, SEEK_END);
     long size = ftell(file);
-    if (size > INT_MAX-2) { err("file too big:", path); return NULL; }
-    content = resize(content, size);
+    if (size > INT_MAX-2) return warn("file too big:", path);
+    content = adjustTo(content, size);
     int n = fread(content, 1, size, file);
-    if (n != size) { err("read failed", path); return NULL; }
+    if (n != size) return warn("read failed", path);
     if (n > 0 && content[n - 1] != '\n') {
-        content = adjust(content, +1);
-        content[n] = '\n';
+        content = adjustBy(content, 1);
+        content[n++] = '\n';
     }
+    content = padBy(content, 1);
+    content[n] = '\0';
     fclose(file);
     return content;
 }
@@ -231,14 +194,14 @@ static bool valid(char *name) {
 // the end of subdirectory names.
 static char **readEntries(char const *path) {
     DIR *dir = opendir(path);
-    if (dir == NULL) { err("can't read dir", path); return NULL; }
+    if (dir == NULL) return warn("can't read dir", path);
     char **names = newArray(sizeof(char *));
     struct dirent *entry;
     for (entry = readdir(dir); entry != NULL; entry = readdir(dir)) {
         if (! valid(entry->d_name)) continue;
         char *name = malloc(strlen(entry->d_name) + 2);
         strcpy(name, entry->d_name);
-        names = adjust(names, 1);
+        names = adjustBy(names, 1);
         names[length(names) - 1] = name;
     }
     closedir(dir);
@@ -252,7 +215,7 @@ static char **readEntries(char const *path) {
     wchar_t wpath[2 * strlen(path)];
     utf8to16(path, wpath);
     _WDIR *dir = _wopendir(wpath);
-    if (dir == NULL) { err("can't read dir", path); return NULL; }
+    if (dir == NULL) return warn("can't read dir", path);
     char **names = newArray(sizeof(char *));
     struct _wdirent *entry;
     for (entry = _wreaddir(dir); entry != NULL; entry = _wreaddir(dir)) {
@@ -279,7 +242,7 @@ static bool isDir(char const *dir, char *name) {
     return isDirPath(path);
 }
 
-char *readDirectory(char const *path) {
+char *readDirectory(char const *path, char *content) {
     assert(path[strlen(path) - 1] == '/');
     char **names = readEntries(path);
     if (names == NULL) return NULL;
@@ -290,15 +253,16 @@ char *readDirectory(char const *path) {
     sort(count, names);
     int total = 0;
     for (int i = 0; i < count; i++) total += strlen(names[i]) + 1;
-    char *result = malloc(total + 1);
-    result[0] = '\0';
+    content = adjustTo(content, total);
+    content = padBy(content, 1);
+    content[0] = '\0';
     for (int i = 0; i < count; i++) {
-        strcat(result, names[i]);
-        strcat(result, "\n");
+        strcat(content, names[i]);
+        strcat(content, "\n");
     }
     for (int i = 0; i < count; i++) free(names[i]);
     freeArray(names);
-    return result;
+    return content;
 }
 
 // Write out a Makefile, restoring the tabs.
@@ -320,7 +284,7 @@ static void writeMakefile(FILE *file, int size, char data[size]) {
 void writeFile(char const *path, int size, char data[size]) {
     assert(path[strlen(path) - 1] != '/');
     FILE *file = fopen(path, "wb");
-    if (file == NULL) { err("can't write", path); return; }
+    if (file == NULL) { warn("can't write", path); return; }
     if (strcmp(&path[strlen(path) - 9], "/Makefile") == 0) {
         writeMakefile(file, size, data);
     }
@@ -331,10 +295,10 @@ void writeFile(char const *path, int size, char data[size]) {
 // ---------- Testing ----------------------------------------------------------
 #ifdef fileTest
 
-// Test that the program is in snipe/src.
-static void testSnipe() {
+// Test that the program is in .../snipe/src/.
+static void testSnipe(char *current) {
     char *snipe = current + strlen(current) - 10;
-    assert(strncmp(snipe, "snipe/src", 9) == 0);
+    assert(strncmp(snipe, "snipe/src/", 10) == 0);
 }
 
 static void testAbsolute() {
@@ -345,41 +309,38 @@ static void testAbsolute() {
     assert(absolute("c:/d/prog"));
 }
 
-static void testFindInstall() {
+static void testFindInstall(char *current) {
     strcpy(current, "/a/b/");
-    findInstall("/a/b/");
+    char *install = findInstall("/a/b/", current);
     assert(strcmp(install, "/a/b/") == 0);
-    findInstall("/a/b/w");
+    freeArray(install);
+    install = findInstall("/a/b/w", current);
     assert(strcmp(install, "/a/b/") == 0);
-    findInstall("prog");
+    freeArray(install);
+    install = findInstall("prog", current);
     assert(strcmp(install, "/a/b/") == 0);
-    findInstall("./prog");
+    freeArray(install);
+    install = findInstall("./prog", current);
     assert(strcmp(install, "/a/b/") == 0);
+    freeArray(install);
 }
 
-static void testAddPath() {
-    char *s = addPath("/a/b/", "c.txt");
-    assert(strcmp(s, "/a/b/c.txt") == 0);
-    free(s);
-    s = addPath("/a/b/", "/c.txt");
-    assert(strcmp(s, "/c.txt") == 0);
-    free(s);
-    s = addPath("/a/b/", ".");
-    assert(strcmp(s, "/a/b/") == 0);
-    free(s);
-    s = addPath("/a/b/", "..");
-    assert(strcmp(s, "/a/") == 0);
-    free(s);
+static void testMakePath() {
+    char *s = makePath("%s%s%s%s", "/a/", "b/", "c", ".d");
+    assert(strcmp(s, "/a/b/c.d") == 0);
+    freeArray(s);
 }
 
 static void testExtension() {
-    assert(strcmp(extension("program.c"), "c") == 0);
-    assert(strcmp(extension("/path/program.c"), "c") == 0);
-    assert(strcmp(extension("/path.c/program"), "txt") == 0);
-    assert(strcmp(extension("/path/"), "directory") == 0);
-    assert(strcmp(extension("Makefile"), "makefile") == 0);
-    assert(strcmp(extension("/path/makefile"), "makefile") == 0);
+    assert(strcmp(extension("program.c"), ".c") == 0);
+    assert(strcmp(extension("/path/program.c"), ".c") == 0);
+    assert(strcmp(extension("/path.c/program"), ".txt") == 0);
+    assert(strcmp(extension("/path/"), ".directory") == 0);
+    assert(strcmp(extension("Makefile"), ".makefile") == 0);
+    assert(strcmp(extension("/path/makefile"), ".makefile") == 0);
 }
+
+
 
 static void testCompare() {
     assert(compare("", "") == 0);
@@ -403,22 +364,25 @@ static void testSort() {
 }
 
 static void testReadDirectory() {
-    char *text = readDirectory("./");
+    char *text = newArray(sizeof(char));
+    text = readDirectory("./", text);
 //    printf("%s", text);
-    free(text);
+    freeArray(text);
 }
 
 int main(int n, char *args[n]) {
-    findResources(args[0]);
-    testSnipe();
+    char *current = findCurrent();
+    char *install = findInstall(args[0], current);
+    testSnipe(current);
     testAbsolute();
-    testFindInstall();
-    testAddPath();
+    testFindInstall(current);
+    testMakePath();
     testExtension();
     testCompare();
     testSort();
     testReadDirectory();
-    freeResources();
+    freeArray(install);
+    freeArray(current);
     printf("File module OK\n");
     return 0;
 }
