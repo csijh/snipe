@@ -25,7 +25,7 @@
 
 <p>Snipe has a scanner, which is implemented as a string-matching
 state machine. It divides a source text into tokens, and gives each token a
-type. It:</p>
+style. It:</p>
 
 <ul>
 <li>includes bracket matching</li>
@@ -81,9 +81,9 @@ the target state. For example:</p>
 double quote character appears next in the input, the scanner moves past the
 character and goes into the <code>string</code> state.</p>
 
-<p>A rule may have a token type after the target state. A type is a constant
+<p>A rule may have a style after the target state. A style is a constant
 beginning with an upper case letter, and must be one of the ones listed later.
-If a rule has a type, the current token is ended, and given that type. For
+If a rule has a style, the current token is ended, and given that style. For
 example:</p>
 
 <pre>start == != start Op
@@ -91,7 +91,7 @@ example:</p>
 
 <p>With this rule, in the <code>start</code> state, if either of the equality
 operators <code>==</code> or <code>!=</code> appears next in the input, then
-the scanner moves past the operator, makes it a token with type
+the scanner moves past the operator, makes it a token with style
 <code>Op</code>, and goes to the <code>start</code> state.</p>
 
 <p>A pattern can consist of two dots with a character on either side:</p>
@@ -121,7 +121,7 @@ the current token. For example:</p>
 
 <p>In the <code>id</code> state, which presumably recognizes identifier tokens,
 if the next character in the source text is an open round bracket, the current
-token is given the type <code>Function</code> instead of <code>Id</code>. That
+token is given the style <code>Function</code> instead of <code>Id</code>. That
 allows an identifier such as <code>f</code> to be highlighted differently when
 it appears as <code>f(...)</code>. A lookahead pattern can be a range:</p>
 
@@ -140,7 +140,7 @@ be used in default rules. For example:</p>
 </pre>
 
 <p>When scanning an identifier, if any character is seen which is not covered by
-other rules, the token is terminated, given type <code>Id</code>, and scanning
+other rules, the token is terminated, given style <code>Id</code>, and scanning
 continues in the <code>start</code> state.</p>
 
 <p>The backslash character is used for escape sequences:</p>
@@ -156,16 +156,16 @@ continues in the <code>start</code> state.</p>
 <pre>start \s \n start Gap
 </pre>
 
-<p>This marks a space or a newline as a separator token of type
+<p>This marks a space or a newline as a separator token of style
 <code>Gap</code>. If a lookahead pattern matches when the current token is
-empty, and the rule has a type, the type is ignored. For example:</p>
+empty, and the rule has a style, the style is ignored. For example:</p>
 
 <pre>note |\n start Comment
 </pre>
 
 <p>While scanning a one-line comment, this rule ensures that any remaining
-characters on the line are given type <code>Comment</code>. If, however, the
-comment is empty so that there are no remaining characters, the type has no
+characters on the line are given style <code>Comment</code>. If, however, the
+comment is empty so that there are no remaining characters, the style has no
 effect and the scanner goes to the <code>start</code> state.</p>
 
 <p>Brackets are automatically matched. Bracket tokens have a suffix
@@ -175,9 +175,9 @@ effect and the scanner goes to the <code>start</code> state.</p>
 <pre>start ( start RoundB
 </pre>
 
-<p>When this rule is obeyed, as well as giving the bracket the type
+<p>When this rule is obeyed, as well as giving the bracket the style
 <code>RoundB</code>, the bracket is pushed on the stack of unmatched opening
-brackets (i.e. the position and type of the token is remembered). A closing
+brackets (i.e. the position and style of the token is remembered). A closing
 bracket causes an item to be popped off the stack. For example:</p>
 
 <pre>start ) start RoundE
@@ -185,10 +185,10 @@ bracket causes an item to be popped off the stack. For example:</p>
 
 <p>For this rule to be obeyed, as well as the closing bracket being next in the
 input, the top item on the stack must be a <code>RoundB</code> bracket. If so,
-the stack is popped, the closing bracket is given the type <code>RoundE</code>,
-and the two brackets are marked as matching. The default, if there is no other
-rule that applies, is that the opening and closing brackets are marked as
-mismatching. A closing bracket is also marked as a mismatch if the stack is
+the stack is popped, the closing bracket is given the style
+<code>RoundE</code>, and the two brackets are marked as matching. The default,
+if there is no other rule that applies, is that the closing bracket is marked
+as mismatched. A closing bracket is also marked as mismatched if the stack is
 empty.</p>
 
 <p>Comment delimiters are treated as brackets, using <code>CommentB</code> for
@@ -206,7 +206,7 @@ tokens in between:</p>
 <pre>start " string QuoteB
 </pre>
 
-<p>For a tag-based language such as HTML or XML, types <code>TagB</code>,
+<p>For a tag-based language such as HTML or XML, styles <code>TagB</code>,
 <code>Tag</code> and <code>TagE</code> can be used to handle and match tags.
 For example, to recognise the start tag <code>&lt;html></code>, after treating
 the <code>&lt;</code> sign as a separate token, this rule can be used:</p>
@@ -222,10 +222,10 @@ like this:</p>
 </pre>
 
 <p>Again, the <code>&lt;/</code> and <code>></code> are treated as separate
-tokens so that the name alone is treated as a bracket. For this rule to apply,
-<code>html</code> must be next in the input, a token of type <code>TagB</code>
-must be at the top of the stack, and the opening and closing brackets must have
-the same name, in this case <code>html</code>.</p>
+tokens so that the name alone is treated as a tag bracket. For this rule to
+apply, <code>html</code> must be next in the input, a token of style
+<code>TagB</code> must be at the top of the stack, and the opening and closing
+brackets must have the same name, in this case <code>html</code>.</p>
 
 <h2>States</h2>
 
@@ -241,12 +241,12 @@ start a..z A..Z id
 </pre>
 
 <p>In the <code>start</code> state, if an equality operator appears next in the
-input, it is marked with type <code>Op</code> and the scanner remains in the
+input, it is marked with style <code>Op</code> and the scanner remains in the
 <code>start</code> state, whereas if a letter appears, the scanner goes into
 the <code>id</code> state. If two different patterns match at one position in
 the input, the longer pattern takes precedence:</p>
 
-<pre>start = start Sign
+<pre>start = start Mark
 start == != start Op
 </pre>
 
@@ -255,27 +255,27 @@ rule applies, not the first. If there is only a single equal sign, the first
 rule applies.</p>
 
 <p>A state's pattern strings should normally be distinct. One exception to the
-rule is when there are two or more possible bracket types that can be
+rule is when there are two or more possible bracket styles that can be
 popped:</p>
 
 <pre>start } state1 BlockE
-start } state2 GroupE
+start } state2 NestE
 </pre>
 
 <p>This might occur in a language where curly brackets are used both for blocks
-and for grouping. It is desirable to give them different types, because they
-affect semicolon insertion in different ways. For these rules to apply, an open
-curly bracket must have been pushed on the stack either as <code>BlockB</code>
-or as <code>GroupB</code>, presumably in one of two different places in the
-language definition. When a close curly bracket is matched in the
-<code>start</code> state, the relevant one of the two rules shown matches,
-causing a jump to one of two different states. If neither rule matches, the
-default is that the brackets are marked as mismatched.</p>
+and for ordinary nesting. It is desirable to give them different styles,
+because they affect semicolon insertion in different ways. For these rules to
+apply, an open curly bracket must have been pushed on the stack either as
+<code>BlockB</code> or as <code>NestB</code>, presumably in one of two
+different places in the language definition. When a close curly bracket is
+matched in the <code>start</code> state, the relevant one of the two rules
+shown matches, causing a jump to one of two different states. If neither rule
+matches, the default is that the close bracket is marked as mismatched.</p>
 
 <p>A second exception to the rule about pattern strings being distinct is where
 one is a lookahead and the other is a non-lookahead pattern. The lookahead
 pattern applies if there is a non-empty current token, and must have a token
-type and stay in the same state. The non-lookahead pattern applies if the
+style and stay in the same state. The non-lookahead pattern applies if the
 current token is empty:</p>
 
 <pre>note |\s note Comment
@@ -284,9 +284,9 @@ note \s  note Gap
 
 <p>These rules deal with a space encountered while scanning a one-line comment.
 If there is a non-empty current token, the first rule applies and the token is
-given the type <code>Comment</code>. The current token is then empty, so the
-second rule applies, and the space is given the type <code>Gap</code>.
-(This feature isn't essential, but it significantly reduces the number of
+given the style <code>Comment</code>. The current token is then empty, so the
+second rule applies, and the space is given the style <code>Gap</code>.
+(This convention isn't essential, but it significantly reduces the number of
 states needed in a language definition.)</p>
 
 <p>If a single character is matched directly by one pattern and as
@@ -319,7 +319,7 @@ check that every state handles all the single characters <code>!..~</code>
 partitions the whole input into tokens and never fails. Where a lookahead
 pattern causes a jump between states without making progress, there is a check
 that no loop of such jumps can occur, to ensure that the scanner always
-terminates. There is a check that if a rule has a bracket type with a
+terminates. There is a check that if a rule has a bracket style with a
 <code>B</code> or <code>E</code> suffix, then the current token cannot be
 empty, to ensure that brackets cannot be ignored.</p>
 
@@ -329,39 +329,37 @@ a newline, because that would prevent simple line-at-a-time rescanning. A
 warning is given if a space or newline is included in a longer token, rather
 than forming a separator on its own, because that potentially goes against the
 idea of breaking long constructs into mini-tokens. It is normal to give a space
-or newline the type <code>Gap</code>. However, it is sometimes necessary to
-give a newline a different type, for example <code>CommentE</code> to mark the
+or newline the style <code>Gap</code>. However, it is sometimes necessary to
+give a newline a different style, for example <code>CommentE</code> to mark the
 end of a one-line comment.</p>
 
 <h2>Types</h2>
 
-<p>These are the available token types, and their intended meanings:</p>
+<p>These are the available token styles, and their intended meanings:</p>
 
-<pre>Keyword, Declaration, Alternative       <samp>kinds of keyword</samp>
-Identifier, Function, Property          <samp>kinds of identifier</samp>
-Operator, Unary, Sign, Mark             <samp>operators and punctuation</samp>
-Value, Gap, Error                       <samp>constants, separators, illegal tokens</samp>
-QuoteB, Quote, QuoteE                   <samp>one-line or multi-line quotes</samp>
-CommentB, Comment, CommentE             <samp>one-line or multi-line comments</samp>
-TagB, Tag, TagE                         <samp>HTML-like tag names</samp>
-Bracket                                 <samp>unspecified bracket</samp>
-RoundB, RoundE, SquareB, SquareE        <samp>round and square brackets</samp>
-GroupB, GroupE, BlockB, BlockE          <samp>group and block brackets</samp>
-Quote2B, Quote2E, Comment2B, Comment2E  <samp>alternatives</samp>
-Round2B, Round2E, Square2B, Square2E
-Group2B, Group2E, Block2B, Block2E
+<pre>Keyword, Declaration, Alternative           <samp>kinds of keyword</samp>
+Identifier, Function, Property              <samp>kinds of identifier</samp>
+Operator, Unary, Mark, Jot                  <samp>operators and punctuation</samp>
+Value, Gap, Error                           <samp>constants, separators, illegal tokens</samp>
+QuoteB, Quote, QuoteE                       <samp>one-line or multi-line quotes</samp>
+CommentB, Comment, CommentE                 <samp>one-line or multi-line comments</samp>
+Round, Square, Nest, Block, Tag             <samp>undifferentiated brackets</samp>
+RoundB, SquareB, NestB, BlockB, TagB        <samp>begin brackets</samp>
+RoundE, SquareE, NestE, BlockE, TagE        <samp>end brackets</samp>
+Round2B, Square2B, Nest2B, Block2B, Tag2B   <samp>alternatives</samp>
+Round2E, Square2E, Nest2E, Block2E, Tag2E
 </pre>
 
-<p>The type names can be shortened to any unique abbreviation, e.g.
+<p>The style names can be shortened to any unique abbreviation, e.g.
 <code>Key</code>, <code>Id</code>, <code>Op</code>, or even <code>K</code>,
-<code>I</code>, <code>O</code>. The scanning conventions and the types are
+<code>I</code>, <code>O</code>. The scanning conventions and the styles are
 designed to help with syntax highlighting, reformatting, bracket matching,
 indenting, semicolon insertion, and incremental rescanning as follows.</p>
 
-<p><b>Syntax highlighting:</b> Each token type can be displayed differently,
-according to a theme definition. Types with suffixes are converted to
-<code>Quote</code>, <code>Comment</code>, <code>Tag</code> or
-<code>Bracket</code> for display purposes.</p>
+<p><b>Syntax highlighting:</b> Each token style can be displayed differently,
+according to a theme definition. Bracket or bracket-like styles with
+<code>B</code>, <code>E</code>, <code>2B</code> or <code>2B</code> suffixes are
+converted to the versions without suffixes for display purposes.</p>
 
 <p><b>Reformatting:</b> The scanning conventions ensure that comments are
 divided into word-like tokens, with spaces and newlines as separators. This
@@ -376,16 +374,16 @@ is followed by two or more spaces is not combined with the previous line.</p>
 
 <p><b>Bracket matching:</b> A stack of open brackets is maintained by the
 scanner, and manipulated by the push and pop conventions. If a pop succeeds,
-the two brackets are matched. If it fails, the brackets are marked as
+the two brackets are matched. If it fails, the close bracket is marked as
 mismatched. This bracket matching can also be used to control the actions of
 the state machine, so that relatively complex contexts can be detected.</p>
 
-<p>Round, square and group bracket types are provided. Group brackets are
+<p>Round, square and nest bracket styles are provided. Nest brackets are
 brackets which are used in the same manner as round or square brackets. There
-is no difference between these bracket types, except that they are marked as
+is no difference between these bracket styles, except that they are marked as
 mismatched if they don't come in matching pairs. There are also block brackets,
 which have a different effect on semicolon insertion. For each of the four
-kinds of bracket types, there is an alternative such as <code>Round2B</code>,
+kinds of bracket styles, there is an alternative such as <code>Round2B</code>,
 <code>Round2E</code> which can be used in a language definition to detect
 syntactic contexts.</p>
 
@@ -411,8 +409,8 @@ expects an immediately following token other than a semicolon, as postfix if it
 expects an immediately preceding token other than a semicolon, and as infix if
 it expects both.</p>
 
-<p>Most token types are nonfix. The types <code>Sign</code> and <code>Op</code>
-are for infix punctuation marks and operators. A <code>Mark</code> is a nonfix
+<p>Most token styles are nonfix. The styles <code>Mark</code> and <code>Op</code>
+are for infix punctuation marks and operators. A <code>Jot</code> is a nonfix
 punctuation mark. A <code>Unary</code> operator (e.g. <code>++</code>) is
 regarded as nonfix, on the assumption that it is unlikely to be separated from
 its operand by a newline. An operator such as minus which can be either prefix
@@ -429,12 +427,12 @@ assumption that it closes a block, so a semicolon is appropriate before it but
 not after it.</p>
 
 <p>Languages in the C family often use curly brackets <samp>{}</samp> both as
-block brackets and as group brackets. In the latter case, a semicolon is
+block brackets and as nest brackets. In the latter case, a semicolon is
 required after the close bracket. To cope with this, the language definition
-can give the open bracket either the type <code>BlockB</code> or
-<code>GroupB</code> according to context, and use bracket matching to ensure
-that the corresponding close bracket is given type <code>BlockE</code> or
-<code>GroupE</code> to match.</p>
+can give the open bracket either the style <code>BlockB</code> or
+<code>NestB</code> according to context, and use bracket matching to ensure
+that the corresponding close bracket is given style <code>BlockE</code> or
+<code>NestE</code> to match.</p>
 
 <p><b>Incremental rescanning:</b> A line of source text can be rescanned
 individually, using only a recorded start state for the line, and the relevant
@@ -467,20 +465,20 @@ id     |                  start Id
 </pre>
 
 <p>Suppose the keyword <samp>for</samp> appears next in the input. The scanner
-goes to the <code>key</code> state which gives the token the type
+goes to the <code>key</code> state which gives the token the style
 <code>Key</code>. Suppose instead that the identifier <samp>form</samp> appears
 next in the input. The prefix <samp>for</samp> is matched and the scanner goes
 into the <code>key</code> state. Then the <samp>m</samp> is matched, the
 scanner goes into the <code>id</code> state, and the token ends up being given
-the type <code>Id</code>.</p>
+the style <code>Id</code>.</p>
 
 <p>Sometimes, judgement has to be used to decide how to handle operators, with
 regard to semicolon insertion. In general, with an operator such as a minus
 sign which can be infix or prefix, it is better to declare it as infix
-(type <code>Op</code>). This means a semicolon is never expected before or after
+(style <code>Op</code>). This means a semicolon is never expected before or after
 it. If used at the start or end of a line, it indicates a continuation. The
 only situation where this gives the wrong result is where a statement begins
-with a minus sign, which is rare.</p>
+with a minus sign, which is vanishingly rare.</p>
 
 <p>On the other hand, the times <samp>*</samp> operator in the C or C++
 languages, which is also used as a prefix dereference operator, quite often
@@ -490,7 +488,7 @@ appears at the start of a statement:</p>
 *p = 0
 </samp></pre>
 
-<p>So in that case, it is better to give it type <code>Unary</code>, i.e.
+<p>So in that case, it is better to give it style <code>Unary</code>, i.e.
 nonfix, on the basis that it is probably rarer for it to be used to continue a
 statement across lines.</p>
 
@@ -507,7 +505,7 @@ inner scope:</p>
 <p>In that case, a preceding semicolon is expected. It doesn't seem practical to
 detect this situation without full parsing. The simplest approach would
 seem to be to assume that a block is always attached to the end of a statement,
-and to avoid this fairly rare situation by writing something of the form:</p>
+and to avoid standalone blocks by converting them into something of the form:</p>
 
 <pre><samp>if (true) {
     int temp = a;
@@ -528,9 +526,9 @@ note   \s       note  Gap
 note   \n       start CommentE
 </pre>
 
-<p>Any non-empty token before a space or a newline is given a type by the
+<p>Any non-empty token before a space or a newline is given a style by the
 <code>|\s</code> or <code>|\n</code> pattern. A space is given the separator
-type <code>Gap</code>, whereas a newline is given the type
+style <code>Gap</code>, whereas a newline is given the style
 <code>CommentE</code> to terminate the comment. A similar approach can be taken
 with delimiters. A one-line string literal can be handled using rules such
 as:</p>
@@ -544,9 +542,9 @@ string  \n          start  Quote2E
 </pre>
 
 <p>Spaces and newlines are handled in a similar way to one-line comments, except
-that if the string is not closed by the next newline, the newline is given type
+that if the string is not closed by the next newline, the newline is given style
 <code>Quote2E</code> to close the construct and cause a deliberate mismatch
-with <code>QuoteB</code>, causing the opening quote to be highlighted as an
+with <code>QuoteB</code>, causing the newline to be highlighted as an
 error.</p>
 
 <p>Multi-line comments, say starting with <samp>/*</samp> and ending with
@@ -561,11 +559,11 @@ comment  */               start   CommentE
 </pre>
 
 <p>There are lookahead patterns to detect separators and delimiters, and ensure
-that anything preceding them is given the <code>Comment</code> type. Spaces and
-newlines are given type <code>Gap</code>. Although an opening delimiter
+that anything preceding them is given the <code>Comment</code> style. Spaces and
+newlines are given style <code>Gap</code>. Although an opening delimiter
 <code>/*</code> is technically legal, it is marked as <code>Error</code> on the
 basis that it is very likely not intentional, and highlighting it could be
-helpful. The <code>Comment2B</code> and <code>Comment2E</code> types can be
+helpful. The <code>Comment2B</code> and <code>Comment2E</code> styles can be
 used for a language with comments that nest. If <samp>/*</samp> and
 <samp>*/</samp> comments nested, the rules could be:</p>
 
@@ -578,15 +576,15 @@ comment  */               comment Comment2E
 comment  */               start   CommentE
 </pre>
 
-<p>An inner open delimiter is given the alternative type <code>Comment2B</code>.
+<p>An inner open delimiter is given the alternative style <code>Comment2B</code>.
 Then <code>*/</code> is matched either as <code>Comment2E</code> and scanning
 continues in an outer comment, or as <code>CommentE</code> which exits from the
 outermost comment.</p>
 
 <p>Languages in the C family often use curly brackets both as block brackets and
-as group brackets. To give them different types, the contexts in which group
+as nest brackets. To give them different styles, the contexts in which nest
 brackets appear can be detected using bracket matching. For example, one
-context in C where curly brackets are used for grouping is the right hand sign
+context in C where curly brackets are used for nesting is the right hand sign
 of an assignment:</p>
 
 <pre><samp>= (...) { ... }
@@ -594,25 +592,25 @@ of an assignment:</p>
 
 <p>The round brackets can, in principle, contain an arbitrarily complex type
 expression, with brackets of its own. By giving these round brackets different
-types from the usual ones, the scanner can match them up and so detect the
-opening curly group bracket which follows. For example, the relevant rules might
+styles from the usual ones, the scanner can match them up and so detect the
+opening curly nest bracket which follows. For example, the relevant rules might
 be:</p>
 
 <pre>start  {  start  BlockB
 start  (  start  RoundB
 start  }  start  BlockE
-start  }  start  GroupE
+start  }  start  NestE
 start  )  start  RoundE
 start  )  eqtype Round2E
 start  =  eq     Op
 
 eq     (  start  Round2B
 
-eqtype {  start  GroupB
+eqtype {  start  NestB
 </pre>
 
-<p>The types <code>BlockB</code> and <code>BlockB</code> are being used for
-block brackets, <code>GroupB</code> and <code>GroupE</code> for curly group
+<p>The styles <code>BlockB</code> and <code>BlockB</code> are being used for
+block brackets, <code>NestB</code> and <code>NestE</code> for curly nest
 brackets, <code>RoundB</code> and <code>RoundE</code> for ordinary round
 brackets and <code>Round2B</code> and <code>Round2E</code> for round brackets
 immediately after an equal sign.</p>
@@ -623,8 +621,8 @@ returns to the <code>start</code> state to process the type expression. When
 the <code>Round2B</code> token comes back to the top of the stack and the open
 round bracket is matched as <code>Round2E</code>, the scanner jumps to the
 <code>eqtype</code> state to give the following open curly bracket the
-<code>GroupB</code> type. When the matching closing bracket appears in the
-<code>start</code> state, it is given the type <code>GroupE</code> instead of
+<code>NestB</code> style. When the matching closing bracket appears in the
+<code>start</code> state, it is given the style <code>NestE</code> instead of
 <code>BlockE</code>, so that it expects a semicolon.</p>
 
 <p>Some languages support template strings, with embedded substitution
@@ -654,10 +652,10 @@ template  `     start    QuoteE
 
 <p>The <code>template</code> state uses a lookahead <code>|${</code> to ensure
 that all the text up to that point is included in <code>Quote</code> tokens.
-Then <code>${</code> is given the type <code>Quote2B</code>, treating it as an
+Then <code>${</code> is given the style <code>Quote2B</code>, treating it as an
 alternative opener. The scanner then goes to the start state to handle whatever
 is within the brackets. The <code>start</code> state recognises the matching
-close curly bracket, giving it type <code>Quote2E</code>, and returns to the
+close curly bracket, giving it style <code>Quote2E</code>, and returns to the
 <code>template</code> state to deal with the rest of the template.</p>
 
 <p>In a language definition for a tag-based language like HTML, start and end
@@ -706,41 +704,43 @@ represents a line of source text. An immediately following line starting with
 <samp>&lt;</samp> represents the output from the scanner. For example:</p>
 
 <pre><samp>&gt; (count + 1)
-&lt; BI---- O VB
+&lt; RI---- O VR
 </samp></pre>
 
-<p>The output has the one-letter abbreviation for the type of each token, placed
-under its first character. Characters of a token after the first are marked
-with minus signs. Gaps are marked with spaces. The scanner state after scanning
-the input line is used as the start state for the next test, which allows for
-extended examples.</p>
+<p>The output has the one-letter abbreviation for the style of each token,
+placed under its first character. Characters of a token after the first are
+marked with minus signs. Gaps are marked with spaces. The scanner state after
+scanning the input line is used as the start state for the next test, which
+allows for extended examples.</p>
 
-<p>Bracket matching results in bracket tokens being marked with <samp>b</samp>
-in stead of <samp>B</samp> if they are mismatched:</p>
+<p>Bracket matching results in close bracket tokens being marked with
+a lower case letter instead of upper case if they are mismatched:</p>
 
 <pre><samp>&gt; (count + 1]
-&lt; bI---- O Vb
+&lt; RI---- O Vs
 </samp></pre>
 
-<p>If a newline is given a type other than <code>Gap</code>, then the expected
+<p>If a newline is given a style other than <code>Gap</code>, then the expected
 output needs to have an extra character to represent it. For example, when a
-one-line comment is scanned, the newline is given type
+one-line comment is scanned, the newline is given style
 <code>CommentE</code>:</p>
 
 <pre><samp>&gt; // note
 &lt; C- C---C
 </samp></pre>
 
-<p>The tests are all carried out together, so that bracket matching in one test
-can affect the results from a previous test.</p>
+<p>The scanner state and stack of open brackets are carried across from one test
+to the next. That allows bracket matching on multiple lines to be tested:</p>
 
-<pre><samp>&gt; open (
-&lt; I--- b
-&gt; close ]
-&lt; I---- b
+<pre><samp>&gt; ((
+&lt; RR
+&gt; )]
+&lt; Rs
 </samp></pre>
 
-<p>If a test fails, a trace of execution of the scanner is shown.</p>
+<p>The close round bracket matches its partner, but the close square bracket
+doesn't. If a test fails, a trace of the execution of the scanner is
+displayed.</p>
 
 <!--
 

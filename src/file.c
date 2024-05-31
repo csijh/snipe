@@ -32,15 +32,15 @@
 // Get the current working directory, with trailing /.
 char *findCurrent() {
     char *current = newArray(sizeof(char));
-    current = adjustTo(current, 100);
+    current = resize(current, 100);
     while (getcwd(current, length(current)) == NULL) {
-        current = adjustBy(current, 100);
+        current = adjust(current, +100);
     }
     int n = strlen(current);
     for (int i = 0; i < n; i++) if (current[i] == '\\') current[i] = '/';
-    current = padBy(current, 1);
+    current = ensure(current, 1);
     if (current[n - 1] != '/') strcat(current, "/");
-    current = adjustTo(current, strlen(current));
+    current = resize(current, strlen(current));
     return current;
 }
 
@@ -56,7 +56,7 @@ static bool absolute(char const *path) {
 char *findInstall(char const *arg0, char const *current) {
     char *install = newArray(sizeof(char));
     int n = strlen(arg0) + 1;
-    install = adjustTo(install, n);
+    install = resize(install, n);
     strcpy(install, arg0);
     for (int i = 0; i < n; i++) if (install[i] == '\\') install[i] = '/';
     if (! absolute(install)) {
@@ -65,7 +65,7 @@ char *findInstall(char const *arg0, char const *current) {
             n = n - 2;
         }
         int c = strlen(current);
-        install = adjustBy(install, c);
+        install = adjust(install, c);
         memmove(install + c, install, n);
         strncpy(install, current, c);
     }
@@ -76,7 +76,7 @@ char *findInstall(char const *arg0, char const *current) {
     if (strcmp(install + n5, "/src/") == 0) {
         install[n5 + 1] = '\0';
     }
-    install = adjustTo(install, strlen(install));
+    install = resize(install, strlen(install));
     return install;
 }
 
@@ -88,8 +88,8 @@ char *makePath(char const *format, ...) {
     va_start(args, format);
     int n = vsnprintf(path, 0, format, args);
     va_end(args);
-    path = adjustTo(path, n);
-    path = padBy(path, 1);
+    path = resize(path, n);
+    path = ensure(path, 1);
     va_start(args, format);
     vsnprintf(path, n+1, format, args);
     va_end(args);
@@ -101,8 +101,8 @@ char *parentPath(char const *path) {
     if (n > 0 && path[n - 1] == '/') n--;
     while (n > 0 && path[n - 1] != '/') n--;
     char *s = newArray(sizeof(char));
-    s = adjustTo(s, n);
-    s = padBy(s, 1);
+    s = resize(s, n);
+    s = ensure(s, 1);
     strncpy(s, path, n);
     s[n] = '\0';
     return s;
@@ -132,18 +132,19 @@ static bool isDirPath(const char *path) {
 char *readFile(char const *path, char *content) {
     assert(path[strlen(path) - 1] != '/');
     FILE *file = fopen(path, "rb");
-    if (file == NULL) return warn("can't read", path);
+    if (file == NULL) { warn("can't read", path); return content; }
     fseek(file, 0L, SEEK_END);
     long size = ftell(file);
-    if (size > INT_MAX-2) return warn("file too big:", path);
-    content = adjustTo(content, size);
+    fseek(file, 0L, SEEK_SET);
+    if (size > INT_MAX-2) { warn("file too big:", path); return content; }
+    content = resize(content, size);
     int n = fread(content, 1, size, file);
-    if (n != size) return warn("read failed", path);
+    if (n != size) { warn("read failed", path); return content; }
     if (n > 0 && content[n - 1] != '\n') {
-        content = adjustBy(content, 1);
+        content = adjust(content, +1);
         content[n++] = '\n';
     }
-    content = padBy(content, 1);
+    content = ensure(content, 1);
     content[n] = '\0';
     fclose(file);
     return content;
@@ -201,7 +202,7 @@ static char **readEntries(char const *path) {
         if (! valid(entry->d_name)) continue;
         char *name = malloc(strlen(entry->d_name) + 2);
         strcpy(name, entry->d_name);
-        names = adjustBy(names, 1);
+        names = adjust(names, +1);
         names[length(names) - 1] = name;
     }
     closedir(dir);
@@ -225,7 +226,7 @@ static char **readEntries(char const *path) {
         if (! valid(name0)) continue;
         char *name = malloc(strlen(name0) + 2);
         strcpy(name, name0);
-        names = adjust(names, 1);
+        names = adjust(names, +1);
         names[length(names) - 1] = name;
     }
     _wclosedir(dir);
@@ -253,8 +254,8 @@ char *readDirectory(char const *path, char *content) {
     sort(count, names);
     int total = 0;
     for (int i = 0; i < count; i++) total += strlen(names[i]) + 1;
-    content = adjustTo(content, total);
-    content = padBy(content, 1);
+    content = resize(content, total);
+    content = ensure(content, 1);
     content[0] = '\0';
     for (int i = 0; i < count; i++) {
         strcat(content, names[i]);

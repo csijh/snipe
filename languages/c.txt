@@ -3,12 +3,12 @@
 // It is assumed that there are no digraphs or trigraphs (or that they are
 // handled by some form of preprocessing).
 
-// Backslash newline, as a line joiner. This is assumed to occur only between tokens
-// (e.g. in #define) or in strings. Give the backslash type Sign to avoid
-// unwanted semicolons.
+// Backslash newline, as a line joiner. This is assumed to occur only between
+// tokens (e.g. in #define) or in strings. Give the backslash type Mark to
+// avoid unwanted semicolons.
 
 start |\\\n join
-join  \\    join  Sign
+join  \\    join  Mark
 join  \n    start Gap
 join  |     start Error
 
@@ -53,19 +53,19 @@ start   ## , ; : -> ...                                 start Mark
 start   =                                               init  Op
 
 // Brackets. By default { and } are block brackets. To help with semicolon
-// insertion, the opener { is marked as a group bracket instead, by the
-// rules below. The closer } is marked as a group bracket to match.
+// insertion, the opener { is marked as a nest bracket instead, by the
+// rules below. The closer } is marked as a nest bracket to match.
 
 start  {   start BlockB
 start  }   start BlockE
-start  }   start GroupE
+start  }   start NestE
 start  [   start SquareB
 start  ]   start SquareE
 start  (   start RoundB
 start  )   start RoundE
 
 // Check for declaration brackets  enum {  or  struct {
-decl   {                           start GroupB
+decl   {                           start NestB
 decl   a..z A..Z _ \\U \\u         decl1
 decl   \s \n                       decl  Gap
 decl   |                           start
@@ -75,12 +75,12 @@ decl1   a..z A..Z 0..9 _ \\U \\u   decl1
 decl1   |                          decl2 Id
 
 // Check for  enum ID {  or  struct ID {
-decl2   {                          start GroupB
+decl2   {                          start NestB
 decl2   \s \n                      decl2 Gap
 decl2   |                          start
 
 // Check for initialiser brackets  = {
-init    {                          start GroupB
+init    {                          start NestB
 init    (                          init1 Round2B
 init    \s \n                      init  Gap
 init    |                          start
@@ -101,7 +101,7 @@ init3   \s \n                      init3 Gap
 init3   |                          start
 
 // Check for   = (ID) {   or   = (struct ID) {
-init4   {                          start GroupB
+init4   {                          start NestB
 init4   |                          start
 
 // A dot starts a number, or is an operator.
@@ -132,7 +132,7 @@ string  \s          string  Gap
 string  "           start   QuoteE
 string  \n          start   Quote2E
 
-string2 \\          string2 Sign
+string2 \\          string2 Mark
 string2 \n          string  Gap
 string2 |           string  Error
 
@@ -208,7 +208,7 @@ start     \s \n      start Gap
 
 // Matched square brackets, and mismatched brackets
 > [x],(y]
-< SISMrIs
+< SISMRIs
 
 // An id can start with a declarator or keyword
 > char chart for form
@@ -218,17 +218,17 @@ start     \s \n      start Gap
 > ++!<<=...->
 < U-UO--M--M-
 
-// Curly brackets recognised as group or block brackets
+// Curly brackets recognised as nest or block brackets
 > s={}; do{}
-< IOGGM K-BB
+< IONNM K-BB
 
-// More curly group brackets
+// More curly nest brackets
 > enum{}  struct{}  enum E{}  struct S{}
-< K---GG  K-----GG  K--- IGG  K----- IGG
+< K---NN  K-----NN  K--- INN  K----- INN
 
-// More curly group brackets
+// More curly nest brackets
 > ={}  =(t){}  =(struct t){}
-< OGG  ORIRGG  ORK----- IRGG
+< ONN  ORIRNN  ORK----- IRNN
 
 // Dot as sign or as part of number
 > s.x 1.2 .2
@@ -236,15 +236,15 @@ start     \s \n      start Gap
 
 // Character literals, including unclosed at end of line
 > 'x' '\'' 'x
-< QQQ QQ-Q qQq
+< QQQ QQ-Q QQq
 
 // String literals, including unclosed
 > "hello world" "a\"b" "unclosed
-< QQ---- Q----Q QQ---Q qQ-------q
+< QQ---- Q----Q QQ---Q QQ-------q
 
 // String literal with joiner
 > "hello \
-< QQ---- S
+< QQ---- M
 > world"
 < Q----Q
 
@@ -266,7 +266,7 @@ start     \s \n      start Gap
 
 // Joiner
 > #define f(x) \
-< AA----- FRIR S
+< AA----- FRIR M
 
 // Illegal characters
 > $ @ `
@@ -278,7 +278,7 @@ start     \s \n      start Gap
 
 // Mismatched brackets on two lines.
 > one (
-< F-- r
+< F-- R
 > two ]
 < I-- s
 
@@ -303,10 +303,10 @@ start     \s \n      start Gap
 < I----- IM
 
 > enum suit { Club, Diamond, Heart, Spade };
-< K--- I--- G I---M I------M I----M I---- GM
+< K--- I--- N I---M I------M I----M I---- NM
 
 > int ns[] = { 1, 2, 34};
-< D-- I-SS O G VM VM V-GM
+< D-- I-SS O N VM VM V-NM
 
 > char *s = "a\nb\0c\04d";
 < D--- OI O QQ----------QM

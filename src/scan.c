@@ -1,141 +1,102 @@
 // The Snipe editor is free and open source. See licence.txt.
-#include "styles.h"
+#include "scan.h"
+#include "array.h"
+#include <stdio.h>
+#include <stdbool.h>
+#include <string.h>
 
-// A scanner contains the transition table for a language, the input, the
-// output, and a stack of unmatched open brackets. For tracing, it has the
-// expected output, the state names, and trace start and end indexes.
-struct scanner {
-    byte *table; char *in; byte *out; int *stack;
-    char *expect; char **stateNames; int trace, end;
-};
-typedef struct scanner Scanner;
-
-// The state transition table for a language comes from ../languages. The table
-// has one row per state. There are 98 columns, two for \n or \s according to
-// whether or not there is a non-empty current token, and one each for !..~.
-// A cell has two bytes containing an action.
-enum { WIDTH = 98, CELL = 2 };
-
-static inline int columnOf(char ch, bool token) {
-    if (ch == \n) return token ? 0 : 1;
-    if (ch == ' ') return token ? 2 : 3;
-    return ch - '!' + 4;
-}
-
-static inline int cellOf(int r, int c) {
-    return CELL * (r * WIDTH + c);
-}
-
-// The first byte in a cell may have these flags. In the main body of the table,
-// the link flag indicates that the cell is a link to the overflow area. In the
-// overflow area, the same flag represents a soft bracket match. In any cell
-// which isn't a link, the look flag indicates a lookahead pattern which does
-// not consume input.
-enum { FLAGS = 0xC0, LINK = 0x80, SOFT = 0x80, LOOK = 0x40 };
-static inline bool isLink(byte *cell) { return (cell[0] & LINK) != 0; }
-static inline bool isSoft(byte *cell) { return (cell[0] & SOFT) != 0; }
-static inline bool isLook(byte *cell) { return (cell[0] & LOOK) != 0; }
-
-// In the case of a link, the two bytes of a cell form an offset to a list of
-// patterns in the overflow area at the end of the table. The list consists of
-// all the patterns starting with the current character. In the main body of
-// the table, if a cell is not a link, it is a single one-character pattern.
-static inline int offset(byte *c) { return ((c[0] & ~LINK) << 8) + c[1]; }
-
-// In a cell which isn't a link, the two bytes of a cell hold a type and a
-// target state. The pair represent the action to take on the current
-// character, i.e. if the type is not None then mark the current token with it,
-// move past the pattern if the lookahead flag is not set, carry out any
-// bracket matching, and go into the target state.
-static inline int typeOf(byte *cell) { return cell[0] & ~FLAGS; }
-static inline int targetOf(byte *cell) { return cell[1]; }
-
-// In the overflow area, a pattern consists of a length byte, the characters
-// after the first (which has already been matched) and a two-byte cell
-// containing the action. A list of patterns always ends with a one-character
-// pattern which is certain to match, so the list needs no termination.
-static inline byte *patternCell(byte *p) { return &p[p[0]]; }
-
-// For a soft closing bracket pattern, check for a match with the top opener on
-// the stack. (If there is no match, the pattern is skipped.)
-static inline bool matchTop(int *stack, byte *types, int closer) {
+// Check if a closer matches the top opener.
+static bool matchTop(byte *stack, byte closer) {
     int n = length(stack);
     if (n == 0) return false;
-    int opener = types[stack[n-1]];
+    byte opener = stack[n-1];
     return bracketMatch(opener, closer);
 }
 
-// Push the position of an opening bracket on the stack (assuming enough room).
-static inline void push(int *stack, int atOpener) {
-    int n = length(stack);
+// Push an opener, assuming the stack is big enough.
+static void push(byte *stack, byte opener) {
     adjust(stack, +1);
-    stack[n-1] = atOpener;
+    stack[length(stack) - 1] = opener;
 }
 
-// Pop an opener from the stack, mark it and the closer as Bad if mismatched.
-static inline void pop(int *stack, int atCloser, byte *types) {
+// Pop an opener, and mark the closer as mismatched if appropriate.
+static void pop(byte *stack, byte *out, int at) {
+    byte closer = out[at];
+    byte opener = 0;
     int n = length(stack);
-    if (n == 0) { types[atCloser] |= Bad; return; }
-    int atOpener = stack[n-1];
-    adjust(stack, -1);
-    if (bracketMatch(types[atOpener], types[atCloser])) return;
-    types[atOpener] |= Bad;
-    types[atCloser] |= Bad;
+    if (n > 0) {
+        opener = stack[n-1];
+        adjust(stack, -1);
+    }
+    if (! bracketMatch(opener, closer)) {
+        out[at] = closer | Bad;
+    }
 }
 
-void trace(char **ns, int s, bool look, char *in, int at, int n, int type) {
-    printf("%-10s ", ns[s]);
-    int pad = 10;
-    if (look) { printf("\\"); pad--; }
-    if (in[at] == '\\') { printf("\\"); pad--; }
-    if (n == 1 && in[at] == ' ') printf("s");
-    else if (n == 1 && in[at] == '\n') printf("n");
-    else printf("%.*s", n, &in[at]);
-    printf(".*s ", pad-n, "          ");
-    printf(typeNames[type]);
-}
-
-int scan(byte *lang, int s0, char *in, int at, byte *out, int *stk, char **ns) {
-    int n = length(in);
-    for (int i = at; i < n; i++) out[i] = None;
-    int state = s0;
-    int start = 0;
-    while (at < n) {
+// Print out one scanning step.
+static void trace(char **names, int state, bool look, char *in, int at, int n, int s) {
+    char pattern[2*n+2];
+    pattern[0] = '\0';
+    if (look) strcat(pattern, "|");
+    for (int i = 0; i < n; i++) {
         char ch = in[at];
-        int col = columnOf(ch, start < at);
-        byte *cell = &table[cellOf(state, col)];
+        if (ch == ' ') strcat(pattern, "\\s");
+        else if (ch == '\n') strcat(pattern, "\\n");
+        else if (ch == '\\') strcat(pattern, "\\\\");
+        else if (ch == '|') strcat(pattern, "\\|");
+        else strcat(pattern, (char[2]){ch,'\0'});
+    }
+    char *base = names[state];
+    char *style = styleName(s);
+    if (s == None) style = "-";
+    printf("%-10s %-10s %-10s\n", base, pattern, style);
+}
+
+// Given the transition table for a language, and a starting state s0, scan in
+// to produce out, using the given stack (assumed big enough), and tracing if
+// names is not NULL. Return the final state.
+int scan(byte *table, int s0, char *in, byte *out, byte *stack, char **names) {
+    int at = 0, start = 0, to = length(in);
+    int state = s0;
+    while (at < to) {
+        char ch = in[at];
+        int col = 0;
+        if (ch != '\n') col = 1 + (ch - ' ');
+        byte *action = &table[CELL * (COLUMNS * state + col)];
         int len = 1;
-        if (isLink(cell)) {
-            byte *pattern = table + offset(cell);
+        if ((action[0] & LINK) != 0) {
+            int offset = ((action[0] & 0x7F) << 8) + action[1];
+            byte *p = table + offset;
             bool found = false;
             while (! found) {
                 found = true;
-                len = pattern[0];
-                cell = patternCell(pattern);
+                len = p[0];
                 for (int i = 1; i < len && found; i++) {
-                    if (in[at + i] != pattern[i]) found = false;
+                    if (in[at + i] != p[i]) found = false;
                 }
-                int type = typeOf(cell);
-                if (found && isSoft(cell)) {
-                    int closer = typeOf(cell);
-                    if (! matchTop(stack,out,closer)) found = false;
+                bool look = p[len] & LOOK;
+                bool soft = p[len] & SOFT;
+                int style = p[len] & ~FLAGS;
+                if (found && soft) {
+                    if (! look && ! matchTop(stack,style)) found = false;
+                    if (look && start == at) found = false;
                 }
-                pattern = pattern + len + CELL;
+                if (found) action = p + len;
+                else p = p + len + 2;
             }
         }
-        bool lookahead = isLook(cell);
-        int type = typeOf(cell);
-        int target = targetOf(cell);
-        if (ns != NULL) trace(ns, state, lookahead, at, len, type, target);
-        if (! lookahead) at = at + len;
-        if (type != None && start < at) {
-            out[start] = type;
-            if (isOpener(type)) push(stack, start);
-            else if (isCloser(type)) pop(stack, start, out);
+        bool look = (action[0] & LOOK) != 0;
+        int style = action[0] & ~FLAGS;
+        int target = action[1];
+        if (names != NULL) trace(names, state, look, in, at, len, style);
+        if (! look) at = at + len;
+        if (style != None && start < at) {
+            out[start] = style | First;
+            for (int i = start+1; i < at; i++) out[i] = style;
+            if (isOpener(style)) push(stack, style);
+            else if (isCloser(style)) pop(stack, out, start);
             start = at;
         }
-        if (ch == ' ') { out[at++] = Gap; start = at; }
-        else if (ch == '\n') { out[at++] = Newline; start = at; }
         state = target;
     }
     return state;

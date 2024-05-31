@@ -2,11 +2,11 @@
 array = array.c
 unicode = unicode.c
 file = file.c unicode.c array.c
-styles = styles.c
+style = style.c
 
-scan = scan.c styles.c
+scan = scan.c style.c
 
-text = text.c kinds.c $(file)
+text = text.c style.c $(file)
 brackets = brackets.c text.c kinds.c
 lines = lines.c text.c kinds.c
 event = event.c
